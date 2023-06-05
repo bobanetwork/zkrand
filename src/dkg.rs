@@ -56,7 +56,7 @@ use halo2wrong::halo2::poly::Rotation;
 
 use crate::poseidon::P128Pow5T3Bn;
 use crate::{
-    BIT_LEN_LIMB, NUMBER, NUMBER_OF_LIMBS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH, THRESHOLD,
+    BIT_LEN_LIMB, NUMBER_OF_LIMBS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH, THRESHOLD,
 };
 
 #[derive(Clone, Debug)]
@@ -229,7 +229,7 @@ impl Circuit<BnScalar> for CircuitDkg {
                 let s = main_gate.assign_value(ctx, self.secret)?;
                 let r = main_gate.assign_value(ctx, self.random)?;
 
-                let g_assigned = ecc_chip.assign_point(ctx, Value::known(BnG1::generator()))?;
+                let g_assigned = ecc_chip.assign_constant(ctx, BnG1::generator())?;
                 let pk_assigned = ecc_chip.assign_point(ctx, self.public_key)?;
 
                 // gs = g^s, gr = g^r, pkr = pk^r
