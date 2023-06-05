@@ -50,7 +50,7 @@ use halo2_maingate::{
     MainGate, MainGateConfig, MainGateInstructions, RangeChip, RangeConfig, RangeInstructions,
 };
 
-use halo2wrong::curves::bn256::{Fq as BnBase, Fr as BnScalar, G1Affine as BnG1};
+use halo2wrong::curves::bn256::{Bn256, Fq as BnBase, Fr as BnScalar, G1Affine as BnG1};
 use halo2wrong::halo2::plonk::Selector;
 use halo2wrong::halo2::poly::Rotation;
 
@@ -244,7 +244,7 @@ impl Circuit<BnScalar> for CircuitDkg {
             },
         )?;
 
-        println!("\ngs in circuit = {:?}", gs);
+        //   println!("\ngs in circuit = {:?}", gs);
 
         let poseidon_chip = Pow5Chip::construct(config.poseidon_config.clone());
         let message = [pkr.x().native().clone(), pkr.y().native().clone()];
@@ -258,7 +258,7 @@ impl Circuit<BnScalar> for CircuitDkg {
             POSEIDON_RATE,
         >::init(poseidon_chip, layouter.namespace(|| "init"))?;
         let key = hasher.hash(layouter.namespace(|| "hash"), message)?;
-        println!("\nkey in circuit = {:?}", key.value());
+        //   println!("\nkey in circuit = {:?}", key.value());
 
         let cipher = layouter.assign_region(
             || "region add",
@@ -283,7 +283,7 @@ impl Circuit<BnScalar> for CircuitDkg {
             },
         )?;
 
-        println!("\ncipher in circuit = {:?}", cipher.value());
+        //    println!("\ncipher in circuit = {:?}", cipher.value());
 
         ecc_chip.expose_public(layouter.namespace(|| "g^s"), gs, 0)?;
         ecc_chip.expose_public(layouter.namespace(|| "cipher g^r"), gr, 8)?;
@@ -307,6 +307,17 @@ mod tests {
     use halo2wrong::curves::CurveAffine;
     use halo2wrong::utils::{big_to_fe, fe_to_big, mock_prover_verify, DimensionMeasurement};
 
+    use ark_std::{end_timer, start_timer};
+    use halo2wrong::halo2::plonk::{create_proof, keygen_pk, keygen_vk, verify_proof};
+    use halo2wrong::halo2::poly::commitment::ParamsProver;
+    use halo2wrong::halo2::poly::kzg::commitment::{
+        KZGCommitmentScheme, ParamsKZG, ParamsVerifierKZG,
+    };
+    use halo2wrong::halo2::poly::kzg::multiopen::{ProverSHPLONK, VerifierSHPLONK};
+    use halo2wrong::halo2::poly::kzg::strategy::SingleStrategy;
+    use halo2wrong::halo2::transcript::{
+        Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
+    };
     use rand_chacha::ChaCha20Rng;
     use rand_core::{OsRng, SeedableRng};
     use std::rc::Rc;
@@ -412,5 +423,123 @@ mod tests {
 
         let dimension = DimensionMeasurement::measure(&circuit).unwrap();
         println!("dimention: {:?}", dimension);
+    }
+
+    #[test]
+    fn test_dkg_proof() {
+        let (rns_base, _) = setup::<BnG1>(0);
+        let rns_base = Rc::new(rns_base);
+
+        let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let g = BnG1::generator();
+
+        // Generate a key pair
+        let sk = BnScalar::random(&mut rng);
+        let pk = (g * sk).to_affine();
+
+        println!("\nsk = {:?}\n", sk);
+        println!("\npk = {:?}\n", pk);
+
+        // Draw arandomness
+        let secret = BnScalar::random(&mut rng);
+        let random = BnScalar::random(&mut rng);
+
+        let gs = (g * secret).to_affine();
+        println!("\ngs = {:?}", gs);
+
+        // Encrypt
+        let gr = (g * random).to_affine();
+        let pkr = (pk * random).to_affine();
+
+        let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
+        let key = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init().hash(message);
+        //   println!("\nrandom = {:?}", random);
+        //   println!("\ngr = {:?}", gr);
+        //   println!("\npkr = {:?}", pkr);
+        println!("\nkey = {:?}", key);
+        println!("\nsecret = {:?}", secret);
+        let cipher = key + secret;
+        println!("\ncipher = {:?}", cipher);
+
+        let gs_point = Point::new(Rc::clone(&rns_base), gs);
+        let mut public_data = gs_point.public();
+        let c0 = Point::new(Rc::clone(&rns_base), gr);
+        //   let mut public_data = c0.public();
+        public_data.extend(c0.public());
+        let c1 = Point::new(Rc::clone(&rns_base), pkr);
+        //  public_data.extend(c1.public());
+
+        let aux_generator = BnG1::random(&mut rng);
+        let circuit = CircuitDkg {
+            secret: Value::known(secret),
+            random: Value::known(random),
+            public_key: Value::known(pk),
+            aux_generator,
+            window_size: 4,
+            //   _marker: PhantomData::<Fr>,
+        };
+        public_data.push(cipher);
+        let instance = vec![public_data];
+        let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
+
+        let dimension = DimensionMeasurement::measure(&circuit).unwrap();
+        println!("dimention: {:?}", dimension);
+
+        let degree = 18;
+        let setup_message = format!("dkg setup with degree = {}", degree);
+        let start1 = start_timer!(|| setup_message);
+        let general_params = ParamsKZG::<Bn256>::setup(degree as u32, &mut rng);
+        let verifier_params: ParamsVerifierKZG<Bn256> = general_params.verifier_params().clone();
+        end_timer!(start1);
+
+        // Initialize the proving key
+        let vk = keygen_vk(&general_params, &circuit).expect("keygen_vk should not fail");
+        let pk = keygen_pk(&general_params, vk, &circuit).expect("keygen_pk should not fail");
+        // Create a proof
+        let mut transcript = Blake2bWrite::<_, BnG1, Challenge255<_>>::init(vec![]);
+
+        // Bench proof generation time
+        let proof_message = format!("dkg proof with degree = {}", degree);
+        let start2 = start_timer!(|| proof_message);
+        create_proof::<
+            KZGCommitmentScheme<Bn256>,
+            ProverSHPLONK<'_, Bn256>,
+            Challenge255<BnG1>,
+            ChaCha20Rng,
+            Blake2bWrite<Vec<u8>, BnG1, Challenge255<BnG1>>,
+            CircuitDkg,
+        >(
+            &general_params,
+            &pk,
+            &[circuit],
+            &[instance_ref.as_slice()],
+            rng,
+            &mut transcript,
+        )
+        .expect("proof generation should not fail");
+        let proof = transcript.finalize();
+        end_timer!(start2);
+
+        println!("proof size = {:?}", proof.len());
+
+        let start3 = start_timer!(|| format!("verify snark proof for dkg"));
+        let mut verifier_transcript = Blake2bRead::<_, BnG1, Challenge255<_>>::init(&proof[..]);
+        let strategy = SingleStrategy::new(&general_params);
+
+        verify_proof::<
+            KZGCommitmentScheme<Bn256>,
+            VerifierSHPLONK<'_, Bn256>,
+            Challenge255<BnG1>,
+            Blake2bRead<&[u8], BnG1, Challenge255<BnG1>>,
+            SingleStrategy<'_, Bn256>,
+        >(
+            &verifier_params,
+            pk.get_vk(),
+            strategy,
+            &[instance_ref.as_slice()],
+            &mut verifier_transcript,
+        )
+        .expect("failed to verify dkg circuit");
+        end_timer!(start3);
     }
 }

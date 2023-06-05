@@ -14,6 +14,7 @@ halo2_ecc ={ package = "ecc", git = "https://github.com/privacy-scaling-explorat
 halo2_maingate =  { package = "maingate", git = "https://github.com/privacy-scaling-explorations/halo2wrong.git", tag = "v2023_04_20"}
 #halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", tag = "v2023_02_02" }
 #ff = { version = "0.13", features = ["bits"] }
+ark-std = { version = "0.3", features = ["print-trace"] }
 
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false }
