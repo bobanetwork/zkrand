@@ -37,11 +37,12 @@ use halo2wrong_ecc::halo2::{
  */
 
 // integer::rns::Integer;
+use halo2_ecc::integer::rns::Rns;
 use halo2_ecc::integer::{
     rns::Integer, AssignedInteger, IntegerConfig, IntegerInstructions, Range,
 };
 use halo2_ecc::maingate::RegionCtx;
-use halo2_ecc::{AssignedPoint, EccConfig, GeneralEccChip, Point};
+use halo2_ecc::{AssignedPoint, BaseFieldEccChip, EccConfig, GeneralEccChip, Point};
 use halo2_gadgets::poseidon::primitives::ConstantLength;
 use halo2_gadgets::poseidon::{Hash as PoseidonHash, Pow5Chip, Pow5Config};
 //use halo2_integer::{rns::Integer, AssignedInteger, IntegerConfig, IntegerInstructions, Range};
@@ -49,17 +50,14 @@ use halo2_maingate::{
     MainGate, MainGateConfig, MainGateInstructions, RangeChip, RangeConfig, RangeInstructions,
 };
 
-use halo2wrong::curves::bn256::{Fr as BnScalar, G1Affine as BnG1};
+use halo2wrong::curves::bn256::{Fq as BnBase, Fr as BnScalar, G1Affine as BnG1};
 use halo2wrong::halo2::plonk::Selector;
 use halo2wrong::halo2::poly::Rotation;
 
 use crate::poseidon::P128Pow5T3Bn;
-
-const BIT_LEN_LIMB: usize = 68;
-const NUMBER_OF_LIMBS: usize = 4;
-const POSEIDON_WIDTH: usize = 3;
-const POSEIDON_RATE: usize = 2;
-const POSEIDON_LEN: usize = 2;
+use crate::{
+    BIT_LEN_LIMB, NUMBER, NUMBER_OF_LIMBS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH, THRESHOLD,
+};
 
 #[derive(Clone, Debug)]
 pub struct CircuitDkgConfig {
@@ -76,12 +74,15 @@ pub struct CircuitDkgConfig {
 
 impl CircuitDkgConfig {
     pub fn new(meta: &mut ConstraintSystem<BnScalar>) -> Self {
-        let (rns_base, rns_scalar) =
-            GeneralEccChip::<BnG1, BnScalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::rns();
+        //        let (rns_base, rns_scalar) = GeneralEccChip::<BnG1, BnScalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::rns();
+        let rns = Rns::<BnBase, BnScalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::construct();
         let main_gate_config = MainGate::<BnScalar>::configure(meta);
+        let overflow_bit_lens = rns.overflow_lengths();
+        /*
         let mut overflow_bit_lens: Vec<usize> = vec![];
         overflow_bit_lens.extend(rns_base.overflow_lengths());
         overflow_bit_lens.extend(rns_scalar.overflow_lengths());
+         */
         let composition_bit_lens = vec![BIT_LEN_LIMB / NUMBER_OF_LIMBS];
 
         let range_config = RangeChip::<BnScalar>::configure(
@@ -112,6 +113,7 @@ impl CircuitDkgConfig {
             rc_b.try_into().unwrap(),
         );
 
+        // encryption (addition) configure
         let secret = meta.advice_column();
         let key = meta.advice_column();
         let cipher = meta.advice_column();
@@ -151,8 +153,11 @@ impl CircuitDkgConfig {
         EccConfig::new(self.range_config.clone(), self.main_gate_config.clone())
     }
 
-    pub fn config_range(&self, layouter: &mut impl Layouter<BnScalar>) -> Result<(), Error> {
-        let range_chip = RangeChip::<BnScalar>::new(self.range_config.clone());
+    pub fn config_range<N: PrimeField>(
+        &self,
+        layouter: &mut impl Layouter<N>,
+    ) -> Result<(), Error> {
+        let range_chip = RangeChip::<N>::new(self.range_config.clone());
         range_chip.load_table(layouter)?;
 
         Ok(())
@@ -190,8 +195,11 @@ impl Circuit<BnScalar> for CircuitDkg {
         mut layouter: impl Layouter<BnScalar>,
     ) -> Result<(), Error> {
         let ecc_chip_config = config.ecc_chip_config();
+        //   let mut ecc_chip = GeneralEccChip::<BnG1, BnScalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
         let mut ecc_chip =
-            GeneralEccChip::<BnG1, BnScalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
+            BaseFieldEccChip::<BnG1, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
+        let main_gate = MainGate::<BnScalar>::new(config.main_gate_config.clone());
+        //  let main_gate = ecc_chip.main_gate();
 
         layouter.assign_region(
             || "assign aux values",
@@ -205,35 +213,41 @@ impl Circuit<BnScalar> for CircuitDkg {
             },
         )?;
 
-        let scalar_chip = ecc_chip.scalar_field_chip();
+        //     let scalar_chip = ecc_chip.scalar_field_chip();
 
-        let (c0, c1) = layouter.assign_region(
+        let (s, gs, gr, pkr) = layouter.assign_region(
             || "region ecc mul",
             |region| {
                 let offset = 0;
                 let ctx = &mut RegionCtx::new(region, offset);
 
-                //      let s = ecc_chip.new_unassigned_scalar(self.secret);
-                let r = ecc_chip.new_unassigned_scalar(self.random);
+                //   let s = ecc_chip.new_unassigned_scalar(self.secret);
+                //   let r = ecc_chip.new_unassigned_scalar(self.random);
 
-                //      let s_integer = scalar_chip.assign_integer(ctx, s, Range::Remainder)?;
-                let r_integer = scalar_chip.assign_integer(ctx, r, Range::Remainder)?;
+                //  let s_integer = scalar_chip.assign_integer(ctx, s, Range::Remainder)?;
+                //  let r_integer = scalar_chip.assign_integer(ctx, r, Range::Remainder)?;
+                let s = main_gate.assign_value(ctx, self.secret)?;
+                let r = main_gate.assign_value(ctx, self.random)?;
 
                 let g_assigned = ecc_chip.assign_point(ctx, Value::known(BnG1::generator()))?;
                 let pk_assigned = ecc_chip.assign_point(ctx, self.public_key)?;
 
-                // c0 = g^r, c1 = pk^r
-                let c0 = ecc_chip.mul(ctx, &g_assigned, &r_integer, self.window_size)?;
-                let c1 = ecc_chip.mul(ctx, &pk_assigned, &r_integer, self.window_size)?;
+                // gs = g^s, gr = g^r, pkr = pk^r
+                let gs = ecc_chip.mul(ctx, &g_assigned, &s, self.window_size)?;
+                let gr = ecc_chip.mul(ctx, &g_assigned, &r, self.window_size)?;
+                let pkr = ecc_chip.mul(ctx, &pk_assigned, &r, self.window_size)?;
 
-                let c0 = ecc_chip.normalize(ctx, &c0)?;
-                let c1 = ecc_chip.normalize(ctx, &c1)?;
-                Ok((c0, c1))
+                let gs = ecc_chip.normalize(ctx, &gs)?;
+                let gr = ecc_chip.normalize(ctx, &gr)?;
+                let pkr = ecc_chip.normalize(ctx, &pkr)?;
+                Ok((s, gs, gr, pkr))
             },
         )?;
 
+        println!("\ngs in circuit = {:?}", gs);
+
         let poseidon_chip = Pow5Chip::construct(config.poseidon_config.clone());
-        let message = [c1.x().native().clone(), c1.y().native().clone()];
+        let message = [pkr.x().native().clone(), pkr.y().native().clone()];
 
         let hasher = PoseidonHash::<
             _,
@@ -243,39 +257,37 @@ impl Circuit<BnScalar> for CircuitDkg {
             POSEIDON_WIDTH,
             POSEIDON_RATE,
         >::init(poseidon_chip, layouter.namespace(|| "init"))?;
-        let key_cell = hasher.hash(layouter.namespace(|| "hash"), message)?;
-        println!("\nkey in circuit = {:?}", key_cell.value());
+        let key = hasher.hash(layouter.namespace(|| "hash"), message)?;
+        println!("\nkey in circuit = {:?}", key.value());
 
-        let cipher_cell = layouter.assign_region(
-            || "region native add",
+        let cipher = layouter.assign_region(
+            || "region add",
             |mut region| {
                 config.q_add.enable(&mut region, 0)?;
 
-                region.assign_advice(|| "secret", config.secret, 0, || self.secret)?;
+                //  region.assign_advice(|| "secret", config.secret, 0, || self.secret)?;
                 //   let s_cell = s_integer.native();
-                //    s_cell.copy_advice(|| "copy secret", &mut region, config.secret, 0)?;
-                key_cell.copy_advice(|| "copy session key", &mut region, config.key, 0)?;
+                s.copy_advice(|| "copy secret", &mut region, config.secret, 0)?;
+                key.copy_advice(|| "copy session key", &mut region, config.key, 0)?;
 
-                //     println!("\ns_cell value = {:?}", s_cell.value());
+                //   println!("\ns value = {:?}", s.value());
 
-                let cipher = key_cell.value() + self.secret;
-                let cipher_cell = region.assign_advice(|| "cipher", config.cipher, 0, || cipher)?;
+                let cipher = region.assign_advice(
+                    || "cipher",
+                    config.cipher,
+                    0,
+                    || key.value() + self.secret,
+                )?;
 
-                Ok(cipher_cell)
+                Ok(cipher)
             },
         )?;
 
-        println!("\ncipher in circuit = {:?}", cipher_cell.value());
+        println!("\ncipher in circuit = {:?}", cipher.value());
 
-        ecc_chip.expose_public(layouter.namespace(|| "cipher g^r"), c0, 0)?;
-        //   ecc_chip.expose_public(layouter.namespace(|| "cipher"), c1, 8)?;
-        //   ecc_chip.expose_public(layouter.namespace(|| "symmetric key"), )
-
-        ecc_chip.main_gate().expose_public(
-            layouter.namespace(|| "cipher final"),
-            cipher_cell,
-            8,
-        )?;
+        ecc_chip.expose_public(layouter.namespace(|| "g^s"), gs, 0)?;
+        ecc_chip.expose_public(layouter.namespace(|| "cipher g^r"), gr, 8)?;
+        main_gate.expose_public(layouter.namespace(|| "cipher main"), cipher, 16)?;
 
         //   layouter.constrain_instance(cipher_cell.cell(), config.public, 0)?;
 
@@ -286,71 +298,22 @@ impl Circuit<BnScalar> for CircuitDkg {
     }
 }
 
-///////todo
-/*
-#[derive(Clone, Debug)]
-pub struct Cipher<
-    W: PrimeField,
-    N: PrimeField,
-    const NUMBER_OF_LIMBS: usize,
-    const BIT_LEN_LIMB: usize,
-> {
-    pub r: Integer<W, N, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
-    pub s: Integer<W, N, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
-}
-
-pub struct AssignedCipher<
-    W: PrimeField,
-    N: PrimeField,
-    const NUMBER_OF_LIMBS: usize,
-    const BIT_LEN_LIMB: usize,
-> {
-    pub r: AssignedInteger<W, N, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
-    pub s: AssignedInteger<W, N, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
-}
-
-pub struct AssignedPublicKey<
-    W: PrimeField,
-    N: PrimeField,
-    const NUMBER_OF_LIMBS: usize,
-    const BIT_LEN_LIMB: usize,
-> {
-    pub point: AssignedPoint<W, N, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
-}
-
-#[derive(Debug, Clone)]
-pub struct EncryptConfig<F: Field> {
-    s: Column<Advice>,
-    r: Column<Advice>,
-    pk: Column<Instance>,
-    cipher: Column<Instance>,
-    _marker: PhantomData<F>,
-}
-
- */
-
 #[cfg(test)]
 mod tests {
     use halo2_ecc::integer::rns::Rns;
     use halo2_ecc::integer::NUMBER_OF_LOOKUP_LIMBS;
-    use std::rc::Rc;
-    //   use std::hash::Hash;
     use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash, P128Pow5T3};
-    // use halo2wrong::curves::bn256::{Fr as , G1Affine};
     use halo2wrong::curves::group::Curve;
     use halo2wrong::curves::CurveAffine;
     use halo2wrong::utils::{big_to_fe, fe_to_big, mock_prover_verify, DimensionMeasurement};
+
     use rand_chacha::ChaCha20Rng;
     use rand_core::{OsRng, SeedableRng};
+    use std::rc::Rc;
 
     use super::*;
     use crate::poseidon::P128Pow5T3Bn;
-    //   use halo2wrong_ecc::curves::bn256::{Bn256, Fr, G1Affine};
-
-    fn mod_n<C: CurveAffine>(x: C::Base) -> C::Scalar {
-        let x_big = fe_to_big(x);
-        big_to_fe(x_big)
-    }
+    use crate::utils::{mod_n, rns, setup};
 
     #[test]
     fn test_ecc() {
@@ -388,31 +351,9 @@ mod tests {
         assert_eq!(secret, secret_prime)
     }
 
-    #[allow(clippy::type_complexity)]
-    fn setup<
-        C: CurveAffine,
-        N: PrimeField,
-        const NUMBER_OF_LIMBS: usize,
-        const BIT_LEN_LIMB: usize,
-    >(
-        k_override: u32,
-    ) -> (
-        Rns<C::Base, N, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
-        Rns<C::Scalar, N, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
-        u32,
-    ) {
-        let (rns_base, rns_scalar) = GeneralEccChip::<C, N, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::rns();
-        let bit_len_lookup = BIT_LEN_LIMB / NUMBER_OF_LOOKUP_LIMBS;
-        let mut k: u32 = (bit_len_lookup + 1) as u32;
-        if k_override != 0 {
-            k = k_override;
-        }
-        (rns_base, rns_scalar, k)
-    }
-
     #[test]
     fn test_dkg_circuit() {
-        let (rns_base, _, _) = setup::<BnG1, BnScalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>(0);
+        let (rns_base, _) = setup::<BnG1>(0);
         let rns_base = Rc::new(rns_base);
 
         let mut rng = ChaCha20Rng::seed_from_u64(42);
@@ -429,22 +370,28 @@ mod tests {
         let secret = BnScalar::random(&mut rng);
         let random = BnScalar::random(&mut rng);
 
+        let gs = (g * secret).to_affine();
+        println!("\ngs = {:?}", gs);
+
         // Encrypt
         let gr = (g * random).to_affine();
         let pkr = (pk * random).to_affine();
 
         let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
         let key = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init().hash(message);
-        //   println!("\nrandom = {:?}\n", random);
-        //   println!("\ngr = {:?}\n", gr);
-        //   println!("\npkr = {:?}\n", pkr);
+        //   println!("\nrandom = {:?}", random);
+        //   println!("\ngr = {:?}", gr);
+        //   println!("\npkr = {:?}", pkr);
         println!("\nkey = {:?}", key);
         println!("\nsecret = {:?}", secret);
         let cipher = key + secret;
         println!("\ncipher = {:?}", cipher);
 
+        let gs_point = Point::new(Rc::clone(&rns_base), gs);
+        let mut public_data = gs_point.public();
         let c0 = Point::new(Rc::clone(&rns_base), gr);
-        let mut public_data = c0.public();
+        //   let mut public_data = c0.public();
+        public_data.extend(c0.public());
         let c1 = Point::new(Rc::clone(&rns_base), pkr);
         //  public_data.extend(c1.public());
 
