@@ -1,42 +1,12 @@
-/*
-use halo2_proofs::{
-    halo2curves::bn256::{Bn256, Fr, G1Affine},
-    plonk::{create_proof, keygen_pk, keygen_vk, verify_proof},
-    poly::{
-        commitment::ParamsProver,
-        kzg::{
-            commitment::{KZGCommitmentScheme, ParamsKZG, ParamsVerifierKZG},
-            multiopen::{ProverSHPLONK, VerifierSHPLONK},
-            strategy::SingleStrategy,
-        },
-    },
-    transcript::{
-        Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
-    },
-};
-
- */
-
+use halo2wrong::curves::ff::PrimeField;
 use halo2wrong::halo2::{
     arithmetic::{CurveAffine, Field},
     circuit::{Layouter, SimpleFloorPlanner, Value},
     plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance},
 };
 
-use halo2wrong::curves::ff::PrimeField;
-
 use std::marker::PhantomData;
 
-//use halo2_proofs::{arithmetic::FieldExt, circuit::*, plonk::*, poly::Rotation};
-/*
-use halo2wrong_ecc::halo2::{
-    arithmetic::Field,
-    plonk::{Advice, Column, ConstraintSystem, Instance},
-};
-
- */
-
-// integer::rns::Integer;
 use halo2_ecc::integer::rns::Rns;
 use halo2_ecc::integer::{
     rns::Integer, AssignedInteger, IntegerConfig, IntegerInstructions, Range,
@@ -45,7 +15,6 @@ use halo2_ecc::maingate::RegionCtx;
 use halo2_ecc::{AssignedPoint, BaseFieldEccChip, EccConfig, GeneralEccChip, Point};
 use halo2_gadgets::poseidon::primitives::ConstantLength;
 use halo2_gadgets::poseidon::{Hash as PoseidonHash, Pow5Chip, Pow5Config};
-//use halo2_integer::{rns::Integer, AssignedInteger, IntegerConfig, IntegerInstructions, Range};
 use halo2_maingate::{
     MainGate, MainGateConfig, MainGateInstructions, RangeChip, RangeConfig, RangeInstructions,
 };
@@ -64,25 +33,13 @@ pub struct CircuitDkgConfig {
     main_gate_config: MainGateConfig,
     range_config: RangeConfig,
     poseidon_config: Pow5Config<BnScalar, POSEIDON_WIDTH, POSEIDON_RATE>,
-    secret: Column<Advice>,
-    key: Column<Advice>,
-    cipher: Column<Advice>,
-    //    cipher: [Column<Instance>; 2],
-    //    public: Column<Instance>,
-    q_add: Selector,
 }
 
 impl CircuitDkgConfig {
     pub fn new(meta: &mut ConstraintSystem<BnScalar>) -> Self {
-        //        let (rns_base, rns_scalar) = GeneralEccChip::<BnG1, BnScalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::rns();
         let rns = Rns::<BnBase, BnScalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::construct();
         let main_gate_config = MainGate::<BnScalar>::configure(meta);
         let overflow_bit_lens = rns.overflow_lengths();
-        /*
-        let mut overflow_bit_lens: Vec<usize> = vec![];
-        overflow_bit_lens.extend(rns_base.overflow_lengths());
-        overflow_bit_lens.extend(rns_scalar.overflow_lengths());
-         */
         let composition_bit_lens = vec![BIT_LEN_LIMB / NUMBER_OF_LIMBS];
 
         let range_config = RangeChip::<BnScalar>::configure(
@@ -113,39 +70,10 @@ impl CircuitDkgConfig {
             rc_b.try_into().unwrap(),
         );
 
-        // encryption (addition) configure
-        let secret = meta.advice_column();
-        let key = meta.advice_column();
-        let cipher = meta.advice_column();
-        //       let public = meta.instance_column();
-        meta.enable_equality(secret);
-        meta.enable_equality(key);
-        meta.enable_equality(cipher);
-        //        meta.enable_equality(public);
-
-        let q_add = meta.selector();
-
-        meta.create_gate("add", |meta| {
-            //
-            // secret | key | cipher | selector
-            //   a      b        c       s
-            //
-            let s = meta.query_selector(q_add);
-            let a = meta.query_advice(secret, Rotation::cur());
-            let b = meta.query_advice(key, Rotation::cur());
-            let c = meta.query_advice(cipher, Rotation::cur());
-            vec![s * (a + b - c)]
-        });
-
         CircuitDkgConfig {
             main_gate_config,
             range_config,
             poseidon_config,
-            secret,
-            key,
-            cipher,
-            //         public,
-            q_add,
         }
     }
 
@@ -195,11 +123,9 @@ impl Circuit<BnScalar> for CircuitDkg {
         mut layouter: impl Layouter<BnScalar>,
     ) -> Result<(), Error> {
         let ecc_chip_config = config.ecc_chip_config();
-        //   let mut ecc_chip = GeneralEccChip::<BnG1, BnScalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
         let mut ecc_chip =
             BaseFieldEccChip::<BnG1, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
         let main_gate = MainGate::<BnScalar>::new(config.main_gate_config.clone());
-        //  let main_gate = ecc_chip.main_gate();
 
         layouter.assign_region(
             || "assign aux values",
@@ -213,19 +139,12 @@ impl Circuit<BnScalar> for CircuitDkg {
             },
         )?;
 
-        //     let scalar_chip = ecc_chip.scalar_field_chip();
-
         let (s, gs, gr, pkr) = layouter.assign_region(
             || "region ecc mul",
             |region| {
                 let offset = 0;
                 let ctx = &mut RegionCtx::new(region, offset);
 
-                //   let s = ecc_chip.new_unassigned_scalar(self.secret);
-                //   let r = ecc_chip.new_unassigned_scalar(self.random);
-
-                //  let s_integer = scalar_chip.assign_integer(ctx, s, Range::Remainder)?;
-                //  let r_integer = scalar_chip.assign_integer(ctx, r, Range::Remainder)?;
                 let s = main_gate.assign_value(ctx, self.secret)?;
                 let r = main_gate.assign_value(ctx, self.random)?;
 
@@ -258,38 +177,22 @@ impl Circuit<BnScalar> for CircuitDkg {
             POSEIDON_RATE,
         >::init(poseidon_chip, layouter.namespace(|| "init"))?;
         let key = hasher.hash(layouter.namespace(|| "hash"), message)?;
-        //   println!("\nkey in circuit = {:?}", key.value());
+        //  println!("\nkey in circuit = {:?}", key.value());
 
         let cipher = layouter.assign_region(
             || "region add",
             |mut region| {
-                config.q_add.enable(&mut region, 0)?;
-
-                //  region.assign_advice(|| "secret", config.secret, 0, || self.secret)?;
-                //   let s_cell = s_integer.native();
-                s.copy_advice(|| "copy secret", &mut region, config.secret, 0)?;
-                key.copy_advice(|| "copy session key", &mut region, config.key, 0)?;
-
-                //   println!("\ns value = {:?}", s.value());
-
-                let cipher = region.assign_advice(
-                    || "cipher",
-                    config.cipher,
-                    0,
-                    || key.value() + self.secret,
-                )?;
-
-                Ok(cipher)
+                let offset = 0;
+                let ctx = &mut RegionCtx::new(region, offset);
+                main_gate.add(ctx, &s, &key)
             },
         )?;
 
-        //    println!("\ncipher in circuit = {:?}", cipher.value());
+        //  println!("\ncipher in circuit = {:?}", cipher.value());
 
         ecc_chip.expose_public(layouter.namespace(|| "g^s"), gs, 0)?;
         ecc_chip.expose_public(layouter.namespace(|| "cipher g^r"), gr, 8)?;
         main_gate.expose_public(layouter.namespace(|| "cipher main"), cipher, 16)?;
-
-        //   layouter.constrain_instance(cipher_cell.cell(), config.public, 0)?;
 
         // todo: move?
         config.config_range(&mut layouter)?;
