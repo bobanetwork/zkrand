@@ -271,8 +271,8 @@ mod tests {
             let sk = BnScalar::random(&mut rng);
             let pk = (g * sk).to_affine();
 
-            println!("\nsk = {:?}\n", sk);
-            println!("\npk = {:?}\n", pk);
+            //   println!("\nsk = {:?}\n", sk);
+            //   println!("\npk = {:?}\n", pk);
 
             sks.push(sk);
             pks.push(pk);
@@ -291,11 +291,11 @@ mod tests {
         let mut poseidon = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init();
 
         for i in 0..NUMBER_OF_MEMBERS {
-            println!("{} th loop", i);
+            //  println!("{} th loop", i);
             let secret = BnScalar::random(&mut rng);
             let gs = (g * secret).to_affine();
-            println!("\nsecret = {:?}", secret);
-            println!("\ngs = {:?}", gs);
+            //  println!("\nsecret = {:?}", secret);
+            //  println!("\ngs = {:?}", gs);
 
             secrets.push(Value::known(secret));
             gss.push(gs);
@@ -307,10 +307,10 @@ mod tests {
             //   println!("\nrandom = {:?}", random);
             //   println!("\ngr = {:?}", gr);
             //   println!("\npkr = {:?}", pkr);
-            println!("\nkey = {:?}", key);
-            println!("\nsecret = {:?}", secret);
+            //  println!("\nkey = {:?}", key);
+            //  println!("\nsecret = {:?}", secret);
             let cipher = key + secret;
-            println!("\ncipher = {:?}", cipher);
+            //  println!("\ncipher = {:?}", cipher);
 
             let gs_point = Point::new(Rc::clone(&rns_base), gs);
             public_data.extend(gs_point.public());
