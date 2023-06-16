@@ -1,4 +1,5 @@
 mod dkg;
+mod dkg_n;
 mod poseidon;
 mod utils;
 
@@ -9,5 +10,6 @@ const POSEIDON_WIDTH: usize = 3;
 const POSEIDON_RATE: usize = 2;
 const POSEIDON_LEN: usize = 2;
 
-const THRESHOLD: usize = 3;
-const NUMBER: usize = 5;
+// for num = 6, k = 20
+const THRESHOLD: usize = 4;
+const NUMBER_OF_MEMBERS: usize = 6;

@@ -25,7 +25,8 @@ use halo2wrong::halo2::poly::Rotation;
 
 use crate::poseidon::P128Pow5T3Bn;
 use crate::{
-    BIT_LEN_LIMB, NUMBER_OF_LIMBS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH, THRESHOLD,
+    BIT_LEN_LIMB, NUMBER_OF_LIMBS, NUMBER_OF_MEMBERS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH,
+    THRESHOLD,
 };
 
 #[derive(Clone, Debug)]
@@ -94,9 +95,9 @@ impl CircuitDkgConfig {
 
 #[derive(Default, Clone)]
 struct CircuitDkg {
-    secret: Value<BnScalar>,
+    secret: [Value<BnScalar>; NUMBER_OF_MEMBERS],
     random: Value<BnScalar>,
-    public_key: Value<BnG1>,
+    public_key: [Value<BnG1>; NUMBER_OF_MEMBERS],
 
     aux_generator: BnG1,
     window_size: usize,
@@ -139,60 +140,84 @@ impl Circuit<BnScalar> for CircuitDkg {
             },
         )?;
 
-        let (s, gs, gr, pkr) = layouter.assign_region(
-            || "region ecc mul",
+        let (g, r, gr) = layouter.assign_region(
+            || "region ecc mul g^r",
             |region| {
                 let offset = 0;
                 let ctx = &mut RegionCtx::new(region, offset);
 
-                let s = main_gate.assign_value(ctx, self.secret)?;
+                let g = ecc_chip.assign_constant(ctx, BnG1::generator())?;
                 let r = main_gate.assign_value(ctx, self.random)?;
 
-                let g_assigned = ecc_chip.assign_constant(ctx, BnG1::generator())?;
-                let pk_assigned = ecc_chip.assign_point(ctx, self.public_key)?;
-
-                // gs = g^s, gr = g^r, pkr = pk^r
-                let gs = ecc_chip.mul(ctx, &g_assigned, &s, self.window_size)?;
-                let gr = ecc_chip.mul(ctx, &g_assigned, &r, self.window_size)?;
-                let pkr = ecc_chip.mul(ctx, &pk_assigned, &r, self.window_size)?;
-
-                let gs = ecc_chip.normalize(ctx, &gs)?;
+                // gr = g^r
+                let gr = ecc_chip.mul(ctx, &g, &r, self.window_size)?;
+                // normalise for public inputs
                 let gr = ecc_chip.normalize(ctx, &gr)?;
-                let pkr = ecc_chip.normalize(ctx, &pkr)?;
-                Ok((s, gs, gr, pkr))
+
+                Ok((g, r, gr))
             },
         )?;
 
-        //   println!("\ngs in circuit = {:?}", gs);
+        ecc_chip.expose_public(layouter.namespace(|| "cipher g^r"), gr, 0)?;
+        let mut instance_offset: usize = 8;
 
-        let poseidon_chip = Pow5Chip::construct(config.poseidon_config.clone());
-        let message = [pkr.x().native().clone(), pkr.y().native().clone()];
+        for i in 0..NUMBER_OF_MEMBERS {
+            let (s, gs, pkr) = layouter.assign_region(
+                || "region ecc mul",
+                |region| {
+                    let offset = 0;
+                    let ctx = &mut RegionCtx::new(region, offset);
 
-        let hasher = PoseidonHash::<
-            _,
-            _,
-            P128Pow5T3Bn,
-            ConstantLength<POSEIDON_LEN>,
-            POSEIDON_WIDTH,
-            POSEIDON_RATE,
-        >::init(poseidon_chip, layouter.namespace(|| "init"))?;
-        let key = hasher.hash(layouter.namespace(|| "hash"), message)?;
-        //  println!("\nkey in circuit = {:?}", key.value());
+                    let s = main_gate.assign_value(ctx, self.secret[i])?;
+                    let pk_assigned = ecc_chip.assign_point(ctx, self.public_key[i])?;
 
-        let cipher = layouter.assign_region(
-            || "region add",
-            |mut region| {
-                let offset = 0;
-                let ctx = &mut RegionCtx::new(region, offset);
-                main_gate.add(ctx, &s, &key)
-            },
-        )?;
+                    // gs = g^s, pkr = pk^r
+                    let gs = ecc_chip.mul(ctx, &g, &s, self.window_size)?;
+                    let pkr = ecc_chip.mul(ctx, &pk_assigned, &r, self.window_size)?;
 
-        //  println!("\ncipher in circuit = {:?}", cipher.value());
+                    // normalise for public inputs
+                    let gs = ecc_chip.normalize(ctx, &gs)?;
+                    let pkr = ecc_chip.normalize(ctx, &pkr)?;
+                    Ok((s, gs, pkr))
+                },
+            )?;
 
-        ecc_chip.expose_public(layouter.namespace(|| "g^s"), gs, 0)?;
-        ecc_chip.expose_public(layouter.namespace(|| "cipher g^r"), gr, 8)?;
-        main_gate.expose_public(layouter.namespace(|| "cipher main"), cipher, 16)?;
+            //   println!("\ngs in circuit = {:?}", gs);
+
+            let message = [pkr.x().native().clone(), pkr.y().native().clone()];
+
+            let poseidon_chip = Pow5Chip::construct(config.poseidon_config.clone());
+            let hasher = PoseidonHash::<
+                _,
+                _,
+                P128Pow5T3Bn,
+                ConstantLength<POSEIDON_LEN>,
+                POSEIDON_WIDTH,
+                POSEIDON_RATE,
+            >::init(poseidon_chip, layouter.namespace(|| "poseidon init"))?;
+            let key = hasher.hash(layouter.namespace(|| "hash"), message)?;
+            //  println!("\nkey in circuit = {:?}", key.value());
+
+            let cipher = layouter.assign_region(
+                || "region add",
+                |mut region| {
+                    let offset = 0;
+                    let ctx = &mut RegionCtx::new(region, offset);
+                    main_gate.add(ctx, &s, &key)
+                },
+            )?;
+
+            //  println!("\ncipher in circuit = {:?}", cipher.value());
+
+            ecc_chip.expose_public(layouter.namespace(|| "g^s"), gs, instance_offset)?;
+            instance_offset += 8;
+            main_gate.expose_public(
+                layouter.namespace(|| "cipher main"),
+                cipher,
+                instance_offset,
+            )?;
+            instance_offset += 1;
+        }
 
         // todo: move?
         config.config_range(&mut layouter)?;
@@ -230,95 +255,81 @@ mod tests {
     use crate::utils::{mod_n, rns, setup};
 
     #[test]
-    fn test_ecc() {
-        let g = BnG1::generator();
-
-        let mut rng = ChaCha20Rng::seed_from_u64(42);
-
-        // Generate a key pair
-        let sk = BnScalar::random(&mut rng);
-        let pk = (g * sk).to_affine();
-
-        println!("sk = {:?}", sk);
-
-        // Draw arandomness
-        let secret = BnScalar::random(&mut rng);
-        let r = BnScalar::random(&mut rng);
-
-        // Encrypt
-        let gr = (g * r).to_affine();
-        let pkr = (pk * r).to_affine();
-
-        let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
-        let hasher = Hash::<BnScalar, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init();
-        let key = hasher.hash(message.into());
-        let c = key + secret;
-        let cipher = (gr, c);
-
-        // Decrypt
-        let pkr_prime = (cipher.0 * sk).to_affine();
-        let message_prime = [mod_n::<BnG1>(pkr_prime.x), mod_n::<BnG1>(pkr_prime.y)];
-        let key_prime = Hash::<BnScalar, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init()
-            .hash(message_prime.into());
-        let secret_prime = c - key_prime;
-
-        assert_eq!(secret, secret_prime)
-    }
-
-    #[test]
-    fn test_dkg_circuit() {
+    fn test_dkg_n_circuit() {
         let (rns_base, _) = setup::<BnG1>(0);
         let rns_base = Rc::new(rns_base);
 
         let mut rng = ChaCha20Rng::seed_from_u64(42);
+
         let g = BnG1::generator();
 
-        // Generate a key pair
-        let sk = BnScalar::random(&mut rng);
-        let pk = (g * sk).to_affine();
+        // Generate a key pair for encryption
+        let mut sks = vec![];
+        let mut pks = vec![];
 
-        println!("\nsk = {:?}\n", sk);
-        println!("\npk = {:?}\n", pk);
+        for i in 0..NUMBER_OF_MEMBERS {
+            let sk = BnScalar::random(&mut rng);
+            let pk = (g * sk).to_affine();
 
-        // Draw arandomness
-        let secret = BnScalar::random(&mut rng);
+            println!("\nsk = {:?}\n", sk);
+            println!("\npk = {:?}\n", pk);
+
+            sks.push(sk);
+            pks.push(pk);
+        }
+
+        // Draw arandomness for encryption
         let random = BnScalar::random(&mut rng);
-
-        let gs = (g * secret).to_affine();
-        println!("\ngs = {:?}", gs);
-
-        // Encrypt
         let gr = (g * random).to_affine();
-        let pkr = (pk * random).to_affine();
 
-        let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
-        let key = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init().hash(message);
-        //   println!("\nrandom = {:?}", random);
-        //   println!("\ngr = {:?}", gr);
-        //   println!("\npkr = {:?}", pkr);
-        println!("\nkey = {:?}", key);
-        println!("\nsecret = {:?}", secret);
-        let cipher = key + secret;
-        println!("\ncipher = {:?}", cipher);
-
-        let gs_point = Point::new(Rc::clone(&rns_base), gs);
-        let mut public_data = gs_point.public();
         let gr_point = Point::new(Rc::clone(&rns_base), gr);
-        //   let mut public_data = c0.public();
-        public_data.extend(gr_point.public());
-        let pkr_point = Point::new(Rc::clone(&rns_base), pkr);
-        //  public_data.extend(pkr_point.public());
+        let mut public_data = gr_point.public();
+
+        let mut secrets = vec![];
+        let mut gss = vec![];
+
+        let mut poseidon = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init();
+
+        for i in 0..NUMBER_OF_MEMBERS {
+            println!("{} th loop", i);
+            let secret = BnScalar::random(&mut rng);
+            let gs = (g * secret).to_affine();
+            println!("\nsecret = {:?}", secret);
+            println!("\ngs = {:?}", gs);
+
+            secrets.push(Value::known(secret));
+            gss.push(gs);
+
+            // Encrypt
+            let pkr = (pks[i] * random).to_affine();
+            let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
+            let key = poseidon.clone().hash(message);
+            //   println!("\nrandom = {:?}", random);
+            //   println!("\ngr = {:?}", gr);
+            //   println!("\npkr = {:?}", pkr);
+            println!("\nkey = {:?}", key);
+            println!("\nsecret = {:?}", secret);
+            let cipher = key + secret;
+            println!("\ncipher = {:?}", cipher);
+
+            let gs_point = Point::new(Rc::clone(&rns_base), gs);
+            public_data.extend(gs_point.public());
+
+            public_data.push(cipher);
+        }
+
+        let public_key: Vec<_> = pks.iter().map(|pk| Value::known(*pk)).collect();
 
         let aux_generator = BnG1::random(&mut rng);
         let circuit = CircuitDkg {
-            secret: Value::known(secret),
+            secret: secrets.try_into().unwrap(),
             random: Value::known(random),
-            public_key: Value::known(pk),
+            public_key: public_key.try_into().unwrap(),
             aux_generator,
             window_size: 4,
             //   _marker: PhantomData::<Fr>,
         };
-        public_data.push(cipher);
+
         let instance = vec![public_data];
         mock_prover_verify(&circuit, instance);
 
@@ -327,66 +338,88 @@ mod tests {
     }
 
     #[test]
-    fn test_dkg_proof() {
+    fn test_dkg_n_proof() {
         let (rns_base, _) = setup::<BnG1>(0);
         let rns_base = Rc::new(rns_base);
 
         let mut rng = ChaCha20Rng::seed_from_u64(42);
+
         let g = BnG1::generator();
 
-        // Generate a key pair
-        let sk = BnScalar::random(&mut rng);
-        let pk = (g * sk).to_affine();
+        // Generate a key pair for encryption
+        let mut sks = vec![];
+        let mut pks = vec![];
 
-        println!("\nsk = {:?}\n", sk);
-        println!("\npk = {:?}\n", pk);
+        for i in 0..NUMBER_OF_MEMBERS {
+            let sk = BnScalar::random(&mut rng);
+            let pk = (g * sk).to_affine();
 
-        // Draw arandomness
-        let secret = BnScalar::random(&mut rng);
+            //      println!("\nsk = {:?}\n", sk);
+            //      println!("\npk = {:?}\n", pk);
+
+            sks.push(sk);
+            pks.push(pk);
+        }
+
+        // Draw arandomness for encryption
         let random = BnScalar::random(&mut rng);
-
-        let gs = (g * secret).to_affine();
-        println!("\ngs = {:?}", gs);
-
-        // Encrypt
         let gr = (g * random).to_affine();
-        let pkr = (pk * random).to_affine();
 
-        let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
-        let key = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init().hash(message);
-        //   println!("\nrandom = {:?}", random);
-        //   println!("\ngr = {:?}", gr);
-        //   println!("\npkr = {:?}", pkr);
-        println!("\nkey = {:?}", key);
-        println!("\nsecret = {:?}", secret);
-        let cipher = key + secret;
-        println!("\ncipher = {:?}", cipher);
+        let gr_point = Point::new(Rc::clone(&rns_base), gr);
+        let mut public_data = gr_point.public();
 
-        let gs_point = Point::new(Rc::clone(&rns_base), gs);
-        let mut public_data = gs_point.public();
-        let c0 = Point::new(Rc::clone(&rns_base), gr);
-        //   let mut public_data = c0.public();
-        public_data.extend(c0.public());
-        let c1 = Point::new(Rc::clone(&rns_base), pkr);
-        //  public_data.extend(c1.public());
+        let mut secrets = vec![];
+        let mut gss = vec![];
+
+        let mut poseidon = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init();
+
+        for i in 0..NUMBER_OF_MEMBERS {
+            //       println!("{} th loop", i);
+            let secret = BnScalar::random(&mut rng);
+            let gs = (g * secret).to_affine();
+            //        println!("\nsecret = {:?}", secret);
+            //        println!("\ngs = {:?}", gs);
+
+            secrets.push(Value::known(secret));
+            gss.push(gs);
+
+            // Encrypt
+            let pkr = (pks[i] * random).to_affine();
+            let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
+            let key = poseidon.clone().hash(message);
+            //   println!("\nrandom = {:?}", random);
+            //   println!("\ngr = {:?}", gr);
+            //   println!("\npkr = {:?}", pkr);
+            //        println!("\nkey = {:?}", key);
+            //        println!("\nsecret = {:?}", secret);
+            let cipher = key + secret;
+            //        println!("\ncipher = {:?}", cipher);
+
+            let gs_point = Point::new(Rc::clone(&rns_base), gs);
+            public_data.extend(gs_point.public());
+
+            public_data.push(cipher);
+        }
+
+        let public_key: Vec<_> = pks.iter().map(|pk| Value::known(*pk)).collect();
 
         let aux_generator = BnG1::random(&mut rng);
         let circuit = CircuitDkg {
-            secret: Value::known(secret),
+            secret: secrets.try_into().unwrap(),
             random: Value::known(random),
-            public_key: Value::known(pk),
+            public_key: public_key.try_into().unwrap(),
             aux_generator,
             window_size: 4,
             //   _marker: PhantomData::<Fr>,
         };
-        public_data.push(cipher);
+
         let instance = vec![public_data];
         let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
 
         let dimension = DimensionMeasurement::measure(&circuit).unwrap();
         println!("dimention: {:?}", dimension);
 
-        let degree = 18;
+        let degree = 20;
         let setup_message = format!("dkg setup with degree = {}", degree);
         let start1 = start_timer!(|| setup_message);
         let general_params = ParamsKZG::<Bn256>::setup(degree as u32, &mut rng);
