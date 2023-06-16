@@ -15,3 +15,4 @@ const POSEIDON_LEN: usize = 2;
 // num = 13, k = 21
 const THRESHOLD: usize = 7;
 const NUMBER_OF_MEMBERS: usize = 13;
+const DEGREE: usize = 21;

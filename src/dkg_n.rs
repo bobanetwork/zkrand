@@ -249,6 +249,7 @@ mod tests {
     use rand_chacha::ChaCha20Rng;
     use rand_core::{OsRng, SeedableRng};
     use std::rc::Rc;
+    use crate::DEGREE;
 
     use super::*;
     use crate::poseidon::P128Pow5T3Bn;
@@ -419,7 +420,7 @@ mod tests {
         let dimension = DimensionMeasurement::measure(&circuit).unwrap();
         println!("dimention: {:?}", dimension);
 
-        let degree = 20;
+        let degree = DEGREE;
         let setup_message = format!("dkg setup with degree = {}", degree);
         let start1 = start_timer!(|| setup_message);
         let general_params = ParamsKZG::<Bn256>::setup(degree as u32, &mut rng);
