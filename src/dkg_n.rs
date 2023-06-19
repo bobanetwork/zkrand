@@ -430,10 +430,11 @@ mod tests {
 
         // Initialize the proving key
         let vk = keygen_vk(&general_params, &circuit).expect("keygen_vk should not fail");
-        let pk = keygen_pk(&general_params, vk, &circuit).expect("keygen_pk should not fail");
 
         let vk_bytes = vk.to_bytes(SerdeFormat::RawBytes);
         println!("size of verification key (raw bytes) {}", vk_bytes.len());
+
+        let pk = keygen_pk(&general_params, vk, &circuit).expect("keygen_pk should not fail");
 
         // Create a proof
         let mut transcript = Blake2bWrite::<_, BnG1, Challenge255<_>>::init(vec![]);
