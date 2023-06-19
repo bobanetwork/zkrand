@@ -235,7 +235,9 @@ mod tests {
     use halo2wrong::curves::CurveAffine;
     use halo2wrong::utils::{big_to_fe, fe_to_big, mock_prover_verify, DimensionMeasurement};
 
+    use crate::DEGREE;
     use ark_std::{end_timer, start_timer};
+    use halo2_ecc::halo2::SerdeFormat;
     use halo2wrong::halo2::plonk::{create_proof, keygen_pk, keygen_vk, verify_proof};
     use halo2wrong::halo2::poly::commitment::ParamsProver;
     use halo2wrong::halo2::poly::kzg::commitment::{
@@ -249,7 +251,6 @@ mod tests {
     use rand_chacha::ChaCha20Rng;
     use rand_core::{OsRng, SeedableRng};
     use std::rc::Rc;
-    use crate::DEGREE;
 
     use super::*;
     use crate::poseidon::P128Pow5T3Bn;
@@ -430,6 +431,10 @@ mod tests {
         // Initialize the proving key
         let vk = keygen_vk(&general_params, &circuit).expect("keygen_vk should not fail");
         let pk = keygen_pk(&general_params, vk, &circuit).expect("keygen_pk should not fail");
+
+        let vk_bytes = vk.to_bytes(SerdeFormat::RawBytes);
+        println!("size of verification key (raw bytes) {}", vk_bytes.len());
+
         // Create a proof
         let mut transcript = Blake2bWrite::<_, BnG1, Challenge255<_>>::init(vec![]);
 
