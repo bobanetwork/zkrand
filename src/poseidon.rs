@@ -1,6 +1,4 @@
-use halo2_gadgets::poseidon::primitives::{generate_constants, ConstantLength, Hash, Mds, Spec};
-//use ff::PrimeField;
-//use ff::{Field, FromUniformBytes};
+use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash, Mds, Spec};
 use halo2wrong::curves::bn256::Fr;
 use halo2wrong::halo2::arithmetic::Field;
 use std::marker::PhantomData;
@@ -37,16 +35,13 @@ impl Spec<Fr, 3, 2> for P128Pow5T3Bn {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use halo2_gadgets::poseidon;
     use halo2_gadgets::poseidon::{Hash as PoseidonHash, Pow5Chip, Pow5Config};
     use halo2wrong::curves::bn256::Fr as Fp;
-    //   use halo2wrong::curves::pasta::{Fp};
     use halo2wrong::halo2::circuit::{Layouter, SimpleFloorPlanner, Value};
-    use halo2wrong::halo2::dev::MockProver;
     use halo2wrong::halo2::plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance};
     use halo2wrong::utils::{mock_prover_verify, DimensionMeasurement};
     use rand_chacha::ChaCha20Rng;
-    use rand_core::{OsRng, SeedableRng};
+    use rand_core::SeedableRng;
 
     //https://github.com/privacy-scaling-explorations/halo2/blob/v2023_04_20/halo2_gadgets/benches/poseidon.rs
     #[derive(Clone, Copy)]
@@ -167,28 +162,22 @@ mod tests {
            }
        }
 
-    */
 
-    const K: u32 = 7;
+       const K: u32 = 7;
+
+    */
 
     #[test]
     fn poseidon_hash() {
-        //  let rng = OsRng;
         let mut rng = ChaCha20Rng::seed_from_u64(42);
 
         let message = [Fp::random(&mut rng), Fp::random(&mut rng)];
-        //P128Pow5T3Bn
-        //     let output = Hash::<_, MySpec<3,2>, ConstantLength<2>, 3, 2>::init().hash(message);
         let output = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init().hash(message);
 
-        //      let k = 6;
         let circuit = HashCircuit::<P128Pow5T3Bn, 3, 2, 2> {
             message: Value::known(message),
-            //          output: Value::known(output),
             _spec: PhantomData,
         };
-        //   let prover = MockProver::run(K, &circuit, vec![vec![]]).unwrap();
-        //   assert_eq!(prover.verify(), Ok(()))
         let dimension = DimensionMeasurement::measure(&circuit).unwrap();
         println!("dimension = {:?}", dimension);
 
