@@ -1,5 +1,5 @@
 mod dkg;
-mod dkg_n;
+mod dkg_circuit;
 mod poseidon;
 mod utils;
 
