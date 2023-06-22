@@ -20,8 +20,7 @@ use halo2_maingate::{
 
 use crate::poseidon::P128Pow5T3Bn;
 use crate::{
-    BIT_LEN_LIMB, NUMBER_OF_LIMBS, NUMBER_OF_MEMBERS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH,
-    THRESHOLD,
+    DkgParams, BIT_LEN_LIMB, NUMBER_OF_LIMBS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH,
 };
 
 #[derive(Clone, Debug)]
@@ -88,8 +87,8 @@ impl CircuitDkgConfig {
     }
 }
 
-#[derive(Default, Clone)]
-struct CircuitDkg {
+#[derive(Clone)]
+pub struct CircuitDkg<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
     coeffs: [Value<BnScalar>; THRESHOLD],
     random: Value<BnScalar>,
     public_keys: [Value<BnG1>; NUMBER_OF_MEMBERS],
@@ -98,7 +97,36 @@ struct CircuitDkg {
     window_size: usize,
 }
 
-impl Circuit<BnScalar> for CircuitDkg {
+impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
+    CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>
+{
+    pub fn new(
+        coeffs: Vec<Value<BnScalar>>,
+        random: Value<BnScalar>,
+        public_keys: Vec<Value<BnG1>>,
+        aux_generator: BnG1,
+        window_size: usize,
+    ) -> Self {
+        assert_eq!(coeffs.len(), THRESHOLD);
+        assert_eq!(public_keys.len(), NUMBER_OF_MEMBERS);
+
+        CircuitDkg {
+            coeffs: coeffs
+                .try_into()
+                .expect("unable to convert coefficient vector"),
+            random,
+            public_keys: public_keys
+                .try_into()
+                .expect("unable to convert public key vector"),
+            aux_generator,
+            window_size,
+        }
+    }
+}
+
+impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
+    for CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>
+{
     type Config = CircuitDkgConfig;
     type FloorPlanner = SimpleFloorPlanner;
     #[cfg(feature = "circuit-params")]
@@ -122,7 +150,7 @@ impl Circuit<BnScalar> for CircuitDkg {
             BaseFieldEccChip::<BnG1, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
         let main_gate = MainGate::<BnScalar>::new(config.main_gate_config.clone());
 
-        let shares = layouter.assign_region(
+        let (shares, a) = layouter.assign_region(
             || "region compute shares from coefficients",
             |region| {
                 let offset = 0;
@@ -155,7 +183,7 @@ impl Circuit<BnScalar> for CircuitDkg {
                     shares.push(s);
                 }
 
-                Ok(shares)
+                Ok((shares, coeffs[0].clone()))
             },
         )?;
 
@@ -171,13 +199,32 @@ impl Circuit<BnScalar> for CircuitDkg {
             },
         )?;
 
-        let (g, r, gr) = layouter.assign_region(
-            || "region ecc mul g^r",
+        let (g, ga) = layouter.assign_region(
+            || "region ecc mul g^a",
             |region| {
                 let offset = 0;
                 let ctx = &mut RegionCtx::new(region, offset);
 
                 let g = ecc_chip.assign_constant(ctx, BnG1::generator())?;
+
+                // ga = g^a
+                let ga = ecc_chip.mul(ctx, &g, &a, self.window_size)?;
+                // normalise for public inputs
+                let ga = ecc_chip.normalize(ctx, &ga)?;
+
+                Ok((g, ga))
+            },
+        )?;
+
+        ecc_chip.expose_public(layouter.namespace(|| "cipher g^a"), ga, 0)?;
+        let mut instance_offset: usize = 8;
+
+        let (r, gr) = layouter.assign_region(
+            || "region ecc mul g^r",
+            |region| {
+                let offset = 0;
+                let ctx = &mut RegionCtx::new(region, offset);
+
                 let r = main_gate.assign_value(ctx, self.random)?;
 
                 // gr = g^r
@@ -185,30 +232,47 @@ impl Circuit<BnScalar> for CircuitDkg {
                 // normalise for public inputs
                 let gr = ecc_chip.normalize(ctx, &gr)?;
 
-                Ok((g, r, gr))
+                Ok((r, gr))
             },
         )?;
 
-        ecc_chip.expose_public(layouter.namespace(|| "cipher g^r"), gr, 0)?;
-        let mut instance_offset: usize = 8;
+        ecc_chip.expose_public(layouter.namespace(|| "cipher g^r"), gr, instance_offset)?;
+        instance_offset += 8;
 
         for i in 0..NUMBER_OF_MEMBERS {
-            let (gs, pkr) = layouter.assign_region(
-                || "region ecc mul",
+            let gs = layouter.assign_region(
+                || "region ecc mul g^s",
+                |region| {
+                    let offset = 0;
+                    let ctx = &mut RegionCtx::new(region, offset);
+
+                    // gs = g^s
+                    let gs = ecc_chip.mul(ctx, &g, &shares[i], self.window_size)?;
+                    // normalise for public inputs
+                    let gs = ecc_chip.normalize(ctx, &gs)?;
+                    Ok(gs)
+                },
+            )?;
+
+            ecc_chip.expose_public(layouter.namespace(|| "g^s"), gs, instance_offset)?;
+            instance_offset += 8;
+        }
+
+        for i in 0..NUMBER_OF_MEMBERS {
+            let pkr = layouter.assign_region(
+                || "region ecc mul encryption",
                 |region| {
                     let offset = 0;
                     let ctx = &mut RegionCtx::new(region, offset);
 
                     let pk_assigned = ecc_chip.assign_point(ctx, self.public_keys[i])?;
 
-                    // gs = g^s, pkr = pk^r
-                    let gs = ecc_chip.mul(ctx, &g, &shares[i], self.window_size)?;
+                    // pkr = pk^r
                     let pkr = ecc_chip.mul(ctx, &pk_assigned, &r, self.window_size)?;
 
                     // normalise for public inputs
-                    let gs = ecc_chip.normalize(ctx, &gs)?;
                     let pkr = ecc_chip.normalize(ctx, &pkr)?;
-                    Ok((gs, pkr))
+                    Ok(pkr)
                 },
             )?;
 
@@ -234,8 +298,6 @@ impl Circuit<BnScalar> for CircuitDkg {
                 },
             )?;
 
-            ecc_chip.expose_public(layouter.namespace(|| "g^s"), gs, instance_offset)?;
-            instance_offset += 8;
             main_gate.expose_public(
                 layouter.namespace(|| "cipher main"),
                 cipher,
@@ -257,7 +319,6 @@ mod tests {
     use halo2wrong::curves::group::Curve;
     use halo2wrong::utils::{mock_prover_verify, DimensionMeasurement};
 
-    use crate::DEGREE;
     use ark_std::{end_timer, start_timer};
     use halo2_ecc::halo2::SerdeFormat;
     use halo2wrong::curves::bn256::Bn256;
@@ -272,15 +333,20 @@ mod tests {
         Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
     };
 
+    use crate::dkg::compute_shares;
     use rand_chacha::ChaCha20Rng;
     use rand_core::SeedableRng;
     use std::rc::Rc;
 
     use super::*;
     use crate::poseidon::P128Pow5T3Bn;
-    use crate::utils::{create_shares, mod_n, setup};
+    use crate::utils::{mod_n, setup};
 
-    fn get_circuit() -> (CircuitDkg, Vec<BnScalar>, ChaCha20Rng) {
+    fn get_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() -> (
+        CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>,
+        Vec<BnScalar>,
+        ChaCha20Rng,
+    ) {
         let (rns_base, _) = setup::<BnG1>(0);
         let rns_base = Rc::new(rns_base);
 
@@ -291,7 +357,6 @@ mod tests {
         // Generate a key pair for encryption
         let mut sks = vec![];
         let mut pks = vec![];
-
         for _ in 0..NUMBER_OF_MEMBERS {
             let sk = BnScalar::random(&mut rng);
             let pk = (g * sk).to_affine();
@@ -300,35 +365,39 @@ mod tests {
             pks.push(pk);
         }
 
-        // Draw arandomness for encryption
-        let random = BnScalar::random(&mut rng);
-        let gr = (g * random).to_affine();
-
-        let gr_point = Point::new(Rc::clone(&rns_base), gr);
-        let mut public_data = gr_point.public();
-
         let mut coeffs = vec![];
         for _ in 0..THRESHOLD {
             let a = BnScalar::random(&mut rng);
             coeffs.push(a);
         }
 
-        let shares = create_shares(&coeffs);
+        let ga = (g * coeffs[0]).to_affine();
+        let ga_point = Point::new(Rc::clone(&rns_base), ga);
+        let mut public_data = ga_point.public();
+
+        // Draw arandomness for encryption
+        let random = BnScalar::random(&mut rng);
+        let gr = (g * random).to_affine();
+
+        let gr_point = Point::new(Rc::clone(&rns_base), gr);
+        public_data.extend(gr_point.public());
+
+        let shares = compute_shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
+
         let poseidon = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init();
 
-        let mut gss = vec![];
         for i in 0..NUMBER_OF_MEMBERS {
             let gs = (g * shares[i]).to_affine();
-            gss.push(gs);
+            let gs_point = Point::new(Rc::clone(&rns_base), gs);
+            public_data.extend(gs_point.public());
+        }
 
+        for i in 0..NUMBER_OF_MEMBERS {
             // Encrypt
             let pkr = (pks[i] * random).to_affine();
             let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
             let key = poseidon.clone().hash(message);
             let cipher = key + shares[i];
-
-            let gs_point = Point::new(Rc::clone(&rns_base), gs);
-            public_data.extend(gs_point.public());
 
             public_data.push(cipher);
         }
@@ -348,9 +417,8 @@ mod tests {
         (circuit, public_data, rng)
     }
 
-    #[test]
-    fn test_dkg_n_circuit() {
-        let (circuit, public_data, _) = get_circuit();
+    fn dkg_n_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
+        let (circuit, public_data, _) = get_circuit::<THRESHOLD, NUMBER_OF_MEMBERS>();
 
         let instance = vec![public_data];
         mock_prover_verify(&circuit, instance);
@@ -360,8 +428,13 @@ mod tests {
     }
 
     #[test]
-    fn test_dkg_n_proof() {
-        let (circuit, public_data, mut rng) = get_circuit();
+    fn test_dkg_n_circuit() {
+        dkg_n_circuit::<4, 6>();
+        dkg_n_circuit::<7, 13>();
+    }
+
+    fn dkg_n_proof<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize, const DEGREE: usize>() {
+        let (circuit, public_data, mut rng) = get_circuit::<THRESHOLD, NUMBER_OF_MEMBERS>();
         let instance = vec![public_data];
         let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
 
@@ -383,6 +456,9 @@ mod tests {
 
         let pk = keygen_pk(&general_params, vk, &circuit).expect("keygen_pk should not fail");
 
+        let pk_bytes = pk.to_bytes(SerdeFormat::RawBytes);
+        println!("size of proving key (raw bytes) {}", pk_bytes.len());
+
         // Create a proof
         let mut transcript = Blake2bWrite::<_, BnG1, Challenge255<_>>::init(vec![]);
 
@@ -395,7 +471,7 @@ mod tests {
             Challenge255<BnG1>,
             ChaCha20Rng,
             Blake2bWrite<Vec<u8>, BnG1, Challenge255<BnG1>>,
-            CircuitDkg,
+            CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>,
         >(
             &general_params,
             &pk,
@@ -429,5 +505,11 @@ mod tests {
         )
         .expect("failed to verify dkg circuit");
         end_timer!(start3);
+    }
+
+    #[test]
+    fn test_dkg_n_proof() {
+        dkg_n_proof::<4, 6, 20>();
+        dkg_n_proof::<6, 13, 21>();
     }
 }

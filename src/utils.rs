@@ -3,7 +3,7 @@ use halo2wrong::curves::bn256::Fr as BnScalar;
 use halo2wrong::curves::CurveAffine;
 use halo2wrong::utils::{big_to_fe, fe_to_big};
 
-use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS, NUMBER_OF_LOOKUP_LIMBS, NUMBER_OF_MEMBERS, THRESHOLD};
+use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS, NUMBER_OF_LOOKUP_LIMBS};
 
 pub fn mod_n<C: CurveAffine>(x: C::Base) -> C::Scalar {
     let x_big = fe_to_big(x);
@@ -50,34 +50,3 @@ fn setup<
 }
 
  */
-
-// evaluate a polynomial at index i
-fn evaluate(coeffs: &[BnScalar], i: usize) -> BnScalar {
-    assert!(coeffs.len() >= 1);
-
-    let mut x = i;
-    let mut eval = coeffs[0];
-
-    for a in coeffs.iter().skip(1) {
-        eval += a * BnScalar::from(x as u64);
-        x = x * i;
-    }
-
-    eval
-}
-
-// create secret shares for n parties
-pub fn create_shares(coeffs: &[BnScalar]) -> [BnScalar; NUMBER_OF_MEMBERS] {
-    assert_eq!(coeffs.len(), THRESHOLD);
-
-    let mut shares = vec![];
-    let s1 = coeffs.iter().sum();
-    shares.push(s1);
-
-    for i in 2..=NUMBER_OF_MEMBERS {
-        let s = evaluate(coeffs, i);
-        shares.push(s);
-    }
-
-    shares.try_into().unwrap()
-}
