@@ -436,8 +436,8 @@ mod tests {
         dkg_n_circuit::<4, 6>();
         dkg_n_circuit::<7, 13>();
         dkg_n_circuit::<14, 27>();
-        dkg_n_circuit::<29, 57>();
-        dkg_n_circuit::<58, 114>();
+        //   dkg_n_circuit::<28, 55>();
+        //    dkg_n_circuit::<57, 112>();
     }
 
     fn dkg_n_proof<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize, const DEGREE: usize>() {

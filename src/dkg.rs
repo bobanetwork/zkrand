@@ -402,7 +402,7 @@ mod tests {
         pseudo_random::<4, 6>();
         pseudo_random::<7, 13>();
         pseudo_random::<14, 27>();
-        pseudo_random::<29, 57>();
-        pseudo_random::<58, 114>();
+        pseudo_random::<28, 55>();
+        pseudo_random::<57, 112>();
     }
 }
