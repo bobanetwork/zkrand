@@ -1,14 +1,272 @@
 use rand_core::RngCore;
+use std::marker::PhantomData;
 
-use crate::poseidon::P128Pow5T3Bn;
-use crate::utils::mod_n;
-use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash};
-use halo2wrong::curves::bn256::{pairing, Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
+use crate::error::Error;
+use blake2b_simd::{blake2b, State as Blake2bState};
+use halo2wrong::curves::bn256::{
+    pairing, Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2, G1 as BnG1Projective,
+};
+use halo2wrong::curves::ff::{FromUniformBytes, PrimeField};
 use halo2wrong::curves::group::prime::PrimeCurveAffine;
 use halo2wrong::curves::group::{Curve, GroupEncoding};
+use halo2wrong::curves::CurveExt;
 use halo2wrong::halo2::arithmetic::Field;
-use sha3::digest::DynDigest;
-use sha3::{Digest, Keccak256};
+
+use crate::hash_to_curve::svdw_hash_to_curve;
+
+const EVAL_PREFIX: &str = "partial evaluation for creating randomness";
+
+pub fn hash_to_curve<'a>(domain_prefix: &'a str) -> Box<dyn Fn(&[u8]) -> BnG1Projective + 'a> {
+    svdw_hash_to_curve::<BnG1Projective>(
+        "bn256_g1",
+        domain_prefix,
+        <BnG1Projective as CurveExt>::Base::one(),
+    )
+}
+
+// evaluate a polynomial at index i
+fn evaluate_poly(coeffs: &[BnScalar], i: usize) -> BnScalar {
+    assert!(coeffs.len() >= 1);
+
+    let mut x = BnScalar::from(i as u64);
+    let mut prod = x;
+    let mut eval = coeffs[0];
+
+    for a in coeffs.iter().skip(1) {
+        eval += a * prod;
+        prod = prod * x;
+    }
+
+    eval
+}
+
+// compute secret shares for n parties
+pub fn get_shares<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
+    coeffs: &[BnScalar],
+) -> [BnScalar; NUMBER_OF_MEMBERS] {
+    assert_eq!(coeffs.len(), THRESHOLD);
+
+    let mut shares = vec![];
+    let s1 = coeffs.iter().sum();
+    shares.push(s1);
+
+    for i in 2..=NUMBER_OF_MEMBERS {
+        let s = evaluate_poly(coeffs, i);
+        shares.push(s);
+    }
+
+    shares
+        .try_into()
+        .expect("cannot convert share vector to array")
+}
+
+pub struct DkgShareKey<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
+    index: usize,
+    sk: BnScalar,
+    vk: BnG1,
+}
+
+impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
+    DkgShareKey<THRESHOLD, NUMBER_OF_MEMBERS>
+{
+    // combine shares received from other members
+    // verification key is computed as vk = g^s
+    pub fn combine(shares: &[BnScalar], index: usize) -> Result<Self, Error> {
+        if index > NUMBER_OF_MEMBERS || index < 1 {
+            return Err(Error::InvalidIndex);
+        };
+
+        let sk: BnScalar = shares.iter().sum();
+
+        let g = BnG1::generator();
+        let vk = (g * sk).to_affine();
+
+        Ok(DkgShareKey { index, sk, vk })
+    }
+
+    pub fn get_verification_key(&self) -> BnG1 {
+        self.vk
+    }
+
+    pub fn get_index(&self) -> usize {
+        self.index
+    }
+
+    // compute H(x)^sk to create partial evaluation and create a schnorr style proof
+    pub fn evaluate(
+        &self,
+        input: &[u8],
+        mut rng: impl RngCore,
+    ) -> PartialEval<THRESHOLD, NUMBER_OF_MEMBERS> {
+        let hasher = hash_to_curve(EVAL_PREFIX);
+        let h: BnG1 = hasher(input).to_affine();
+        let v = (h * self.sk).to_affine();
+
+        let g = BnG1::generator();
+        let r = BnScalar::random(&mut rng);
+        let cap_r_1 = (g * r).to_affine();
+        let cap_r_2 = (h * r).to_affine();
+
+        let mut hash_state = Blake2bState::new();
+        hash_state
+            .update(g.to_bytes().as_ref())
+            .update(h.to_bytes().as_ref())
+            .update(cap_r_1.to_bytes().as_ref())
+            .update(cap_r_2.to_bytes().as_ref())
+            .update(self.vk.to_bytes().as_ref())
+            .update(v.to_bytes().as_ref());
+        let data: [u8; 64] = hash_state
+            .finalize()
+            .as_ref()
+            .try_into()
+            .expect("cannot convert hash result to array");
+
+        let c = BnScalar::from_uniform_bytes(&data);
+        let z = c * self.sk + r;
+        let proof = (z, c);
+
+        PartialEval {
+            index: self.index,
+            v,
+            proof,
+        }
+    }
+}
+
+pub struct PartialEval<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
+    index: usize,
+    v: BnG1,
+    proof: (BnScalar, BnScalar),
+}
+
+impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
+    PartialEval<THRESHOLD, NUMBER_OF_MEMBERS>
+{
+    pub fn verify(&self, input: &[u8], vk: &BnG1) -> Result<(), Error> {
+        if self.index > NUMBER_OF_MEMBERS || self.index < 1 {
+            return Err(Error::InvalidIndex);
+        };
+
+        let hasher = hash_to_curve(EVAL_PREFIX);
+        let h: BnG1 = hasher(input).to_affine();
+
+        let g = BnG1::generator();
+        let z = self.proof.0;
+        let c = self.proof.1;
+        let v = self.v;
+
+        let cap_r_1 = ((g * z) - (vk * c)).to_affine();
+        let cap_r_2 = ((h * z) - (v * c)).to_affine();
+
+        let mut hash_state = Blake2bState::new();
+        hash_state
+            .update(g.to_bytes().as_ref())
+            .update(h.to_bytes().as_ref())
+            .update(cap_r_1.to_bytes().as_ref())
+            .update(cap_r_2.to_bytes().as_ref())
+            .update(vk.to_bytes().as_ref())
+            .update(v.to_bytes().as_ref());
+        let data: [u8; 64] = hash_state
+            .finalize()
+            .as_ref()
+            .try_into()
+            .expect("cannot convert hash result to array");
+        let c_tilde = BnScalar::from_uniform_bytes(&data);
+
+        if c != c_tilde {
+            return Err(Error::VerifyFailed);
+        }
+
+        Ok(())
+    }
+}
+
+pub struct PseudoRandom {
+    proof: BnG1,
+    random: Vec<u8>,
+}
+
+// check if the indices are in the range and sorted
+fn check_indices<const NUMBER_OF_MEMBERS: usize>(indices: &[usize]) -> Result<(), Error> {
+    for i in 0..indices.len() {
+        if i < indices.len() - 1 {
+            if indices[i] >= indices[i + 1] {
+                return Err(Error::InvalidIndex);
+            };
+        }
+        if indices[i] > NUMBER_OF_MEMBERS || indices[i] < 1 {
+            return Err(Error::InvalidIndex);
+        };
+    }
+
+    Ok(())
+}
+
+// obtain final random
+pub fn combine_partial_evaluations<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
+    sigmas: &[PartialEval<THRESHOLD, NUMBER_OF_MEMBERS>],
+) -> Result<PseudoRandom, Error> {
+    if sigmas.len() != THRESHOLD {
+        return Err(Error::InvalidLength);
+    }
+
+    let indices: Vec<_> = sigmas.iter().map(|sigma| sigma.index).collect();
+    check_indices::<NUMBER_OF_MEMBERS>(&indices)?;
+
+    // compute Lagrange coefficients
+    let indices: Vec<_> = indices.iter().map(|i| BnScalar::from(*i as u64)).collect();
+    let mut lambdas = vec![];
+    for i in indices.iter() {
+        let mut lambda = BnScalar::one();
+        for k in indices.iter() {
+            if !k.eq(i) {
+                let sub = k - i;
+                let z = k * sub.invert().unwrap();
+                lambda *= z;
+            }
+        }
+        lambdas.push(lambda);
+    }
+
+    // compute pi
+    let pis: Vec<_> = sigmas
+        .iter()
+        .zip(lambdas.iter())
+        .map(|(sigma, lambda)| sigma.v * lambda)
+        .collect();
+    let sum = pis.iter().skip(1).fold(pis[0], |sum, p| sum + p);
+
+    let proof = sum.to_affine();
+    let random = blake2b(proof.to_bytes().as_ref()).as_bytes().to_vec();
+
+    Ok(PseudoRandom { proof, random })
+}
+
+impl PseudoRandom {
+    pub fn verify(&self, input: &[u8], gpk: &BnG2) -> Result<(), Error> {
+        let g2 = BnG2::generator();
+
+        let hasher = hash_to_curve(EVAL_PREFIX);
+        let h: BnG1 = hasher(input).to_affine();
+
+        let left = pairing(&h, &gpk);
+        let right = pairing(&self.proof, &g2);
+
+        if !left.eq(&right) {
+            return Err(Error::VerifyFailed);
+        }
+
+        if !self
+            .random
+            .as_slice()
+            .eq(blake2b(self.proof.to_bytes().as_ref()).as_ref())
+        {
+            return Err(Error::VerifyFailed);
+        }
+
+        Ok(())
+    }
+}
 
 pub fn keygen(mut rng: impl RngCore) -> (BnScalar, BnG1) {
     let g = BnG1::generator();
@@ -25,100 +283,20 @@ pub fn get_public_key(sk: BnScalar) -> BnG1 {
     pk
 }
 
-// todo: integrate this verification to dkg circuit verification
+// todo: integrate this verification to dkg circuit verification(?)
 // check if ga and g2a have the same exponent a
-pub fn verify_public_coeffs(ga: BnG1, g2a: BnG2) {
+pub fn verify_public_coeffs(ga: BnG1, g2a: BnG2) -> Result<(), Error> {
     let g = BnG1::generator();
     let g2 = BnG2::generator();
 
     let left = pairing(&g, &g2a);
     let right = pairing(&ga, &g2);
 
-    assert_eq!(left, right);
-}
-
-// evaluate a polynomial at index i
-fn evaluate(coeffs: &[BnScalar], i: usize) -> BnScalar {
-    assert!(coeffs.len() >= 1);
-
-    let mut x = i;
-    let mut eval = coeffs[0];
-
-    for a in coeffs.iter().skip(1) {
-        eval += a * BnScalar::from(x as u64);
-        x = x * i;
+    if left != right {
+        return Err(Error::VerifyFailed);
     }
 
-    eval
-}
-
-// compute secret shares for n parties
-pub fn compute_shares<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
-    coeffs: &[BnScalar],
-) -> [BnScalar; NUMBER_OF_MEMBERS] {
-    assert_eq!(coeffs.len(), THRESHOLD);
-
-    let mut shares = vec![];
-    let s1 = coeffs.iter().sum();
-    shares.push(s1);
-
-    for i in 2..=NUMBER_OF_MEMBERS {
-        let s = evaluate(coeffs, i);
-        shares.push(s);
-    }
-
-    shares.try_into().unwrap()
-}
-
-fn get_public_shares(shares: &[BnScalar]) -> Vec<BnG1> {
-    let g = BnG1::generator();
-    let public_shares: Vec<_> = shares.iter().map(|s| (g * s).to_affine()).collect();
-    public_shares
-}
-
-fn encrypt_shares<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
-    shares: &[BnScalar],
-    public_keys: &[BnG1],
-    mut rng: impl RngCore,
-) -> (BnScalar, BnG1, Vec<BnScalar>) {
-    assert_eq!(shares.len(), NUMBER_OF_MEMBERS);
-    assert_eq!(public_keys.len(), NUMBER_OF_MEMBERS);
-
-    let g = BnG1::generator();
-
-    // Draw arandomness for encryption
-    let r = BnScalar::random(&mut rng);
-    let gr = (g * r).to_affine();
-
-    let poseidon = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init();
-
-    let mut ciphers = vec![];
-    for i in 0..NUMBER_OF_MEMBERS {
-        // Encrypt
-        let pkr = (public_keys[i] * r).to_affine();
-        let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
-        let key = poseidon.clone().hash(message);
-        let cipher = key + shares[i];
-        ciphers.push(cipher)
-    }
-
-    (r, gr, ciphers)
-}
-
-fn decrypt_share(sk: BnScalar, gr: BnG1, cipher: BnScalar) -> BnScalar {
-    let pkr = (gr * sk).to_affine();
-    let poseidon = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init();
-    let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
-    let key = poseidon.clone().hash(message);
-    let plaintext = cipher - key;
-
-    plaintext
-}
-
-// combine shares received from other members
-// verification key is computed as vk = g^s
-fn combine_shares(shares: &[BnScalar]) -> BnScalar {
-    shares.iter().sum()
+    Ok(())
 }
 
 // compute global public key g2a and verification keys vk_i for each member i
@@ -133,4 +311,98 @@ fn combine_public_params(gas: &[BnG1], g2as: &[BnG2]) -> (BnG1, BnG2) {
         .fold(g2as[0], |sum, h| (sum + h).to_affine());
 
     (ga, g2a)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ark_std::{end_timer, start_timer};
+    use rand_chacha::ChaCha20Rng;
+    use rand_core::SeedableRng;
+    use std::ops::Index;
+
+    const THRESHOLD: usize = 9;
+    const NUMBER_OF_MEMBERS: usize = 16;
+
+    #[test]
+    fn test_hash_to_curve() {
+        let hasher = hash_to_curve("another generator");
+        let h = hasher(b"second generator h");
+        assert!(bool::from(h.is_on_curve()));
+    }
+
+    #[test]
+    fn test_partial_evaluation() {
+        let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let index = 1;
+        let (sk, vk) = keygen(&mut rng);
+        let key = DkgShareKey::<THRESHOLD, NUMBER_OF_MEMBERS> { index, sk, vk };
+        let x = b"the first random 20230626";
+
+        let start =
+            start_timer!(|| format!("partial evaluations ({}, {})", THRESHOLD, NUMBER_OF_MEMBERS));
+        let sigma = key.evaluate(x, &mut rng);
+        end_timer!(start);
+
+        sigma.verify(x, &vk).unwrap();
+    }
+
+    fn pseudo_random<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
+        let mut rng = ChaCha20Rng::seed_from_u64(42);
+        //  let index = 1;
+
+        let g = BnG1::generator();
+        let g2 = BnG2::generator();
+
+        let mut coeffs: Vec<_> = (0..THRESHOLD).map(|_| BnScalar::random(&mut rng)).collect();
+        let shares = get_shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
+        let keys: Vec<_> = shares
+            .iter()
+            .enumerate()
+            .map(|(i, s)| DkgShareKey::<THRESHOLD, NUMBER_OF_MEMBERS> {
+                index: i + 1,
+                sk: *s,
+                vk: (g * s).to_affine(),
+            })
+            .collect();
+        let vks: Vec<_> = keys.iter().map(|key| key.vk).collect();
+
+        let gpk = (g2 * coeffs[0]).to_affine();
+        let input = b"test first random";
+
+        let evals: Vec<_> = keys
+            .iter()
+            .map(|key| key.evaluate(input, &mut rng))
+            .collect();
+
+        let res = evals
+            .iter()
+            .zip(vks.iter())
+            .all(|(e, vk)| e.verify(input, vk).is_ok());
+
+        assert!(res);
+
+        let start = start_timer!(|| format!(
+            "combine partial evaluations ({}, {})",
+            THRESHOLD, NUMBER_OF_MEMBERS
+        ));
+        let pseudo_random = combine_partial_evaluations(&evals[0..THRESHOLD]).unwrap();
+        end_timer!(start);
+
+        let start = start_timer!(|| format!(
+            "verify pseudo random value ({}, {})",
+            THRESHOLD, NUMBER_OF_MEMBERS
+        ));
+        pseudo_random.verify(input, &gpk).unwrap();
+        end_timer!(start);
+    }
+
+    #[test]
+    fn test_pseudo_random() {
+        pseudo_random::<4, 6>();
+        pseudo_random::<7, 13>();
+        pseudo_random::<14, 27>();
+        pseudo_random::<29, 57>();
+        pseudo_random::<58, 114>();
+    }
 }

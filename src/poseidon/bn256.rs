@@ -1,4 +1,4 @@
-use halo2wrong::curves::{bn256::{Fr as Fp}, group::ff::PrimeField};
+use halo2wrong::curves::{bn256::Fr as Fp, group::ff::PrimeField};
 use halo2wrong::halo2::arithmetic::Field;
 
 use lazy_static::lazy_static;

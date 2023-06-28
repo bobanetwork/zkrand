@@ -3,6 +3,7 @@ use halo2wrong::curves::bn256::Fr as BnScalar;
 use halo2wrong::curves::CurveAffine;
 use halo2wrong::utils::{big_to_fe, fe_to_big};
 
+use crate::hash_to_curve::svdw_hash_to_curve;
 use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS, NUMBER_OF_LOOKUP_LIMBS};
 
 pub fn mod_n<C: CurveAffine>(x: C::Base) -> C::Scalar {

@@ -1,5 +1,7 @@
 mod dkg;
 mod dkg_circuit;
+mod error;
+mod hash_to_curve;
 mod poseidon;
 mod utils;
 
@@ -14,7 +16,7 @@ use halo2wrong::curves::group::Curve;
 use halo2wrong::halo2::arithmetic::Field;
 use halo2wrong::halo2::circuit::Value;
 
-use crate::dkg::{compute_shares, keygen};
+use crate::dkg::{get_shares, keygen};
 use crate::dkg_circuit::CircuitDkg;
 use crate::poseidon::P128Pow5T3Bn;
 use crate::utils::{mod_n, setup};
@@ -51,10 +53,20 @@ impl MemberKey {
 
         MemberKey { sk, pk }
     }
+
+    pub fn decrypt_share(sk: BnScalar, gr: BnG1, cipher: BnScalar) -> BnScalar {
+        let pkr = (gr * sk).to_affine();
+        let poseidon = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init();
+        let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
+        let key = poseidon.clone().hash(message);
+        let plaintext = cipher - key;
+
+        plaintext
+    }
 }
 
 pub struct DkgParams<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
-    // each member is indexed using a number between 0..NUMBER_OF_MEMBERS-1
+    // each member is indexed using a number between 1..NUMBER_OF_MEMBERS
     index: usize,
     coeffs: [BnScalar; THRESHOLD],
     shares: [BnScalar; NUMBER_OF_MEMBERS],
@@ -71,7 +83,8 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
     DkgParams<THRESHOLD, NUMBER_OF_MEMBERS>
 {
     pub fn new(index: usize, member_public_keys: &[BnG1], mut rng: impl RngCore) -> Self {
-        assert!(index < NUMBER_OF_MEMBERS);
+        assert!(index >= 1);
+        assert!(index <= NUMBER_OF_MEMBERS);
         assert_eq!(member_public_keys.len(), NUMBER_OF_MEMBERS);
 
         // generate random coefficients for polynomial
@@ -85,7 +98,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         let g2a = (g2 * coeffs[0]).to_affine();
 
         // compute secret shares for members
-        let shares = compute_shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
+        let shares = get_shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
         let public_shares: Vec<_> = shares.iter().map(|s| (g * s).to_affine()).collect();
 
         // draw arandomness for encryption

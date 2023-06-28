@@ -173,12 +173,13 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
 
                 // compute s1,..., s_n-1
                 for i in 2..=NUMBER_OF_MEMBERS {
-                    let mut x = i;
+                    let ii = BnScalar::from(i as u64);
+                    let mut x = ii;
                     let mut s = coeffs[0].clone();
                     for j in 1..THRESHOLD {
-                        let y = main_gate.assign_constant(ctx, BnScalar::from(x as u64))?;
+                        let y = main_gate.assign_constant(ctx, x)?;
                         s = main_gate.mul_add(ctx, &coeffs[j], &y, &s)?;
-                        x = x * i;
+                        x = x * ii;
                     }
                     shares.push(s);
                 }
@@ -333,7 +334,7 @@ mod tests {
         Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
     };
 
-    use crate::dkg::compute_shares;
+    use crate::dkg::get_shares;
     use rand_chacha::ChaCha20Rng;
     use rand_core::SeedableRng;
     use std::rc::Rc;
@@ -382,7 +383,7 @@ mod tests {
         let gr_point = Point::new(Rc::clone(&rns_base), gr);
         public_data.extend(gr_point.public());
 
-        let shares = compute_shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
+        let shares = get_shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
 
         let poseidon = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init();
 
@@ -424,13 +425,19 @@ mod tests {
         mock_prover_verify(&circuit, instance);
 
         let dimension = DimensionMeasurement::measure(&circuit).unwrap();
-        println!("dimention: {:?}", dimension);
+        println!(
+            "({}, {}) dimention: {:?}",
+            THRESHOLD, NUMBER_OF_MEMBERS, dimension
+        );
     }
 
     #[test]
     fn test_dkg_n_circuit() {
         dkg_n_circuit::<4, 6>();
         dkg_n_circuit::<7, 13>();
+        dkg_n_circuit::<14, 27>();
+        dkg_n_circuit::<29, 57>();
+        dkg_n_circuit::<58, 114>();
     }
 
     fn dkg_n_proof<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize, const DEGREE: usize>() {
