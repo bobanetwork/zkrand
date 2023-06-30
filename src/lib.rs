@@ -16,8 +16,9 @@ use halo2wrong::curves::group::Curve;
 use halo2wrong::halo2::arithmetic::Field;
 use halo2wrong::halo2::circuit::Value;
 
-use crate::dkg::{get_shares, keygen};
+use crate::dkg::{get_shares, keygen, DkgShareKey};
 use crate::dkg_circuit::CircuitDkg;
+use crate::error::Error;
 use crate::poseidon::P128Pow5T3Bn;
 use crate::utils::{mod_n, setup};
 
@@ -31,17 +32,6 @@ const POSEIDON_LEN: usize = 2;
 // t = 4, num = 6, k = 20
 // t = 7, num = 13, k = 21
 
-/*
-const THRESHOLD: usize = 4;
-const NUMBER_OF_MEMBERS: usize = 6;
-const DEGREE: usize = 20;
-
-
-const THRESHOLD: usize = 7;
-const NUMBER_OF_MEMBERS: usize = 13;
-const DEGREE: usize = 21;
- */
-
 pub struct MemberKey {
     sk: BnScalar,
     pk: BnG1,
@@ -54,8 +44,12 @@ impl MemberKey {
         MemberKey { sk, pk }
     }
 
-    pub fn decrypt_share(sk: BnScalar, gr: BnG1, cipher: BnScalar) -> BnScalar {
-        let pkr = (gr * sk).to_affine();
+    pub fn get_public_key(&self) -> BnG1 {
+        self.pk
+    }
+
+    pub fn decrypt_share(&self, gr: &BnG1, cipher: &BnScalar) -> BnScalar {
+        let pkr = (gr * self.sk).to_affine();
         let poseidon = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init();
         let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
         let key = poseidon.clone().hash(message);
@@ -63,29 +57,76 @@ impl MemberKey {
 
         plaintext
     }
+
+    // find the index of this member in a list of public keys; member_index is array_index + 1
+    pub fn get_index(&self, public_keys: &[BnG1]) -> Option<usize> {
+        public_keys
+            .iter()
+            .position(|pk| pk.eq(&self.pk))
+            .map(|i| i + 1)
+    }
 }
 
-pub struct DkgParams<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
-    // each member is indexed using a number between 1..NUMBER_OF_MEMBERS
+#[derive(Clone, Debug)]
+pub struct DkgMemberPublicParams<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
+    // each member is indexed between 1..NUMBER_OF_MEMBERS
     index: usize,
-    coeffs: [BnScalar; THRESHOLD],
-    shares: [BnScalar; NUMBER_OF_MEMBERS],
     public_shares: [BnG1; NUMBER_OF_MEMBERS],
-    member_public_keys: [BnG1; NUMBER_OF_MEMBERS],
     ciphers: [BnScalar; NUMBER_OF_MEMBERS],
-    r: BnScalar,
     gr: BnG1,
     ga: BnG1,
     g2a: BnG2,
 }
 
 impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
-    DkgParams<THRESHOLD, NUMBER_OF_MEMBERS>
+    DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS>
 {
-    pub fn new(index: usize, member_public_keys: &[BnG1], mut rng: impl RngCore) -> Self {
-        assert!(index >= 1);
-        assert!(index <= NUMBER_OF_MEMBERS);
-        assert_eq!(member_public_keys.len(), NUMBER_OF_MEMBERS);
+    pub fn get_instance(&self, pks: &[BnG1]) -> Vec<Vec<BnScalar>> {
+        assert_eq!(pks.len(), NUMBER_OF_MEMBERS);
+
+        let (rns_base, _) = setup::<BnG1>(0);
+        let rns_base = Rc::new(rns_base);
+
+        let ga_point = Point::new(Rc::clone(&rns_base), self.ga);
+        let mut public_data = ga_point.public();
+
+        let gr_point = Point::new(Rc::clone(&rns_base), self.gr);
+        public_data.extend(gr_point.public());
+
+        for i in 0..NUMBER_OF_MEMBERS {
+            let gs_point = Point::new(Rc::clone(&rns_base), self.public_shares[i]);
+            public_data.extend(gs_point.public());
+        }
+
+        for i in 0..NUMBER_OF_MEMBERS {
+            let mpk_point = Point::new(Rc::clone(&rns_base), pks[i]);
+            public_data.extend(mpk_point.public());
+            public_data.push(self.ciphers[i]);
+        }
+
+        let instance = vec![public_data];
+        instance
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct DkgMemberParams<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
+    coeffs: [BnScalar; THRESHOLD],
+    shares: [BnScalar; NUMBER_OF_MEMBERS],
+    r: BnScalar,
+    public_keys: [BnG1; NUMBER_OF_MEMBERS],
+    public_params: DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS>,
+}
+
+impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
+    DkgMemberParams<THRESHOLD, NUMBER_OF_MEMBERS>
+{
+    pub fn new(index: usize, public_keys: &[BnG1], mut rng: impl RngCore) -> Result<Self, Error> {
+        assert_eq!(public_keys.len(), NUMBER_OF_MEMBERS);
+
+        if index < 1 || index > NUMBER_OF_MEMBERS {
+            return Err(Error::InvalidIndex { index });
+        }
 
         // generate random coefficients for polynomial
         let mut coeffs: Vec<_> = (0..THRESHOLD).map(|_| BnScalar::random(&mut rng)).collect();
@@ -109,60 +150,43 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         let poseidon = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init();
         let mut ciphers = vec![];
         for i in 0..NUMBER_OF_MEMBERS {
-            let pkr = (member_public_keys[i] * r).to_affine();
+            let pkr = (public_keys[i] * r).to_affine();
             let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
             let key = poseidon.clone().hash(message);
             let cipher = key + shares[i];
             ciphers.push(cipher);
         }
 
-        DkgParams {
+        let public_params = DkgMemberPublicParams {
             index,
+            public_shares: public_shares
+                .try_into()
+                .expect("unable to convert public share vector"),
+            ciphers: ciphers.try_into().expect("unable to convert cipher vector"),
+            gr,
+            ga,
+            g2a,
+        };
+
+        Ok(DkgMemberParams {
             coeffs: coeffs
                 .try_into()
                 .expect("unable to convert coefficient vector"),
             shares,
-            public_shares: public_shares
-                .try_into()
-                .expect("unable to convert public share vector"),
-            member_public_keys: member_public_keys
+            r,
+            public_keys: public_keys
                 .try_into()
                 .expect("unable to convert public key vector"),
-            ciphers: ciphers.try_into().expect("unable to convert cipher vector"),
-            r,
-            gr,
-            ga,
-            g2a,
-        }
+            public_params,
+        })
     }
 
-    pub fn get_dkg_circuit(
-        &self,
-        mut rng: impl RngCore,
-    ) -> (CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>, Vec<Vec<BnScalar>>) {
-        let (rns_base, _) = setup::<BnG1>(0);
-        let rns_base = Rc::new(rns_base);
-
-        let ga_point = Point::new(Rc::clone(&rns_base), self.ga);
-        let mut public_data = ga_point.public();
-
-        let gr_point = Point::new(Rc::clone(&rns_base), self.gr);
-        public_data.extend(gr_point.public());
-
-        for i in 0..NUMBER_OF_MEMBERS {
-            let gs_point = Point::new(Rc::clone(&rns_base), self.public_shares[i]);
-            public_data.extend(gs_point.public());
-        }
-
-        for c in self.ciphers.iter() {
-            public_data.push(*c);
-        }
-
+    pub fn get_circuit(&self, mut rng: impl RngCore) -> CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS> {
         // todo: replace with hash_to_curve
         let aux_generator = BnG1::random(&mut rng);
         let coeffs: Vec<_> = self.coeffs.iter().map(|a| Value::known(*a)).collect();
         let public_keys: Vec<_> = self
-            .member_public_keys
+            .public_keys
             .iter()
             .map(|pk| Value::known(*pk))
             .collect();
@@ -174,35 +198,119 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
             aux_generator,
             4,
         );
-        let instance = vec![public_data];
 
-        (circuit, instance)
+        circuit
     }
+
+    pub fn get_instance(&self) -> Vec<Vec<BnScalar>> {
+        self.public_params.get_instance(&self.public_keys)
+    }
+
+    pub fn get_member_public_params(&self) -> DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS> {
+        self.public_params.clone()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct DkgGlobalPubParams<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
+    ga: BnG1,
+    g2a: BnG2,
+    verify_keys: [BnG1; NUMBER_OF_MEMBERS],
+}
+
+pub fn get_dkg_global_public_params<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
+    pps: &[DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS>],
+) -> DkgGlobalPubParams<THRESHOLD, NUMBER_OF_MEMBERS> {
+    // combine ga and g2a to get global public keys
+    // todo: optimise to_affine?
+    let ga = pps
+        .iter()
+        .skip(1)
+        .fold(pps[0].ga, |acc, pp| (acc + pp.ga).to_affine());
+    let g2a = pps
+        .iter()
+        .skip(1)
+        .fold(pps[0].g2a, |acc, pp| (acc + pp.g2a).to_affine());
+
+    // compute vk_1, ... vk_n
+    let mut vks = vec![];
+    for i in 0..NUMBER_OF_MEMBERS {
+        let mut vk = pps[0].public_shares[i];
+        for pp in pps.iter().skip(1) {
+            vk = (vk + pp.public_shares[i]).to_affine();
+        }
+        vks.push(vk);
+    }
+
+    DkgGlobalPubParams {
+        ga,
+        g2a,
+        verify_keys: vks
+            .try_into()
+            .expect("unable to convert vks vector to arrays"),
+    }
+}
+
+// decrypt ciphers from other members (including its own cipher) and aggregate shares
+pub fn get_dkg_share_key<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
+    mk: &MemberKey,
+    index: usize,
+    pps: &[DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS>],
+) -> Result<DkgShareKey<THRESHOLD, NUMBER_OF_MEMBERS>, Error> {
+    if index < 1 || index > NUMBER_OF_MEMBERS {
+        return Err(Error::InvalidIndex { index });
+    }
+
+    let k = index - 1;
+    let mut sk = BnScalar::zero();
+    for i in 0..NUMBER_OF_MEMBERS {
+        let s = mk.decrypt_share(&pps[i].gr, &pps[i].ciphers[k]);
+        sk += s;
+    }
+
+    let g = BnG1::generator();
+    let vk = (g * sk).to_affine();
+
+    Ok(DkgShareKey::new(index, sk, vk))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dkg::combine_partial_evaluations;
     use halo2wrong::utils::{mock_prover_verify, DimensionMeasurement};
+
+    use ark_std::{end_timer, start_timer};
+    use halo2_ecc::halo2::SerdeFormat;
+    use halo2wrong::curves::bn256::Bn256;
+    use halo2wrong::halo2::plonk::{create_proof, keygen_pk, keygen_vk, verify_proof};
+    use halo2wrong::halo2::poly::commitment::ParamsProver;
+    use halo2wrong::halo2::poly::kzg::commitment::{
+        KZGCommitmentScheme, ParamsKZG, ParamsVerifierKZG,
+    };
+    use halo2wrong::halo2::poly::kzg::multiopen::{ProverSHPLONK, VerifierSHPLONK};
+    use halo2wrong::halo2::poly::kzg::strategy::SingleStrategy;
+    use halo2wrong::halo2::transcript::{
+        Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
+    };
+
     use rand_chacha::ChaCha20Rng;
     use rand_core::SeedableRng;
 
-    fn init_dkg_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
+    fn mock_dkg_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
         let mut rng = ChaCha20Rng::seed_from_u64(42);
-        let g = BnG1::generator();
-
-        let mut sks = vec![];
+        let mut members = vec![];
         let mut pks = vec![];
         for _ in 0..NUMBER_OF_MEMBERS {
-            let sk = BnScalar::random(&mut rng);
-            let pk = (g * sk).to_affine();
-
-            sks.push(sk);
-            pks.push(pk);
+            let member = MemberKey::new(&mut rng);
+            pks.push(member.get_public_key());
+            members.push(member);
         }
 
-        let dkg_params = DkgParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &pks, &mut rng);
-        let (circuit, instance) = dkg_params.get_dkg_circuit(&mut rng);
+        let dkg_params =
+            DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &pks, &mut rng).unwrap();
+        let circuit = dkg_params.get_circuit(&mut rng);
+        let instance = dkg_params.get_instance();
         mock_prover_verify(&circuit, instance);
         let dimension = DimensionMeasurement::measure(&circuit).unwrap();
         println!("dimention: {:?}", dimension);
@@ -210,7 +318,157 @@ mod tests {
 
     #[test]
     fn test_dkg_circuit() {
-        init_dkg_circuit::<4, 6>();
-        init_dkg_circuit::<7, 13>();
+        mock_dkg_circuit::<4, 6>();
+        mock_dkg_circuit::<7, 13>();
+        mock_dkg_circuit::<14, 27>();
+    }
+
+    fn dkg_proof<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize, const DEGREE: usize>() {
+        let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let mut members = vec![];
+        let mut mpks = vec![];
+        for _ in 0..NUMBER_OF_MEMBERS {
+            let member = MemberKey::new(&mut rng);
+            mpks.push(member.get_public_key());
+            members.push(member);
+        }
+
+        let dkg_params =
+            DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &mpks, &mut rng).unwrap();
+        let circuit = dkg_params.get_circuit(&mut rng);
+        let instance = dkg_params.get_instance();
+        let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
+
+        let dimension = DimensionMeasurement::measure(&circuit).unwrap();
+        println!("dimention: {:?}", dimension);
+
+        let start1 = start_timer!(|| format!("kzg setup with degree {}", DEGREE));
+        let general_params = ParamsKZG::<Bn256>::setup(DEGREE as u32, &mut rng);
+        let verifier_params: ParamsVerifierKZG<Bn256> = general_params.verifier_params().clone();
+        end_timer!(start1);
+
+        // Initialize the proving key
+        let vk = keygen_vk(&general_params, &circuit).expect("keygen_vk should not fail");
+
+        let vk_bytes = vk.to_bytes(SerdeFormat::RawBytes);
+        println!("size of verification key (raw bytes) {}", vk_bytes.len());
+
+        let pk = keygen_pk(&general_params, vk, &circuit).expect("keygen_pk should not fail");
+
+        let pk_bytes = pk.to_bytes(SerdeFormat::RawBytes);
+        println!("size of proving key (raw bytes) {}", pk_bytes.len());
+
+        // Create a proof
+        let mut transcript = Blake2bWrite::<_, BnG1, Challenge255<_>>::init(vec![]);
+
+        // Bench proof generation time
+        let proof_message = format!("dkg proof with degree = {}", DEGREE);
+        let start2 = start_timer!(|| proof_message);
+        create_proof::<
+            KZGCommitmentScheme<Bn256>,
+            ProverSHPLONK<'_, Bn256>,
+            Challenge255<BnG1>,
+            ChaCha20Rng,
+            Blake2bWrite<Vec<u8>, BnG1, Challenge255<BnG1>>,
+            CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>,
+        >(
+            &general_params,
+            &pk,
+            &[circuit],
+            &[instance_ref.as_slice()],
+            rng,
+            &mut transcript,
+        )
+        .expect("proof generation should not fail");
+        let proof = transcript.finalize();
+        end_timer!(start2);
+
+        println!("proof size = {:?}", proof.len());
+
+        let start3 = start_timer!(|| format!("verify snark proof for dkg"));
+        let mut verifier_transcript = Blake2bRead::<_, BnG1, Challenge255<_>>::init(&proof[..]);
+        let strategy = SingleStrategy::new(&general_params);
+
+        verify_proof::<
+            KZGCommitmentScheme<Bn256>,
+            VerifierSHPLONK<'_, Bn256>,
+            Challenge255<BnG1>,
+            Blake2bRead<&[u8], BnG1, Challenge255<BnG1>>,
+            SingleStrategy<'_, Bn256>,
+        >(
+            &verifier_params,
+            pk.get_vk(),
+            strategy,
+            &[instance_ref.as_slice()],
+            &mut verifier_transcript,
+        )
+        .expect("failed to verify dkg circuit");
+        end_timer!(start3);
+    }
+
+    #[test]
+    fn test_dkg_proof() {
+        dkg_proof::<4, 6, 20>();
+        dkg_proof::<7, 13, 21>();
+    }
+
+    fn mock_dvrf<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
+        let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let g = BnG1::generator();
+
+        let mut members = vec![];
+        let mut pks = vec![];
+        for _ in 0..NUMBER_OF_MEMBERS {
+            let member = MemberKey::new(&mut rng);
+            pks.push(member.pk.clone());
+            members.push(member);
+        }
+
+        let mut dkgs = vec![];
+        let mut dkgs_pub = vec![];
+        for i in 0..NUMBER_OF_MEMBERS {
+            let dkg_params =
+                DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(i + 1, &pks, &mut rng)
+                    .unwrap();
+            dkgs_pub.push(dkg_params.get_member_public_params());
+            dkgs.push(dkg_params);
+        }
+
+        // simulation skips the snark proof and verify
+
+        // compute public parameters
+        let pp = get_dkg_global_public_params(&dkgs_pub);
+
+        // each member decrypt to obtain their own shares
+        let mut shares = vec![];
+        for i in 0..NUMBER_OF_MEMBERS {
+            assert_eq!(members[i].pk, pks[i]);
+            let share = get_dkg_share_key(&members[i], i + 1, &dkgs_pub).unwrap();
+            share.verify(&pp.verify_keys).unwrap();
+
+            shares.push(share);
+        }
+
+        // each member performs partial evaluation
+        let input = b"first random";
+        let mut sigmas = vec![];
+        for i in 0..NUMBER_OF_MEMBERS {
+            let sigma = shares[i].evaluate(input, &mut rng);
+            sigma.verify(input, &pp.verify_keys[i]).unwrap();
+            sigmas.push(sigma);
+        }
+
+        // combine partial evaluations to obtain final random
+        let v = combine_partial_evaluations(&sigmas[0..THRESHOLD]).unwrap();
+        v.verify(input, &pp.g2a).unwrap();
+    }
+
+    #[test]
+    fn test_dvrf_functions() {
+        mock_dvrf::<4, 6>();
+        mock_dvrf::<7, 13>();
+        mock_dvrf::<14, 27>();
+        mock_dvrf::<28, 55>();
+        mock_dvrf::<57, 112>();
     }
 }

@@ -69,19 +69,8 @@ pub struct DkgShareKey<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
 impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
     DkgShareKey<THRESHOLD, NUMBER_OF_MEMBERS>
 {
-    // combine shares received from other members
-    // verification key is computed as vk = g^s
-    pub fn combine(shares: &[BnScalar], index: usize) -> Result<Self, Error> {
-        if index > NUMBER_OF_MEMBERS || index < 1 {
-            return Err(Error::InvalidIndex);
-        };
-
-        let sk: BnScalar = shares.iter().sum();
-
-        let g = BnG1::generator();
-        let vk = (g * sk).to_affine();
-
-        Ok(DkgShareKey { index, sk, vk })
+    pub fn new(index: usize, sk: BnScalar, vk: BnG1) -> Self {
+        DkgShareKey { index, sk, vk }
     }
 
     pub fn get_verification_key(&self) -> BnG1 {
@@ -90,6 +79,19 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
 
     pub fn get_index(&self) -> usize {
         self.index
+    }
+
+    // verify the index and verification key is correct w.r.t. a list of public verification keys
+    pub fn verify(&self, vks: &[BnG1]) -> Result<(), Error> {
+        if self.index < 1 || self.index > NUMBER_OF_MEMBERS {
+            return Err(Error::InvalidIndex { index: self.index });
+        }
+
+        if self.vk != vks[self.index - 1] {
+            return Err(Error::VerifyFailed);
+        }
+
+        Ok(())
     }
 
     // compute H(x)^sk to create partial evaluation and create a schnorr style proof
@@ -144,7 +146,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
 {
     pub fn verify(&self, input: &[u8], vk: &BnG1) -> Result<(), Error> {
         if self.index > NUMBER_OF_MEMBERS || self.index < 1 {
-            return Err(Error::InvalidIndex);
+            return Err(Error::InvalidIndex { index: self.index });
         };
 
         let hasher = hash_to_curve(EVAL_PREFIX);
@@ -191,11 +193,11 @@ fn check_indices<const NUMBER_OF_MEMBERS: usize>(indices: &[usize]) -> Result<()
     for i in 0..indices.len() {
         if i < indices.len() - 1 {
             if indices[i] >= indices[i + 1] {
-                return Err(Error::InvalidIndex);
+                return Err(Error::InvalidOrder { index: i });
             };
         }
         if indices[i] > NUMBER_OF_MEMBERS || indices[i] < 1 {
-            return Err(Error::InvalidIndex);
+            return Err(Error::InvalidIndex { index: indices[i] });
         };
     }
 
@@ -206,9 +208,7 @@ fn check_indices<const NUMBER_OF_MEMBERS: usize>(indices: &[usize]) -> Result<()
 pub fn combine_partial_evaluations<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
     sigmas: &[PartialEval<THRESHOLD, NUMBER_OF_MEMBERS>],
 ) -> Result<PseudoRandom, Error> {
-    if sigmas.len() != THRESHOLD {
-        return Err(Error::InvalidLength);
-    }
+    assert_eq!(sigmas.len(), THRESHOLD);
 
     let indices: Vec<_> = sigmas.iter().map(|sigma| sigma.index).collect();
     check_indices::<NUMBER_OF_MEMBERS>(&indices)?;
@@ -297,20 +297,6 @@ pub fn verify_public_coeffs(ga: BnG1, g2a: BnG2) -> Result<(), Error> {
     }
 
     Ok(())
-}
-
-// compute global public key g2a and verification keys vk_i for each member i
-fn combine_public_params(gas: &[BnG1], g2as: &[BnG2]) -> (BnG1, BnG2) {
-    let ga = gas
-        .iter()
-        .skip(1)
-        .fold(gas[0], |sum, h| (sum + h).to_affine());
-    let g2a = g2as
-        .iter()
-        .skip(1)
-        .fold(g2as[0], |sum, h| (sum + h).to_affine());
-
-    (ga, g2a)
 }
 
 #[cfg(test)]

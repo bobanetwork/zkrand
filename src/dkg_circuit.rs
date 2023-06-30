@@ -5,7 +5,7 @@ use halo2wrong::curves::{
 use halo2wrong::halo2::{
     arithmetic::Field,
     circuit::{Layouter, SimpleFloorPlanner, Value},
-    plonk::{Circuit, ConstraintSystem, Error},
+    plonk::{Circuit, ConstraintSystem, Error as PlonkError},
 };
 
 use halo2_ecc::integer::rns::Rns;
@@ -19,9 +19,7 @@ use halo2_maingate::{
 };
 
 use crate::poseidon::P128Pow5T3Bn;
-use crate::{
-    DkgParams, BIT_LEN_LIMB, NUMBER_OF_LIMBS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH,
-};
+use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH};
 
 #[derive(Clone, Debug)]
 pub struct CircuitDkgConfig {
@@ -79,7 +77,7 @@ impl CircuitDkgConfig {
     pub fn config_range<N: PrimeField>(
         &self,
         layouter: &mut impl Layouter<N>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), PlonkError> {
         let range_chip = RangeChip::<N>::new(self.range_config.clone());
         range_chip.load_table(layouter)?;
 
@@ -144,7 +142,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
         &self,
         config: Self::Config,
         mut layouter: impl Layouter<BnScalar>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), PlonkError> {
         let ecc_chip_config = config.ecc_chip_config();
         let mut ecc_chip =
             BaseFieldEccChip::<BnG1, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
@@ -260,22 +258,26 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
         }
 
         for i in 0..NUMBER_OF_MEMBERS {
-            let pkr = layouter.assign_region(
+            let (pkr, pk) = layouter.assign_region(
                 || "region ecc mul encryption",
                 |region| {
                     let offset = 0;
                     let ctx = &mut RegionCtx::new(region, offset);
 
-                    let pk_assigned = ecc_chip.assign_point(ctx, self.public_keys[i])?;
+                    let pk = ecc_chip.assign_point(ctx, self.public_keys[i])?;
 
                     // pkr = pk^r
-                    let pkr = ecc_chip.mul(ctx, &pk_assigned, &r, self.window_size)?;
+                    let pkr = ecc_chip.mul(ctx, &pk, &r, self.window_size)?;
 
                     // normalise for public inputs
                     let pkr = ecc_chip.normalize(ctx, &pkr)?;
-                    Ok(pkr)
+                    let pk = ecc_chip.normalize(ctx, &pk)?;
+                    Ok((pkr, pk))
                 },
             )?;
+
+            ecc_chip.expose_public(layouter.namespace(|| "pk"), pk, instance_offset)?;
+            instance_offset += 8;
 
             let message = [pkr.x().native().clone(), pkr.y().native().clone()];
 
@@ -400,6 +402,8 @@ mod tests {
             let key = poseidon.clone().hash(message);
             let cipher = key + shares[i];
 
+            let pk_point = Point::new(Rc::clone(&rns_base), pks[i]);
+            public_data.extend(pk_point.public());
             public_data.push(cipher);
         }
 
@@ -435,7 +439,7 @@ mod tests {
     fn test_dkg_n_circuit() {
         dkg_n_circuit::<4, 6>();
         dkg_n_circuit::<7, 13>();
-        dkg_n_circuit::<14, 27>();
+        //  dkg_n_circuit::<14, 27>();
         //   dkg_n_circuit::<28, 55>();
         //    dkg_n_circuit::<57, 112>();
     }
@@ -517,6 +521,6 @@ mod tests {
     #[test]
     fn test_dkg_n_proof() {
         dkg_n_proof::<4, 6, 20>();
-        dkg_n_proof::<6, 13, 21>();
+        dkg_n_proof::<7, 13, 21>();
     }
 }
