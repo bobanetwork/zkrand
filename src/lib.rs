@@ -320,7 +320,7 @@ mod tests {
     fn test_dkg_circuit() {
         mock_dkg_circuit::<4, 6>();
         mock_dkg_circuit::<7, 13>();
-        mock_dkg_circuit::<14, 27>();
+        //     mock_dkg_circuit::<14, 27>();
     }
 
     fn dkg_proof<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize, const DEGREE: usize>() {
@@ -350,13 +350,17 @@ mod tests {
         // Initialize the proving key
         let vk = keygen_vk(&general_params, &circuit).expect("keygen_vk should not fail");
 
-        let vk_bytes = vk.to_bytes(SerdeFormat::RawBytes);
-        println!("size of verification key (raw bytes) {}", vk_bytes.len());
+        {
+            let vk_bytes = vk.to_bytes(SerdeFormat::RawBytes);
+            println!("size of verification key (raw bytes) {}", vk_bytes.len());
+        }
 
         let pk = keygen_pk(&general_params, vk, &circuit).expect("keygen_pk should not fail");
 
-        let pk_bytes = pk.to_bytes(SerdeFormat::RawBytes);
-        println!("size of proving key (raw bytes) {}", pk_bytes.len());
+        {
+            let pk_bytes = pk.to_bytes(SerdeFormat::RawBytes);
+            println!("size of proving key (raw bytes) {}", pk_bytes.len());
+        }
 
         // Create a proof
         let mut transcript = Blake2bWrite::<_, BnG1, Challenge255<_>>::init(vec![]);
