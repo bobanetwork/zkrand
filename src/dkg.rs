@@ -215,14 +215,15 @@ pub fn combine_partial_evaluations<const THRESHOLD: usize, const NUMBER_OF_MEMBE
     let indices: Vec<_> = indices.iter().map(|i| BnScalar::from(*i as u64)).collect();
     let mut lambdas = vec![];
     for i in indices.iter() {
-        let mut lambda = BnScalar::one();
+        let mut numerator = BnScalar::one();
+        let mut denominator = BnScalar::one();
         for k in indices.iter() {
             if !k.eq(i) {
-                let sub = k - i;
-                let z = k * sub.invert().unwrap();
-                lambda *= z;
+                numerator = numerator * k;
+                denominator = denominator * (k - i);
             }
         }
+        let lambda = numerator * denominator.invert().expect("cannot divide zero");
         lambdas.push(lambda);
     }
 
