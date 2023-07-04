@@ -14,6 +14,7 @@ mod dkg_benches {
     use halo2wrong::halo2::transcript::{
         Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
     };
+    use halo2wrong::utils::DimensionMeasurement;
     use rand_core::OsRng;
     use zkdvrf::{CircuitDkg, DkgMemberParams, MemberKey};
 
@@ -40,6 +41,9 @@ mod dkg_benches {
         let instance = dkg_params.get_instance();
         let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
 
+        let dimension = DimensionMeasurement::measure(&circuit).unwrap();
+        println!("dimention: {:?}", dimension);
+
         let start1 = start_timer!(|| format!("kzg setup with degree {}", DEGREE));
         let general_params = ParamsKZG::<Bn256>::setup(DEGREE as u32, &mut rng);
         let verifier_params: ParamsVerifierKZG<Bn256> = general_params.verifier_params().clone();
@@ -50,7 +54,7 @@ mod dkg_benches {
 
         let mut transcript = Blake2bWrite::<_, BnG1, Challenge255<_>>::init(vec![]);
 
-        let proof_message = format!("dkg proof with degree = {}", DEGREE);
+        let proof_message = format!("dkg prove with degree = {}", DEGREE);
         let start2 = start_timer!(|| proof_message);
         create_proof::<
             KZGCommitmentScheme<Bn256>,
@@ -100,6 +104,9 @@ mod dkg_benches {
         targets =
             dkg_proof_verify::<4,6,20>,
     //        dkg_proof_verify::<7,13,21>,
+    //        dkg_proof_verify::<14,27,22>,
+    //        dkg_proof_verify::<28,55,23>,
+    //        dkg_proof_verify::<57,112,24>,
     }
 }
 

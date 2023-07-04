@@ -170,12 +170,13 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
 
                 // compute s1,..., s_n-1
                 for i in 2..=NUMBER_OF_MEMBERS {
-                    let x = main_gate.assign_constant(ctx, BnScalar::from(i as u64))?;
-                    let mut y = x.clone();
+                    let ii = BnScalar::from(i as u64);
+                    let mut x = ii;
                     let mut s = coeffs[0].clone();
                     for j in 1..THRESHOLD {
+                        let y = main_gate.assign_constant(ctx, x)?;
                         s = main_gate.mul_add(ctx, &coeffs[j], &y, &s)?;
-                        y = main_gate.mul(ctx, &y, &x)?;
+                        x = x * ii;
                     }
                     shares.push(s);
                 }
@@ -323,6 +324,7 @@ mod tests {
     use ark_std::{end_timer, start_timer};
     use halo2_ecc::halo2::SerdeFormat;
     use halo2wrong::curves::bn256::Bn256;
+    use halo2wrong::halo2::arithmetic::Field;
     use halo2wrong::halo2::plonk::{create_proof, keygen_pk, keygen_vk, verify_proof};
     use halo2wrong::halo2::poly::commitment::ParamsProver;
     use halo2wrong::halo2::poly::kzg::commitment::{
@@ -333,14 +335,12 @@ mod tests {
     use halo2wrong::halo2::transcript::{
         Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
     };
-    use halo2wrong::halo2::arithmetic::Field;
 
     use crate::dkg::get_shares;
+    use halo2_ecc::Point;
     use rand_chacha::ChaCha20Rng;
     use rand_core::SeedableRng;
     use std::rc::Rc;
-    use halo2_ecc::Point;
-
 
     use super::*;
     use crate::poseidon::P128Pow5T3Bn;

@@ -28,6 +28,6 @@ name = "dvrf_benchmark"
 harness = false
 
 
-[[bench]]
-name = "dkg_benchmark"
-harness = false
+#[[bench]]
+#name = "dkg_benchmark"
+#harness = false
