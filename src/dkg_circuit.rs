@@ -3,14 +3,13 @@ use halo2wrong::curves::{
     ff::PrimeField,
 };
 use halo2wrong::halo2::{
-    arithmetic::Field,
     circuit::{Layouter, SimpleFloorPlanner, Value},
     plonk::{Circuit, ConstraintSystem, Error as PlonkError},
 };
 
 use halo2_ecc::integer::rns::Rns;
 use halo2_ecc::maingate::RegionCtx;
-use halo2_ecc::{BaseFieldEccChip, EccConfig, Point};
+use halo2_ecc::{BaseFieldEccChip, EccConfig};
 use halo2_gadgets::poseidon::{
     primitives::ConstantLength, Hash as PoseidonHash, Pow5Chip, Pow5Config,
 };
@@ -334,11 +333,14 @@ mod tests {
     use halo2wrong::halo2::transcript::{
         Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
     };
+    use halo2wrong::halo2::arithmetic::Field;
 
     use crate::dkg::get_shares;
     use rand_chacha::ChaCha20Rng;
     use rand_core::SeedableRng;
     use std::rc::Rc;
+    use halo2_ecc::Point;
+
 
     use super::*;
     use crate::poseidon::P128Pow5T3Bn;

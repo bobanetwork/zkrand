@@ -11,15 +11,19 @@ use std::rc::Rc;
 pub use halo2_ecc::integer::NUMBER_OF_LOOKUP_LIMBS;
 use halo2_ecc::Point;
 use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash};
-use halo2wrong::curves::bn256::{pairing, Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
+use halo2wrong::curves::bn256::{Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
 use halo2wrong::curves::group::Curve;
 use halo2wrong::halo2::arithmetic::Field;
 use halo2wrong::halo2::circuit::Value;
 
-use crate::dkg::{get_shares, keygen, DkgShareKey};
-use crate::dkg_circuit::CircuitDkg;
-use crate::error::Error;
-use crate::poseidon::P128Pow5T3Bn;
+use crate::dkg::check_public_coeffs;
+pub use crate::dkg::{
+    combine_partial_evaluations, get_shares, hash_to_curve, keygen, DkgShareKey, PseudoRandom,
+    EVAL_PREFIX,
+};
+pub use crate::dkg_circuit::CircuitDkg;
+pub use crate::error::Error;
+pub use crate::poseidon::P128Pow5T3Bn;
 use crate::utils::{mod_n, setup};
 
 const BIT_LEN_LIMB: usize = 68;
@@ -39,7 +43,7 @@ pub struct MemberKey {
 
 impl MemberKey {
     pub fn new(mut rng: impl RngCore) -> Self {
-        let (sk, pk) = keygen(rng);
+        let (sk, pk) = keygen(&mut rng);
 
         MemberKey { sk, pk }
     }
@@ -64,6 +68,29 @@ impl MemberKey {
             .iter()
             .position(|pk| pk.eq(&self.pk))
             .map(|i| i + 1)
+    }
+
+    // decrypt ciphers from other members (including its own cipher) and aggregate shares
+    pub fn get_dkg_share_key<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
+        &self,
+        index: usize,
+        pps: &[&DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS>],
+    ) -> Result<DkgShareKey<THRESHOLD, NUMBER_OF_MEMBERS>, Error> {
+        if index < 1 || index > NUMBER_OF_MEMBERS {
+            return Err(Error::InvalidIndex { index });
+        }
+
+        let k = index - 1;
+        let mut sk = BnScalar::zero();
+        for i in 0..NUMBER_OF_MEMBERS {
+            let s = self.decrypt_share(&pps[i].gr, &pps[i].ciphers[k]);
+            sk += s;
+        }
+
+        let g = BnG1::generator();
+        let vk = (g * sk).to_affine();
+
+        Ok(DkgShareKey::new(index, sk, vk))
     }
 }
 
@@ -129,7 +156,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         }
 
         // generate random coefficients for polynomial
-        let mut coeffs: Vec<_> = (0..THRESHOLD).map(|_| BnScalar::random(&mut rng)).collect();
+        let coeffs: Vec<_> = (0..THRESHOLD).map(|_| BnScalar::random(&mut rng)).collect();
 
         let g = BnG1::generator();
         let g2 = BnG2::generator();
@@ -206,8 +233,8 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         self.public_params.get_instance(&self.public_keys)
     }
 
-    pub fn get_member_public_params(&self) -> DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS> {
-        self.public_params.clone()
+    pub fn get_member_public_params(&self) -> &DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS> {
+        &self.public_params
     }
 }
 
@@ -218,8 +245,17 @@ pub struct DkgGlobalPubParams<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: u
     verify_keys: [BnG1; NUMBER_OF_MEMBERS],
 }
 
+impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
+    DkgGlobalPubParams<THRESHOLD, NUMBER_OF_MEMBERS>
+{
+    // check if ga and g2a have the same exponent
+    pub fn check_public(&self) -> Result<(), Error> {
+        check_public_coeffs(&self.ga, &self.g2a)
+    }
+}
+
 pub fn get_dkg_global_public_params<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
-    pps: &[DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS>],
+    pps: &[&DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS>],
 ) -> DkgGlobalPubParams<THRESHOLD, NUMBER_OF_MEMBERS> {
     // combine ga and g2a to get global public keys
     // todo: optimise to_affine?
@@ -249,29 +285,6 @@ pub fn get_dkg_global_public_params<const THRESHOLD: usize, const NUMBER_OF_MEMB
             .try_into()
             .expect("unable to convert vks vector to arrays"),
     }
-}
-
-// decrypt ciphers from other members (including its own cipher) and aggregate shares
-pub fn get_dkg_share_key<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
-    mk: &MemberKey,
-    index: usize,
-    pps: &[DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS>],
-) -> Result<DkgShareKey<THRESHOLD, NUMBER_OF_MEMBERS>, Error> {
-    if index < 1 || index > NUMBER_OF_MEMBERS {
-        return Err(Error::InvalidIndex { index });
-    }
-
-    let k = index - 1;
-    let mut sk = BnScalar::zero();
-    for i in 0..NUMBER_OF_MEMBERS {
-        let s = mk.decrypt_share(&pps[i].gr, &pps[i].ciphers[k]);
-        sk += s;
-    }
-
-    let g = BnG1::generator();
-    let vk = (g * sk).to_affine();
-
-    Ok(DkgShareKey::new(index, sk, vk))
 }
 
 #[cfg(test)]
@@ -418,7 +431,6 @@ mod tests {
 
     fn mock_dvrf<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
         let mut rng = ChaCha20Rng::seed_from_u64(42);
-        let g = BnG1::generator();
 
         let mut members = vec![];
         let mut pks = vec![];
@@ -428,15 +440,16 @@ mod tests {
             members.push(member);
         }
 
-        let mut dkgs = vec![];
-        let mut dkgs_pub = vec![];
-        for i in 0..NUMBER_OF_MEMBERS {
-            let dkg_params =
-                DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(i + 1, &pks, &mut rng)
-                    .unwrap();
-            dkgs_pub.push(dkg_params.get_member_public_params());
-            dkgs.push(dkg_params);
-        }
+        let dkgs: Vec<_> = (0..NUMBER_OF_MEMBERS)
+            .map(|i| {
+                DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(i + 1, &pks, &mut rng).unwrap()
+            })
+            .collect();
+
+        let dkgs_pub: Vec<_> = dkgs
+            .iter()
+            .map(|dkg| dkg.get_member_public_params())
+            .collect();
 
         // simulation skips the snark proof and verify
 
@@ -447,7 +460,7 @@ mod tests {
         let mut shares = vec![];
         for i in 0..NUMBER_OF_MEMBERS {
             assert_eq!(members[i].pk, pks[i]);
-            let share = get_dkg_share_key(&members[i], i + 1, &dkgs_pub).unwrap();
+            let share = members[i].get_dkg_share_key(i + 1, &dkgs_pub).unwrap();
             share.verify(&pp.verify_keys).unwrap();
 
             shares.push(share);

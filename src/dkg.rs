@@ -1,20 +1,18 @@
 use rand_core::RngCore;
-use std::marker::PhantomData;
 
 use crate::error::Error;
 use blake2b_simd::{blake2b, State as Blake2bState};
 use halo2wrong::curves::bn256::{
     pairing, Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2, G1 as BnG1Projective,
 };
-use halo2wrong::curves::ff::{FromUniformBytes, PrimeField};
-use halo2wrong::curves::group::prime::PrimeCurveAffine;
+use halo2wrong::curves::ff::FromUniformBytes;
 use halo2wrong::curves::group::{Curve, GroupEncoding};
 use halo2wrong::curves::CurveExt;
 use halo2wrong::halo2::arithmetic::Field;
 
 use crate::hash_to_curve::svdw_hash_to_curve;
 
-const EVAL_PREFIX: &str = "partial evaluation for creating randomness";
+pub const EVAL_PREFIX: &str = "partial evaluation for creating randomness";
 
 pub fn hash_to_curve<'a>(domain_prefix: &'a str) -> Box<dyn Fn(&[u8]) -> BnG1Projective + 'a> {
     svdw_hash_to_curve::<BnG1Projective>(
@@ -28,7 +26,7 @@ pub fn hash_to_curve<'a>(domain_prefix: &'a str) -> Box<dyn Fn(&[u8]) -> BnG1Pro
 fn evaluate_poly(coeffs: &[BnScalar], i: usize) -> BnScalar {
     assert!(coeffs.len() >= 1);
 
-    let mut x = BnScalar::from(i as u64);
+    let x = BnScalar::from(i as u64);
     let mut prod = x;
     let mut eval = coeffs[0];
 
@@ -185,7 +183,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
 
 pub struct PseudoRandom {
     proof: BnG1,
-    random: Vec<u8>,
+    value: Vec<u8>,
 }
 
 // check if the indices are in the range and sorted
@@ -237,12 +235,24 @@ pub fn combine_partial_evaluations<const THRESHOLD: usize, const NUMBER_OF_MEMBE
     let sum = pis.iter().skip(1).fold(pis[0], |sum, p| sum + p);
 
     let proof = sum.to_affine();
-    let random = blake2b(proof.to_bytes().as_ref()).as_bytes().to_vec();
+    let value = blake2b(proof.to_bytes().as_ref()).as_bytes().to_vec();
 
-    Ok(PseudoRandom { proof, random })
+    Ok(PseudoRandom { proof, value })
 }
 
 impl PseudoRandom {
+    pub fn new(proof: BnG1, value: Vec<u8>) -> Self {
+        Self { proof, value }
+    }
+
+    pub fn get_value(&self) -> &[u8] {
+        &self.value
+    }
+
+    pub fn get_proof(&self) -> &BnG1 {
+        &self.proof
+    }
+
     pub fn verify(&self, input: &[u8], gpk: &BnG2) -> Result<(), Error> {
         let g2 = BnG2::generator();
 
@@ -257,7 +267,7 @@ impl PseudoRandom {
         }
 
         if !self
-            .random
+            .value
             .as_slice()
             .eq(blake2b(self.proof.to_bytes().as_ref()).as_ref())
         {
@@ -276,21 +286,13 @@ pub fn keygen(mut rng: impl RngCore) -> (BnScalar, BnG1) {
     (sk, pk)
 }
 
-pub fn get_public_key(sk: BnScalar) -> BnG1 {
-    let g = BnG1::generator();
-    let pk = (g * sk).to_affine();
-
-    pk
-}
-
-// todo: integrate this verification to dkg circuit verification(?)
 // check if ga and g2a have the same exponent a
-pub fn verify_public_coeffs(ga: BnG1, g2a: BnG2) -> Result<(), Error> {
+pub fn check_public_coeffs(ga: &BnG1, g2a: &BnG2) -> Result<(), Error> {
     let g = BnG1::generator();
     let g2 = BnG2::generator();
 
-    let left = pairing(&g, &g2a);
-    let right = pairing(&ga, &g2);
+    let left = pairing(&g, g2a);
+    let right = pairing(ga, &g2);
 
     if left != right {
         return Err(Error::VerifyFailed);
@@ -305,7 +307,6 @@ mod tests {
     use ark_std::{end_timer, start_timer};
     use rand_chacha::ChaCha20Rng;
     use rand_core::SeedableRng;
-    use std::ops::Index;
 
     const THRESHOLD: usize = 9;
     const NUMBER_OF_MEMBERS: usize = 16;
@@ -340,7 +341,7 @@ mod tests {
         let g = BnG1::generator();
         let g2 = BnG2::generator();
 
-        let mut coeffs: Vec<_> = (0..THRESHOLD).map(|_| BnScalar::random(&mut rng)).collect();
+        let coeffs: Vec<_> = (0..THRESHOLD).map(|_| BnScalar::random(&mut rng)).collect();
         let shares = get_shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
         let keys: Vec<_> = shares
             .iter()

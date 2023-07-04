@@ -1,7 +1,6 @@
-use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash, Mds, Spec};
+use halo2_gadgets::poseidon::primitives::{Mds, Spec};
 use halo2wrong::curves::bn256::Fr;
 use halo2wrong::halo2::arithmetic::Field;
-use std::marker::PhantomData;
 
 mod bn256;
 use bn256::{MDS, MDS_INV, ROUND_CONSTANTS};
@@ -35,6 +34,8 @@ impl Spec<Fr, 3, 2> for P128Pow5T3Bn {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::marker::PhantomData;
+    use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash};
     use halo2_gadgets::poseidon::{Hash as PoseidonHash, Pow5Chip, Pow5Config};
     use halo2wrong::curves::bn256::Fr as Fp;
     use halo2wrong::halo2::circuit::{Layouter, SimpleFloorPlanner, Value};
