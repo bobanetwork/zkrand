@@ -339,22 +339,18 @@ mod tests {
     use crate::dkg::get_shares;
     use halo2_ecc::Point;
     use rand_chacha::ChaCha20Rng;
-    use rand_core::SeedableRng;
+    use rand_core::{RngCore, SeedableRng};
     use std::rc::Rc;
 
     use super::*;
     use crate::poseidon::P128Pow5T3Bn;
     use crate::utils::{mod_n, setup};
 
-    fn get_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() -> (
-        CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>,
-        Vec<BnScalar>,
-        ChaCha20Rng,
-    ) {
+    fn get_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
+        mut rng: impl RngCore,
+    ) -> (CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>, Vec<BnScalar>) {
         let (rns_base, _) = setup::<BnG1>(0);
         let rns_base = Rc::new(rns_base);
-
-        let mut rng = ChaCha20Rng::seed_from_u64(42);
 
         let g = BnG1::generator();
 
@@ -420,12 +416,12 @@ mod tests {
             window_size: 4,
         };
 
-        (circuit, public_data, rng)
+        (circuit, public_data)
     }
 
     fn dkg_n_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
-        let (circuit, public_data, _) = get_circuit::<THRESHOLD, NUMBER_OF_MEMBERS>();
-
+        let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let (circuit, public_data) = get_circuit::<THRESHOLD, NUMBER_OF_MEMBERS>(&mut rng);
         let instance = vec![public_data];
         mock_prover_verify(&circuit, instance);
 
@@ -445,8 +441,31 @@ mod tests {
         //    dkg_n_circuit::<57, 112>();
     }
 
+    #[test]
+    fn test_vk() {
+        let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let (circuit1, public_data1) = get_circuit::<4, 6>(&mut rng);
+        let (circuit2, public_data2) = get_circuit::<4, 6>(&mut rng);
+
+        let degree = 20;
+        let setup_message = format!("dkg setup with degree = {}", degree);
+        let start1 = start_timer!(|| setup_message);
+        let general_params = ParamsKZG::<Bn256>::setup(degree as u32, &mut rng);
+        let verifier_params: ParamsVerifierKZG<Bn256> = general_params.verifier_params().clone();
+        end_timer!(start1);
+
+        let vk1 = keygen_vk(&general_params, &circuit1).expect("keygen_vk should not fail");
+        let vk2 = keygen_vk(&general_params, &circuit2).expect("keygen_vk should not fail");
+
+        assert_eq!(
+            vk1.to_bytes(SerdeFormat::RawBytes),
+            vk2.to_bytes(SerdeFormat::RawBytes)
+        )
+    }
+
     fn dkg_n_proof<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize, const DEGREE: usize>() {
-        let (circuit, public_data, mut rng) = get_circuit::<THRESHOLD, NUMBER_OF_MEMBERS>();
+        let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let (circuit, public_data) = get_circuit::<THRESHOLD, NUMBER_OF_MEMBERS>(&mut rng);
         let instance = vec![public_data];
         let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
 
