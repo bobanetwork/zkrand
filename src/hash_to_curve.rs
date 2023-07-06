@@ -7,7 +7,7 @@ use halo2wrong::curves::CurveExt;
 use static_assertions::const_assert;
 use subtle::{ConditionallySelectable, ConstantTimeEq};
 
-// code from https://github.com/privacy-scaling-explorations/halo2curves/blob/main/src/hash_to_curve.rs 8cc62b8ce237d9d84b7723a3a8b8ae0a05b2846f
+// code from https://github.com/privacy-scaling-explorations/halo2curves/blob/8cc62b8ce237d9d84b7723a3a8b8ae0a05b2846f/src/hash_to_curve.rs
 
 /// Hashes over a message and writes the output to all of `buf`.
 /// Modified from https://github.com/zcash/pasta_curves/blob/7e3fc6a4919f6462a32b79dd226cb2587b7961eb/src/hashtocurve.rs#L11.
