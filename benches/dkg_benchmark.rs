@@ -75,6 +75,8 @@ mod dkg_benches {
         let proof = transcript.finalize();
         end_timer!(start2);
 
+        println!("proof size = {:?}", proof.len());
+
         c.bench_function("dkg proof verification", move |b| {
             b.iter(|| {
                 let mut verifier_transcript =

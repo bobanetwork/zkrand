@@ -28,7 +28,7 @@ mod dvrf_benches {
 
     fn combine<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(c: &mut Criterion) {
         let mut rng = OsRng;
-
+        // simplified setup only used for benchmark
         let g = BnG1::generator();
         let coeffs: Vec<_> = (0..THRESHOLD).map(|_| BnScalar::random(&mut rng)).collect();
         let shares = get_shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
@@ -77,6 +77,7 @@ mod dvrf_benches {
     }
 
     fn pseudo_random_verify(c: &mut Criterion) {
+        // simplified setup only used for benchmark
         let mut rng = OsRng;
         let (a, _) = keygen(&mut rng);
         let g2 = BnG2::generator();

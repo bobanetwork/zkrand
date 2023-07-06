@@ -34,7 +34,6 @@ impl Spec<Fr, 3, 2> for P128Pow5T3Bn {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::marker::PhantomData;
     use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash};
     use halo2_gadgets::poseidon::{Hash as PoseidonHash, Pow5Chip, Pow5Config};
     use halo2wrong::curves::bn256::Fr as Fp;
@@ -43,6 +42,7 @@ mod tests {
     use halo2wrong::utils::{mock_prover_verify, DimensionMeasurement};
     use rand_chacha::ChaCha20Rng;
     use rand_core::SeedableRng;
+    use std::marker::PhantomData;
 
     //https://github.com/privacy-scaling-explorations/halo2/blob/v2023_04_20/halo2_gadgets/benches/poseidon.rs
     #[derive(Clone, Copy)]
