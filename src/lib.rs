@@ -5,6 +5,7 @@ mod hash_to_curve;
 mod poseidon;
 mod utils;
 
+use blake2b_simd::State as Blake2bState;
 use rand_core::RngCore;
 use std::rc::Rc;
 
@@ -12,7 +13,8 @@ pub use halo2_ecc::integer::NUMBER_OF_LOOKUP_LIMBS;
 use halo2_ecc::Point;
 use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash};
 use halo2wrong::curves::bn256::{Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
-use halo2wrong::curves::group::Curve;
+use halo2wrong::curves::ff::FromUniformBytes;
+use halo2wrong::curves::group::{Curve, GroupEncoding};
 use halo2wrong::halo2::arithmetic::Field;
 use halo2wrong::halo2::circuit::Value;
 
@@ -35,6 +37,36 @@ const POSEIDON_LEN: usize = 2;
 // t = 4, num = 6, k = 20
 // t = 7, num = 13, k = 21
 
+pub struct ProofOfKnowledge {
+    c: BnScalar,
+    z: BnScalar,
+}
+
+impl ProofOfKnowledge {
+    pub fn verify(&self, pk: &BnG1) -> Result<(), Error> {
+        let g = BnG1::generator();
+        let cap_r = ((g * self.z) - (pk * self.c)).to_affine();
+
+        let mut hash_state = Blake2bState::new();
+        hash_state
+            .update(g.to_bytes().as_ref())
+            .update(pk.to_bytes().as_ref())
+            .update(cap_r.to_bytes().as_ref());
+        let data: [u8; 64] = hash_state
+            .finalize()
+            .as_ref()
+            .try_into()
+            .expect("cannot convert hash result to array");
+
+        let c = BnScalar::from_uniform_bytes(&data);
+        if c != self.c {
+            return Err(Error::VerifyFailed);
+        }
+
+        Ok(())
+    }
+}
+
 pub struct MemberKey {
     sk: BnScalar,
     pk: BnG1,
@@ -49,6 +81,29 @@ impl MemberKey {
 
     pub fn get_public_key(&self) -> BnG1 {
         self.pk
+    }
+
+    // a schnorr style proof to show the knowledge of sk such that pk = g^sk
+    pub fn prove_knowledge(&self, mut rng: impl RngCore) -> ProofOfKnowledge {
+        let g = BnG1::generator();
+        let r = BnScalar::random(&mut rng);
+        let cap_r = (g * r).to_affine();
+
+        let mut hash_state = Blake2bState::new();
+        hash_state
+            .update(g.to_bytes().as_ref())
+            .update(self.pk.to_bytes().as_ref())
+            .update(cap_r.to_bytes().as_ref());
+        let data: [u8; 64] = hash_state
+            .finalize()
+            .as_ref()
+            .try_into()
+            .expect("cannot convert hash result to array");
+
+        let c = BnScalar::from_uniform_bytes(&data);
+        let z = c * self.sk + r;
+
+        ProofOfKnowledge { c, z }
     }
 
     pub fn decrypt_share(&self, gr: &BnG1, cipher: &BnScalar) -> BnScalar {
@@ -308,6 +363,14 @@ mod tests {
 
     use rand_chacha::ChaCha20Rng;
     use rand_core::SeedableRng;
+
+    #[test]
+    fn test_proof_knowledge() {
+        let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let member = MemberKey::new(&mut rng);
+        let proof = member.prove_knowledge(&mut rng);
+        proof.verify(&member.pk).unwrap()
+    }
 
     fn mock_dkg_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
         let mut rng = ChaCha20Rng::seed_from_u64(42);
