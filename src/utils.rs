@@ -1,8 +1,9 @@
 use halo2_ecc::integer::rns::Rns;
-use halo2wrong::curves::CurveAffine;
+use halo2wrong::curves::{CurveAffine, CurveExt, bn256, grumpkin};
 use halo2wrong::utils::{big_to_fe, fe_to_big};
 
 use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS, NUMBER_OF_LOOKUP_LIMBS};
+use crate::hash_to_curve::svdw_hash_to_curve;
 
 pub fn mod_n<C: CurveAffine>(x: C::Base) -> C::Scalar {
     let x_big = fe_to_big(x);
@@ -23,6 +24,22 @@ pub fn setup<C: CurveAffine>(
         k = k_override;
     }
     (rns, k)
+}
+
+pub fn hash_to_curve_bn<'a>(domain_prefix: &'a str) -> Box<dyn Fn(&[u8]) -> bn256::G1 + 'a> {
+    svdw_hash_to_curve::<bn256::G1>(
+        "bn256_g1",
+        domain_prefix,
+        <bn256::G1 as CurveExt>::Base::one(),
+    )
+}
+
+pub fn hash_to_curve_grumpkin<'a>(domain_prefix: &'a str) -> Box<dyn Fn(&[u8]) -> grumpkin::G1 + 'a> {
+    svdw_hash_to_curve::<grumpkin::G1>(
+        "grumpkin_g1",
+        domain_prefix,
+        <grumpkin::G1 as CurveExt>::Base::one(),
+    )
 }
 
 /*
@@ -49,3 +66,20 @@ fn setup<
 }
 
  */
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hash_to_curve() {
+        let hasher = hash_to_curve_bn("another generator");
+        let h = hasher(b"second generator h");
+        assert!(bool::from(h.is_on_curve()));
+
+        let hasher = hash_to_curve_grumpkin("another generator");
+        let h = hasher(b"second generator h");
+        assert!(bool::from(h.is_on_curve()));
+    }
+}

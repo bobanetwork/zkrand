@@ -7,10 +7,10 @@ edition = "2021"
 
 [dependencies]
 lazy_static = "1.4.0"
-halo2wrong = { git = "https://github.com/privacy-scaling-explorations/halo2wrong.git", tag = "v2023_04_20"}
-halo2_gadgets = { git = "https://github.com/privacy-scaling-explorations/halo2.git", tag = "v2023_04_20"}
-halo2_ecc ={ package = "ecc", git = "https://github.com/privacy-scaling-explorations/halo2wrong.git", tag = "v2023_04_20"}
-halo2_maingate =  { package = "maingate", git = "https://github.com/privacy-scaling-explorations/halo2wrong.git", tag = "v2023_04_20"}
+halo2wrong = { git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin"}
+halo2_gadgets = { git = "https://github.com/kitounliu/halo2.git", branch = "grumpkin"}
+halo2_ecc ={ package = "ecc", git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin"}
+halo2_maingate =  { package = "maingate", git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin"}
 ark-std = { version = "0.3", features = ["print-trace"] }
 sha3 = "0.9.1"
 rand_core = { version = "0.6", default-features = false }

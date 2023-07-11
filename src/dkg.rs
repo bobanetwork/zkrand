@@ -1,6 +1,5 @@
 use rand_core::RngCore;
 
-use crate::error::Error;
 use blake2b_simd::{blake2b, State as Blake2bState};
 use halo2wrong::curves::bn256::{
     pairing, Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2, G1 as BnG1Projective,
@@ -10,17 +9,10 @@ use halo2wrong::curves::group::{Curve, GroupEncoding};
 use halo2wrong::curves::CurveExt;
 use halo2wrong::halo2::arithmetic::Field;
 
-use crate::hash_to_curve::svdw_hash_to_curve;
+use crate::error::Error;
+use crate::utils::hash_to_curve_bn;
 
 pub const EVAL_PREFIX: &str = "partial evaluation for creating randomness";
-
-pub fn hash_to_curve<'a>(domain_prefix: &'a str) -> Box<dyn Fn(&[u8]) -> BnG1Projective + 'a> {
-    svdw_hash_to_curve::<BnG1Projective>(
-        "bn256_g1",
-        domain_prefix,
-        <BnG1Projective as CurveExt>::Base::one(),
-    )
-}
 
 // evaluate a polynomial at index i
 fn evaluate_poly(coeffs: &[BnScalar], i: usize) -> BnScalar {
@@ -98,7 +90,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         input: &[u8],
         mut rng: impl RngCore,
     ) -> PartialEval<THRESHOLD, NUMBER_OF_MEMBERS> {
-        let hasher = hash_to_curve(EVAL_PREFIX);
+        let hasher = hash_to_curve_bn(EVAL_PREFIX);
         let h: BnG1 = hasher(input).to_affine();
         let v = (h * self.sk).to_affine();
 
@@ -147,7 +139,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
             return Err(Error::InvalidIndex { index: self.index });
         };
 
-        let hasher = hash_to_curve(EVAL_PREFIX);
+        let hasher = hash_to_curve_bn(EVAL_PREFIX);
         let h: BnG1 = hasher(input).to_affine();
 
         let g = BnG1::generator();
@@ -257,7 +249,7 @@ impl PseudoRandom {
     pub fn verify(&self, input: &[u8], gpk: &BnG2) -> Result<(), Error> {
         let g2 = BnG2::generator();
 
-        let hasher = hash_to_curve(EVAL_PREFIX);
+        let hasher = hash_to_curve_bn(EVAL_PREFIX);
         let h: BnG1 = hasher(input).to_affine();
 
         let left = pairing(&h, &gpk);
@@ -312,12 +304,6 @@ mod tests {
     const THRESHOLD: usize = 9;
     const NUMBER_OF_MEMBERS: usize = 16;
 
-    #[test]
-    fn test_hash_to_curve() {
-        let hasher = hash_to_curve("another generator");
-        let h = hasher(b"second generator h");
-        assert!(bool::from(h.is_on_curve()));
-    }
 
     #[test]
     fn test_partial_evaluation() {

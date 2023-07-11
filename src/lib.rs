@@ -18,13 +18,12 @@ use halo2wrong::halo2::circuit::Value;
 
 use crate::dkg::check_public_coeffs;
 pub use crate::dkg::{
-    combine_partial_evaluations, get_shares, hash_to_curve, keygen, DkgShareKey, PseudoRandom,
-    EVAL_PREFIX,
+    combine_partial_evaluations, get_shares, keygen, DkgShareKey, PseudoRandom, EVAL_PREFIX,
 };
 pub use crate::dkg_circuit::CircuitDkg;
 pub use crate::error::Error;
 pub use crate::poseidon::P128Pow5T3Bn;
-use crate::utils::{mod_n, setup};
+pub use crate::utils::{hash_to_curve_bn, hash_to_curve_grumpkin, mod_n, setup};
 
 const BIT_LEN_LIMB: usize = 68;
 const NUMBER_OF_LIMBS: usize = 4;
