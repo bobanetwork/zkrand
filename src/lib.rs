@@ -1,6 +1,7 @@
 mod dkg;
 mod dkg_circuit;
 mod error;
+mod grumpkin_chip;
 mod hash_to_curve;
 mod poseidon;
 mod utils;
@@ -263,7 +264,6 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
     }
 
     pub fn get_circuit(&self, mut rng: impl RngCore) -> CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS> {
-        // todo: replace with hash_to_curve
         let aux_generator = BnG1::random(&mut rng);
         let coeffs: Vec<_> = self.coeffs.iter().map(|a| Value::known(*a)).collect();
         let public_keys: Vec<_> = self

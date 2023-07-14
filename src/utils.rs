@@ -1,9 +1,9 @@
 use halo2_ecc::integer::rns::Rns;
-use halo2wrong::curves::{CurveAffine, CurveExt, bn256, grumpkin};
+use halo2wrong::curves::{bn256, grumpkin, CurveAffine, CurveExt};
 use halo2wrong::utils::{big_to_fe, fe_to_big};
 
-use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS, NUMBER_OF_LOOKUP_LIMBS};
 use crate::hash_to_curve::svdw_hash_to_curve;
+use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS, NUMBER_OF_LOOKUP_LIMBS};
 
 pub fn mod_n<C: CurveAffine>(x: C::Base) -> C::Scalar {
     let x_big = fe_to_big(x);
@@ -34,7 +34,9 @@ pub fn hash_to_curve_bn<'a>(domain_prefix: &'a str) -> Box<dyn Fn(&[u8]) -> bn25
     )
 }
 
-pub fn hash_to_curve_grumpkin<'a>(domain_prefix: &'a str) -> Box<dyn Fn(&[u8]) -> grumpkin::G1 + 'a> {
+pub fn hash_to_curve_grumpkin<'a>(
+    domain_prefix: &'a str,
+) -> Box<dyn Fn(&[u8]) -> grumpkin::G1 + 'a> {
     svdw_hash_to_curve::<grumpkin::G1>(
         "grumpkin_g1",
         domain_prefix,
@@ -66,7 +68,6 @@ fn setup<
 }
 
  */
-
 
 #[cfg(test)]
 mod tests {

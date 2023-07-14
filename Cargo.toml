@@ -7,10 +7,15 @@ edition = "2021"
 
 [dependencies]
 lazy_static = "1.4.0"
-halo2wrong = { git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin"}
 halo2_gadgets = { git = "https://github.com/kitounliu/halo2.git", branch = "grumpkin"}
+halo2wrong = { git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin"}
 halo2_ecc ={ package = "ecc", git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin"}
 halo2_maingate =  { package = "maingate", git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin"}
+
+#halo2wrong = { path = "../halo2wrong/halo2wrong"}
+#halo2_ecc = { package = "ecc", path = "../halo2wrong/ecc"}
+#halo2_maingate = { package = "maingate", path = "../halo2wrong/maingate"}
+
 ark-std = { version = "0.3", features = ["print-trace"] }
 sha3 = "0.9.1"
 rand_core = { version = "0.6", default-features = false }

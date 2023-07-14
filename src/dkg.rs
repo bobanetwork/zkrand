@@ -1,5 +1,4 @@
 use rand_core::RngCore;
-
 use blake2b_simd::{blake2b, State as Blake2bState};
 use halo2wrong::curves::bn256::{
     pairing, Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2, G1 as BnG1Projective,
@@ -303,7 +302,6 @@ mod tests {
 
     const THRESHOLD: usize = 9;
     const NUMBER_OF_MEMBERS: usize = 16;
-
 
     #[test]
     fn test_partial_evaluation() {
