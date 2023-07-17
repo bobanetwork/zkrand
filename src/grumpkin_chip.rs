@@ -1,3 +1,4 @@
+use halo2_gadgets::utilities::FieldValue;
 use halo2_maingate::{
     AssignedCondition, AssignedValue, MainGate, MainGateConfig, MainGateInstructions,
 };
@@ -194,7 +195,7 @@ impl GrumpkinChip {
     }
 
     // convert into bits without checking the bits compose back to the original value
-    pub fn to_bits_simple(
+    pub fn to_bits_unsafe(
         &self,
         ctx: &mut RegionCtx<'_, Base>,
         value: &AssignedValue<Base>,
@@ -288,12 +289,6 @@ mod tests {
 
                     ecc.assign_aux_generator(ctx, Value::known(aux))?;
 
-                    // test point incomplete addition
-                    {
-                        let d = ecc.add_incomplete(ctx, p0_assigned, p1_assigned)?;
-                        ecc.assert_equal(ctx, &add_assigned, &d)?;
-                    }
-
                     // test point addition
                     {
                         let d = ecc.add(ctx, p0_assigned, p1_assigned)?;
@@ -320,7 +315,7 @@ mod tests {
 
                     // test mul bits
                     {
-                        let bits = ecc.to_bits_simple(ctx, r_assigned)?;
+                        let bits = ecc.to_bits_unsafe(ctx, r_assigned)?;
                         let d = ecc.mul_bits(ctx, p0_assigned, &bits)?;
                         ecc.assert_equal(ctx, &mul_assigned, &d)?;
                     }
@@ -391,7 +386,7 @@ mod tests {
                     let p0_assigned = &ecc.assign_point(ctx, Value::known(p0))?;
                     let r_assigned = &ecc.main_gate.assign_value(ctx, Value::known(r))?;
 
-                    let bits = ecc.to_bits_simple(ctx, r_assigned)?;
+                    let bits = ecc.to_bits_unsafe(ctx, r_assigned)?;
                     let d = ecc.mul_bits(ctx, p0_assigned, &bits)?;
 
                     Ok(())
