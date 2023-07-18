@@ -335,9 +335,9 @@ mod tests {
     fn test_dkg_circuit() {
         mock_dkg_circuit::<3, 5>();
         mock_dkg_circuit::<7, 12>();
-        //    mock_dkg_circuit::<13, 25>();
-        //    mock_dkg_circuit::<26, 50>();
-        //    mock_dkg_circuit::<51, 101>();
+        //    mock_dkg_circuit::<14, 26>();
+        //    mock_dkg_circuit::<27, 53>();
+        //    mock_dkg_circuit::<54, 107>();
     }
 
     fn dkg_proof<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize, const DEGREE: usize>() {
@@ -431,7 +431,9 @@ mod tests {
     fn test_dkg_proof() {
         dkg_proof::<3, 5, 19>();
         dkg_proof::<7, 12, 20>();
-        dkg_proof::<13, 25, 21>();
+        dkg_proof::<14, 26, 21>();
+        dkg_proof::<27, 53, 22>();
+        dkg_proof::<54, 107, 23>();
     }
 
     fn mock_dvrf<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
@@ -489,8 +491,8 @@ mod tests {
     fn test_dvrf_functions() {
         mock_dvrf::<3, 5>();
         mock_dvrf::<7, 12>();
-        mock_dvrf::<13, 25>();
-        mock_dvrf::<26, 50>();
-        mock_dvrf::<51, 101>();
+        mock_dvrf::<14, 26>();
+        mock_dvrf::<27, 53>();
+        mock_dvrf::<54, 107>();
     }
 }

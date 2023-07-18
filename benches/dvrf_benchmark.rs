@@ -8,8 +8,8 @@ mod dvrf_benches {
     use halo2wrong::halo2::arithmetic::Field;
     use rand_core::OsRng;
     use zkdvrf::{
-        combine_partial_evaluations, get_shares, hash_to_curve, keygen, DkgShareKey, PseudoRandom,
-        EVAL_PREFIX,
+        combine_partial_evaluations, get_shares, hash_to_curve_bn, keygen, DkgShareKey,
+        PseudoRandom, EVAL_PREFIX,
     };
 
     // partial evaluation time independent of the values of threshold and number of members
@@ -84,7 +84,7 @@ mod dvrf_benches {
         let gpk = (g2 * a).to_affine();
 
         let input = b"the first random 20230703";
-        let hasher = hash_to_curve(EVAL_PREFIX);
+        let hasher = hash_to_curve_bn(EVAL_PREFIX);
         let h: BnG1 = hasher(input).to_affine();
 
         let proof = (h * a).to_affine();
@@ -101,11 +101,11 @@ mod dvrf_benches {
         config = Criterion::default();
         targets =
             partial_evaluate,
-            combine::<4,6>,
-            combine::<7,13>,
-            combine::<14,27>,
-            combine::<28,55>,
-            combine::<57,112>,
+            combine::<3,5>,
+            combine::<7,12>,
+            combine::<14,26>,
+            combine::<27,53>,
+            combine::<54,107>,
             partial_verify,
             pseudo_random_verify,
     }

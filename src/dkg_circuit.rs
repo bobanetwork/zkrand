@@ -453,9 +453,9 @@ mod tests {
     fn test_dkg_n_circuit() {
         dkg_n_circuit::<3, 5>();
         dkg_n_circuit::<7, 12>();
-        //  dkg_n_circuit::<13, 25>();
-        //   dkg_n_circuit::<26, 50>();
-        //    dkg_n_circuit::<51, 101>();
+        //  dkg_n_circuit::<14, 26>();
+        //   dkg_n_circuit::<27, 53>();
+        //    dkg_n_circuit::<54, 107>();
     }
 
     #[test]

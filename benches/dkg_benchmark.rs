@@ -104,11 +104,11 @@ mod dkg_benches {
         name = dkg_benches;
         config = Criterion::default();
         targets =
-            dkg_proof_verify::<4,6,20>,
-    //        dkg_proof_verify::<7,13,21>,
-    //        dkg_proof_verify::<14,27,22>,
-    //        dkg_proof_verify::<28,55,23>,
-    //        dkg_proof_verify::<57,112,24>,
+            dkg_proof_verify::<3,5,19>,
+    //        dkg_proof_verify::<7,12,20>,
+    //        dkg_proof_verify::<14,26,21>,
+    //        dkg_proof_verify::<27,53,22>,
+    //        dkg_proof_verify::<54,107,23>,
     }
 }
 
