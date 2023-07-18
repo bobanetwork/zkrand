@@ -6,7 +6,6 @@ mod hash_to_curve;
 mod poseidon;
 mod utils;
 
-use blake2b_simd::State as Blake2bState;
 use rand_core::RngCore;
 use std::rc::Rc;
 
@@ -14,8 +13,9 @@ pub use halo2_ecc::integer::NUMBER_OF_LOOKUP_LIMBS;
 use halo2_ecc::Point;
 use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash};
 use halo2wrong::curves::bn256::{Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
-use halo2wrong::curves::ff::FromUniformBytes;
-use halo2wrong::curves::group::{Curve, GroupEncoding};
+use halo2wrong::curves::ff::PrimeField;
+use halo2wrong::curves::group::Curve;
+use halo2wrong::curves::grumpkin::{Fr as GkScalar, G1Affine as GkG1};
 use halo2wrong::halo2::arithmetic::Field;
 use halo2wrong::halo2::circuit::Value;
 
@@ -34,91 +34,35 @@ const POSEIDON_WIDTH: usize = 3;
 const POSEIDON_RATE: usize = 2;
 const POSEIDON_LEN: usize = 2;
 
-// recommended numbers (closest to 2^n):
-// t = 4, num = 6, k = 20
-// t = 7, num = 13, k = 21
-
-pub struct ProofOfKnowledge {
-    c: BnScalar,
-    z: BnScalar,
-}
-
-impl ProofOfKnowledge {
-    pub fn verify(&self, pk: &BnG1) -> Result<(), Error> {
-        let g = BnG1::generator();
-        let cap_r = ((g * self.z) - (pk * self.c)).to_affine();
-
-        let mut hash_state = Blake2bState::new();
-        hash_state
-            .update(g.to_bytes().as_ref())
-            .update(pk.to_bytes().as_ref())
-            .update(cap_r.to_bytes().as_ref());
-        let data: [u8; 64] = hash_state
-            .finalize()
-            .as_ref()
-            .try_into()
-            .expect("cannot convert hash result to array");
-
-        let c = BnScalar::from_uniform_bytes(&data);
-        if c != self.c {
-            return Err(Error::VerifyFailed);
-        }
-
-        Ok(())
-    }
-}
-
 pub struct MemberKey {
-    sk: BnScalar,
-    pk: BnG1,
+    sk: GkScalar,
+    pk: GkG1,
 }
 
 impl MemberKey {
     pub fn new(mut rng: impl RngCore) -> Self {
-        let (sk, pk) = keygen(&mut rng);
+        let g = GkG1::generator();
+        let sk = GkScalar::random(&mut rng);
+        let pk = (g * sk).to_affine();
 
         MemberKey { sk, pk }
     }
 
-    pub fn get_public_key(&self) -> BnG1 {
+    pub fn get_public_key(&self) -> GkG1 {
         self.pk
     }
 
-    // a schnorr style proof to show the knowledge of sk such that pk = g^sk
-    pub fn prove_knowledge(&self, mut rng: impl RngCore) -> ProofOfKnowledge {
-        let g = BnG1::generator();
-        let r = BnScalar::random(&mut rng);
-        let cap_r = (g * r).to_affine();
-
-        let mut hash_state = Blake2bState::new();
-        hash_state
-            .update(g.to_bytes().as_ref())
-            .update(self.pk.to_bytes().as_ref())
-            .update(cap_r.to_bytes().as_ref());
-        let data: [u8; 64] = hash_state
-            .finalize()
-            .as_ref()
-            .try_into()
-            .expect("cannot convert hash result to array");
-
-        let c = BnScalar::from_uniform_bytes(&data);
-        let z = c * self.sk + r;
-
-        ProofOfKnowledge { c, z }
-    }
-
-    pub fn decrypt_share(&self, gr: &BnG1, cipher: &BnScalar) -> BnScalar {
+    pub fn decrypt_share(&self, gr: &GkG1, cipher: &BnScalar) -> BnScalar {
         let pkr = (gr * self.sk).to_affine();
         let poseidon = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init();
-        let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
-        let key = poseidon.clone().hash(message);
+        let key = poseidon.clone().hash([pkr.x, pkr.y]);
         let plaintext = cipher - key;
 
         plaintext
     }
 
     // find the index of this member in a list of public keys; member_index is array_index + 1
-    pub fn get_index(&self, public_keys: &[BnG1]) -> Option<usize> {
+    pub fn get_index(&self, public_keys: &[GkG1]) -> Option<usize> {
         public_keys
             .iter()
             .position(|pk| pk.eq(&self.pk))
@@ -155,7 +99,7 @@ pub struct DkgMemberPublicParams<const THRESHOLD: usize, const NUMBER_OF_MEMBERS
     index: usize,
     public_shares: [BnG1; NUMBER_OF_MEMBERS],
     ciphers: [BnScalar; NUMBER_OF_MEMBERS],
-    gr: BnG1,
+    gr: GkG1,
     ga: BnG1,
     g2a: BnG2,
 }
@@ -163,7 +107,7 @@ pub struct DkgMemberPublicParams<const THRESHOLD: usize, const NUMBER_OF_MEMBERS
 impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
     DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS>
 {
-    pub fn get_instance(&self, pks: &[BnG1]) -> Vec<Vec<BnScalar>> {
+    pub fn get_instance(&self, pks: &[GkG1]) -> Vec<Vec<BnScalar>> {
         assert_eq!(pks.len(), NUMBER_OF_MEMBERS);
 
         let (rns_base, _) = setup::<BnG1>(0);
@@ -172,8 +116,8 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         let ga_point = Point::new(Rc::clone(&rns_base), self.ga);
         let mut public_data = ga_point.public();
 
-        let gr_point = Point::new(Rc::clone(&rns_base), self.gr);
-        public_data.extend(gr_point.public());
+        public_data.push(self.gr.x);
+        public_data.push(self.gr.y);
 
         for i in 0..NUMBER_OF_MEMBERS {
             let gs_point = Point::new(Rc::clone(&rns_base), self.public_shares[i]);
@@ -181,8 +125,8 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         }
 
         for i in 0..NUMBER_OF_MEMBERS {
-            let mpk_point = Point::new(Rc::clone(&rns_base), pks[i]);
-            public_data.extend(mpk_point.public());
+            public_data.push(pks[i].x);
+            public_data.push(pks[i].y);
             public_data.push(self.ciphers[i]);
         }
 
@@ -196,14 +140,14 @@ pub struct DkgMemberParams<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usiz
     coeffs: [BnScalar; THRESHOLD],
     shares: [BnScalar; NUMBER_OF_MEMBERS],
     r: BnScalar,
-    public_keys: [BnG1; NUMBER_OF_MEMBERS],
+    public_keys: [GkG1; NUMBER_OF_MEMBERS],
     public_params: DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS>,
 }
 
 impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
     DkgMemberParams<THRESHOLD, NUMBER_OF_MEMBERS>
 {
-    pub fn new(index: usize, public_keys: &[BnG1], mut rng: impl RngCore) -> Result<Self, Error> {
+    pub fn new(index: usize, public_keys: &[GkG1], mut rng: impl RngCore) -> Result<Self, Error> {
         assert_eq!(public_keys.len(), NUMBER_OF_MEMBERS);
 
         if index < 1 || index > NUMBER_OF_MEMBERS {
@@ -226,15 +170,17 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
 
         // draw arandomness for encryption
         let r = BnScalar::random(&mut rng);
-        let gr = (g * r).to_affine();
+        let gg = GkG1::generator();
+        let rs = GkScalar::from_repr(r.to_repr())
+            .expect("unable to convert Bn256 scalar to Grumpkin scalar");
+        let ggr = (gg * rs).to_affine();
 
         // encrypt shares
         let poseidon = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init();
         let mut ciphers = vec![];
         for i in 0..NUMBER_OF_MEMBERS {
-            let pkr = (public_keys[i] * r).to_affine();
-            let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
-            let key = poseidon.clone().hash(message);
+            let pkr = (public_keys[i] * rs).to_affine();
+            let key = poseidon.clone().hash([pkr.x, pkr.y]);
             let cipher = key + shares[i];
             ciphers.push(cipher);
         }
@@ -245,7 +191,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
                 .try_into()
                 .expect("unable to convert public share vector"),
             ciphers: ciphers.try_into().expect("unable to convert cipher vector"),
-            gr,
+            gr: ggr,
             ga,
             g2a,
         };
@@ -265,6 +211,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
 
     pub fn get_circuit(&self, mut rng: impl RngCore) -> CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS> {
         let aux_generator = BnG1::random(&mut rng);
+        let grumpkin_aux_generator = GkG1::random(&mut rng);
         let coeffs: Vec<_> = self.coeffs.iter().map(|a| Value::known(*a)).collect();
         let public_keys: Vec<_> = self
             .public_keys
@@ -278,6 +225,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
             public_keys,
             aux_generator,
             4,
+            grumpkin_aux_generator,
         );
 
         circuit
@@ -364,14 +312,6 @@ mod tests {
     use rand_chacha::ChaCha20Rng;
     use rand_core::SeedableRng;
 
-    #[test]
-    fn test_proof_knowledge() {
-        let mut rng = ChaCha20Rng::seed_from_u64(42);
-        let member = MemberKey::new(&mut rng);
-        let proof = member.prove_knowledge(&mut rng);
-        proof.verify(&member.pk).unwrap()
-    }
-
     fn mock_dkg_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
         let mut rng = ChaCha20Rng::seed_from_u64(42);
         let mut members = vec![];
@@ -393,9 +333,11 @@ mod tests {
 
     #[test]
     fn test_dkg_circuit() {
-        mock_dkg_circuit::<4, 6>();
-        mock_dkg_circuit::<7, 13>();
-        //     mock_dkg_circuit::<14, 27>();
+        mock_dkg_circuit::<3, 5>();
+        mock_dkg_circuit::<7, 12>();
+        //    mock_dkg_circuit::<13, 25>();
+        //    mock_dkg_circuit::<26, 50>();
+        //    mock_dkg_circuit::<51, 101>();
     }
 
     fn dkg_proof<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize, const DEGREE: usize>() {
@@ -487,8 +429,9 @@ mod tests {
 
     #[test]
     fn test_dkg_proof() {
-        dkg_proof::<4, 6, 20>();
-        dkg_proof::<7, 13, 21>();
+        dkg_proof::<3, 5, 19>();
+        dkg_proof::<7, 12, 20>();
+        dkg_proof::<13, 25, 21>();
     }
 
     fn mock_dvrf<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
@@ -544,10 +487,10 @@ mod tests {
 
     #[test]
     fn test_dvrf_functions() {
-        mock_dvrf::<4, 6>();
-        mock_dvrf::<7, 13>();
-        mock_dvrf::<14, 27>();
-        mock_dvrf::<28, 55>();
-        mock_dvrf::<57, 112>();
+        mock_dvrf::<3, 5>();
+        mock_dvrf::<7, 12>();
+        mock_dvrf::<13, 25>();
+        mock_dvrf::<26, 50>();
+        mock_dvrf::<51, 101>();
     }
 }

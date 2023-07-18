@@ -1,12 +1,9 @@
-use rand_core::RngCore;
 use blake2b_simd::{blake2b, State as Blake2bState};
-use halo2wrong::curves::bn256::{
-    pairing, Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2, G1 as BnG1Projective,
-};
+use halo2wrong::curves::bn256::{pairing, Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
 use halo2wrong::curves::ff::FromUniformBytes;
 use halo2wrong::curves::group::{Curve, GroupEncoding};
-use halo2wrong::curves::CurveExt;
 use halo2wrong::halo2::arithmetic::Field;
+use rand_core::RngCore;
 
 use crate::error::Error;
 use crate::utils::hash_to_curve_bn;

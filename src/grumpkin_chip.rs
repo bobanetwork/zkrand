@@ -1,10 +1,9 @@
-use halo2_gadgets::utilities::FieldValue;
 use halo2_maingate::{
     AssignedCondition, AssignedValue, MainGate, MainGateConfig, MainGateInstructions,
 };
 use halo2wrong::curves::ff::PrimeField;
 use halo2wrong::curves::grumpkin::{Fq as Base, G1Affine as Point};
-use halo2wrong::curves::{grumpkin, CurveAffine};
+use halo2wrong::curves::CurveAffine;
 use halo2wrong::halo2::circuit::Layouter;
 use halo2wrong::halo2::{circuit::Value, plonk::Error as PlonkError};
 use halo2wrong::utils::decompose;
@@ -34,15 +33,10 @@ impl AssignedPoint {
     }
 
     pub fn value(&self) -> Value<Point> {
-        let x = self.x();
-        let y = self.y();
-
-        let p = self
-            .x
+        self.x
             .value()
             .zip(self.y.value())
-            .map(|(x, y)| Point { x: *x, y: *y });
-        p
+            .map(|(x, y)| Point { x: *x, y: *y })
     }
 }
 
@@ -225,14 +219,12 @@ impl GrumpkinChip {
     pub fn to_bits_unsafe(
         &self,
         ctx: &mut RegionCtx<'_, Base>,
-        value: &AssignedValue<Base>,
+        value: &Value<Base>,
     ) -> Result<Vec<AssignedCondition<Base>>, PlonkError> {
         let main_gate = self.main_gate();
         let number_of_bits = Base::NUM_BITS as usize;
 
-        let decomposed_value = value
-            .value()
-            .map(|value| decompose(*value, number_of_bits, 1));
+        let decomposed_value = value.map(|value| decompose(value, number_of_bits, 1));
 
         let bits: Vec<_> = (0..number_of_bits)
             .map(|i| {
@@ -249,7 +241,6 @@ impl GrumpkinChip {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use grumpkin::{Fq, G1Affine, G1};
     use halo2wrong::curves::ff::PrimeField;
     use halo2wrong::curves::group::Curve;
     use halo2wrong::curves::grumpkin::Fr as Scalar;
@@ -305,10 +296,8 @@ mod tests {
                     let add_assigned = ecc.assign_point(ctx, Value::known(add))?;
                     let double_assigned = ecc.assign_point(ctx, Value::known(double))?;
 
-                    let main_gate = ecc.main_gate();
-
                     let r = Base::random(&mut rng);
-                    let r_assigned = &main_gate.assign_value(ctx, Value::known(r))?;
+                    let r_value = Value::known(r);
                     // base can fit in scalar for Grumpkin
                     let rr = Scalar::from_repr(r.to_repr()).unwrap();
                     let mul = (p0 * rr).to_affine();
@@ -316,6 +305,8 @@ mod tests {
 
                     ecc.assign_aux_generator(ctx, Value::known(aux))?;
                     ecc.assign_aux_sub(ctx)?;
+
+                    let main_gate = ecc.main_gate();
 
                     // test point addition
                     {
@@ -337,13 +328,14 @@ mod tests {
 
                     // test mul
                     {
+                        let r_assigned = &main_gate.assign_value(ctx, r_value)?;
                         let d = ecc.mul(ctx, p0_assigned, r_assigned)?;
                         ecc.assert_equal(ctx, &mul_assigned, &d)?;
                     }
 
                     // test mul bits
                     {
-                        let bits = ecc.to_bits_unsafe(ctx, r_assigned)?;
+                        let bits = ecc.to_bits_unsafe(ctx, &r_value)?;
                         let d = ecc.mul_bits(ctx, p0_assigned, &bits)?;
                         ecc.assert_equal(ctx, &mul_assigned, &d)?;
                     }
@@ -413,9 +405,7 @@ mod tests {
                     let ctx = &mut RegionCtx::new(region, offset);
 
                     let p0_assigned = &ecc.assign_point(ctx, Value::known(p0))?;
-                    let r_assigned = &ecc.main_gate.assign_value(ctx, Value::known(r))?;
-
-                    let bits = ecc.to_bits_unsafe(ctx, r_assigned)?;
+                    let bits = ecc.to_bits_unsafe(ctx, &Value::known(r))?;
                     let d = ecc.mul_bits(ctx, p0_assigned, &bits)?;
 
                     Ok(())

@@ -1,6 +1,7 @@
 use halo2wrong::curves::{
     bn256::{Fq as BnBase, Fr as BnScalar, G1Affine as BnG1},
     ff::PrimeField,
+    grumpkin::G1Affine as GkG1,
 };
 use halo2wrong::halo2::{
     circuit::{Layouter, SimpleFloorPlanner, Value},
@@ -17,6 +18,7 @@ use halo2_maingate::{
     MainGate, MainGateConfig, MainGateInstructions, RangeChip, RangeConfig, RangeInstructions,
 };
 
+use crate::grumpkin_chip::GrumpkinChip;
 use crate::poseidon::P128Pow5T3Bn;
 use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH};
 
@@ -88,10 +90,10 @@ impl CircuitDkgConfig {
 pub struct CircuitDkg<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
     coeffs: [Value<BnScalar>; THRESHOLD],
     random: Value<BnScalar>,
-    public_keys: [Value<BnG1>; NUMBER_OF_MEMBERS],
-
+    public_keys: [Value<GkG1>; NUMBER_OF_MEMBERS],
     aux_generator: BnG1,
     window_size: usize,
+    grumpkin_aux_generator: GkG1,
 }
 
 impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
@@ -100,9 +102,10 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
     pub fn new(
         coeffs: Vec<Value<BnScalar>>,
         random: Value<BnScalar>,
-        public_keys: Vec<Value<BnG1>>,
+        public_keys: Vec<Value<GkG1>>,
         aux_generator: BnG1,
         window_size: usize,
+        grumpkin_aux_generator: GkG1,
     ) -> Self {
         assert_eq!(coeffs.len(), THRESHOLD);
         assert_eq!(public_keys.len(), NUMBER_OF_MEMBERS);
@@ -117,6 +120,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
                 .expect("unable to convert public key vector"),
             aux_generator,
             window_size,
+            grumpkin_aux_generator,
         }
     }
 }
@@ -146,6 +150,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
         let mut ecc_chip =
             BaseFieldEccChip::<BnG1, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
         let main_gate = MainGate::<BnScalar>::new(config.main_gate_config.clone());
+        let mut grumpkin_chip = GrumpkinChip::new(config.main_gate_config.clone());
 
         let (shares, a) = layouter.assign_region(
             || "region compute shares from coefficients",
@@ -197,6 +202,18 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
             },
         )?;
 
+        layouter.assign_region(
+            || "assign aux values for grumpkin chip",
+            |region| {
+                let offset = 0;
+                let ctx = &mut RegionCtx::new(region, offset);
+                grumpkin_chip
+                    .assign_aux_generator(ctx, Value::known(self.grumpkin_aux_generator))?;
+                grumpkin_chip.assign_aux_sub(ctx)?;
+                Ok(())
+            },
+        )?;
+
         let (g, ga) = layouter.assign_region(
             || "region ecc mul g^a",
             |region| {
@@ -217,25 +234,25 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
         ecc_chip.expose_public(layouter.namespace(|| "cipher g^a"), ga, 0)?;
         let mut instance_offset: usize = 8;
 
-        let (r, gr) = layouter.assign_region(
-            || "region ecc mul g^r",
+        let (bits, gr) = layouter.assign_region(
+            || "region grumpkin ecc mul g^r",
             |region| {
                 let offset = 0;
                 let ctx = &mut RegionCtx::new(region, offset);
 
-                let r = main_gate.assign_value(ctx, self.random)?;
+                let g = grumpkin_chip.assign_constant(ctx, GkG1::generator())?;
 
+                // we don't care about the value of r; if r==0, add will fail
+                let bits = grumpkin_chip.to_bits_unsafe(ctx, &self.random)?;
                 // gr = g^r
-                let gr = ecc_chip.mul(ctx, &g, &r, self.window_size)?;
-                // normalise for public inputs
-                let gr = ecc_chip.normalize(ctx, &gr)?;
+                let gr = grumpkin_chip.mul_bits(ctx, &g, &bits)?;
 
-                Ok((r, gr))
+                Ok((bits, gr))
             },
         )?;
 
-        ecc_chip.expose_public(layouter.namespace(|| "cipher g^r"), gr, instance_offset)?;
-        instance_offset += 8;
+        grumpkin_chip.expose_public(layouter.namespace(|| "cipher g^r"), gr, instance_offset)?;
+        instance_offset += 2;
 
         for i in 0..NUMBER_OF_MEMBERS {
             let gs = layouter.assign_region(
@@ -258,27 +275,23 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
 
         for i in 0..NUMBER_OF_MEMBERS {
             let (pkr, pk) = layouter.assign_region(
-                || "region ecc mul encryption",
+                || "region grumpkin ecc mul encryption",
                 |region| {
                     let offset = 0;
                     let ctx = &mut RegionCtx::new(region, offset);
 
-                    let pk = ecc_chip.assign_point(ctx, self.public_keys[i])?;
-
+                    let pk = grumpkin_chip.assign_point(ctx, self.public_keys[i])?;
                     // pkr = pk^r
-                    let pkr = ecc_chip.mul(ctx, &pk, &r, self.window_size)?;
+                    let pkr = grumpkin_chip.mul_bits(ctx, &pk, &bits)?;
 
-                    // normalise for public inputs
-                    let pkr = ecc_chip.normalize(ctx, &pkr)?;
-                    let pk = ecc_chip.normalize(ctx, &pk)?;
                     Ok((pkr, pk))
                 },
             )?;
 
-            ecc_chip.expose_public(layouter.namespace(|| "pk"), pk, instance_offset)?;
-            instance_offset += 8;
+            grumpkin_chip.expose_public(layouter.namespace(|| "pk"), pk, instance_offset)?;
+            instance_offset += 2;
 
-            let message = [pkr.x().native().clone(), pkr.y().native().clone()];
+            let message = [pkr.x, pkr.y];
 
             let poseidon_chip = Pow5Chip::construct(config.poseidon_config.clone());
             let hasher = PoseidonHash::<
@@ -324,6 +337,7 @@ mod tests {
     use ark_std::{end_timer, start_timer};
     use halo2_ecc::halo2::SerdeFormat;
     use halo2wrong::curves::bn256::Bn256;
+    use halo2wrong::curves::grumpkin::{Fr as GkScalar, G1Affine as GkG1};
     use halo2wrong::halo2::arithmetic::Field;
     use halo2wrong::halo2::plonk::{create_proof, keygen_pk, keygen_vk, verify_proof};
     use halo2wrong::halo2::poly::commitment::ParamsProver;
@@ -353,13 +367,14 @@ mod tests {
         let rns_base = Rc::new(rns_base);
 
         let g = BnG1::generator();
+        let gg = GkG1::generator();
 
         // Generate a key pair for encryption
         let mut sks = vec![];
         let mut pks = vec![];
         for _ in 0..NUMBER_OF_MEMBERS {
-            let sk = BnScalar::random(&mut rng);
-            let pk = (g * sk).to_affine();
+            let sk = GkScalar::random(&mut rng);
+            let pk = (gg * sk).to_affine();
 
             sks.push(sk);
             pks.push(pk);
@@ -377,10 +392,11 @@ mod tests {
 
         // Draw arandomness for encryption
         let random = BnScalar::random(&mut rng);
-        let gr = (g * random).to_affine();
+        let rs = GkScalar::from_repr(random.to_repr()).unwrap();
+        let gr = (gg * rs).to_affine();
 
-        let gr_point = Point::new(Rc::clone(&rns_base), gr);
-        public_data.extend(gr_point.public());
+        public_data.push(gr.x);
+        public_data.push(gr.y);
 
         let shares = get_shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
 
@@ -394,13 +410,12 @@ mod tests {
 
         for i in 0..NUMBER_OF_MEMBERS {
             // Encrypt
-            let pkr = (pks[i] * random).to_affine();
-            let message = [mod_n::<BnG1>(pkr.x), mod_n::<BnG1>(pkr.y)];
-            let key = poseidon.clone().hash(message);
+            let pkr = (pks[i] * rs).to_affine();
+            let key = poseidon.clone().hash([pkr.x, pkr.y]);
             let cipher = key + shares[i];
 
-            let pk_point = Point::new(Rc::clone(&rns_base), pks[i]);
-            public_data.extend(pk_point.public());
+            public_data.push(pks[i].x);
+            public_data.push(pks[i].y);
             public_data.push(cipher);
         }
 
@@ -408,12 +423,14 @@ mod tests {
         let public_keys: Vec<_> = pks.iter().map(|pk| Value::known(*pk)).collect();
 
         let aux_generator = BnG1::random(&mut rng);
+        let grumpkin_aux_generator = GkG1::random(&mut rng);
         let circuit = CircuitDkg {
             coeffs: coeffs.try_into().unwrap(),
             random: Value::known(random),
             public_keys: public_keys.try_into().unwrap(),
             aux_generator,
             window_size: 4,
+            grumpkin_aux_generator,
         };
 
         (circuit, public_data)
@@ -434,20 +451,20 @@ mod tests {
 
     #[test]
     fn test_dkg_n_circuit() {
-        dkg_n_circuit::<4, 6>();
-        dkg_n_circuit::<7, 13>();
-        //  dkg_n_circuit::<14, 27>();
-        //   dkg_n_circuit::<28, 55>();
-        //    dkg_n_circuit::<57, 112>();
+        dkg_n_circuit::<3, 5>();
+        dkg_n_circuit::<7, 12>();
+        //  dkg_n_circuit::<13, 25>();
+        //   dkg_n_circuit::<26, 50>();
+        //    dkg_n_circuit::<51, 101>();
     }
 
     #[test]
     fn test_vk() {
         let mut rng = ChaCha20Rng::seed_from_u64(42);
-        let (circuit1, public_data1) = get_circuit::<4, 6>(&mut rng);
-        let (circuit2, public_data2) = get_circuit::<4, 6>(&mut rng);
+        let (circuit1, public_data1) = get_circuit::<3, 5>(&mut rng);
+        let (circuit2, public_data2) = get_circuit::<3, 5>(&mut rng);
 
-        let degree = 20;
+        let degree = 19;
         let setup_message = format!("dkg setup with degree = {}", degree);
         let start1 = start_timer!(|| setup_message);
         let general_params = ParamsKZG::<Bn256>::setup(degree as u32, &mut rng);
@@ -544,7 +561,7 @@ mod tests {
 
     #[test]
     fn test_dkg_n_proof() {
-        dkg_n_proof::<4, 6, 20>();
-        //        dkg_n_proof::<7, 13, 21>();
+        dkg_n_proof::<3, 5, 19>();
+        //        dkg_n_proof::<7, 12, 20>();
     }
 }

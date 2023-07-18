@@ -1,11 +1,9 @@
 use crate::grumpkin_chip::{AssignedPoint, Base, GrumpkinChip, PlonkError};
-use halo2_gadgets::utilities::FieldValue;
 use halo2_maingate::{
     AssignedValue, CombinationOption, CombinationOptionCommon, MainGate, MainGateInstructions, Term,
 };
 use halo2wrong::curves::ff::Field;
 use halo2wrong::RegionCtx;
-use std::ops::Sub;
 
 // d = s*a*b-c where s is fixed scalar
 fn mul_sub(
