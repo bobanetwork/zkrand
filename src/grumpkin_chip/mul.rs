@@ -27,7 +27,10 @@ impl GrumpkinChip {
             Some((assigned, _)) => Ok(assigned),
             None => Err(PlonkError::Synthesis),
         }?;
-        let aux_neg = self.neg(ctx, &aux)?;
+        let aux_sub = match self.aux_sub.clone() {
+            Some((assigned, _)) => Ok(assigned),
+            None => Err(PlonkError::Synthesis),
+        }?;
 
         let mut res = aux;
         let mut double = point.clone();
@@ -37,7 +40,7 @@ impl GrumpkinChip {
             double = self.double_incomplete(ctx, &double)?;
         }
 
-        res = self.add(ctx, &res, &aux_neg)?;
+        res = self.add(ctx, &res, &aux_sub)?;
         Ok(res)
     }
 }

@@ -32,12 +32,25 @@ impl AssignedPoint {
     pub fn y(&self) -> &AssignedValue<Base> {
         &self.y
     }
+
+    pub fn value(&self) -> Value<Point> {
+        let x = self.x();
+        let y = self.y();
+
+        let p = self
+            .x
+            .value()
+            .zip(self.y.value())
+            .map(|(x, y)| Point { x: *x, y: *y });
+        p
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct GrumpkinChip {
     main_gate: MainGate<Base>,
     aux_generator: Option<(AssignedPoint, Value<Point>)>,
+    aux_sub: Option<(AssignedPoint, Value<Point>)>,
 }
 
 impl GrumpkinChip {
@@ -46,6 +59,7 @@ impl GrumpkinChip {
         Self {
             main_gate,
             aux_generator: None,
+            aux_sub: None,
         }
     }
 
@@ -99,6 +113,19 @@ impl GrumpkinChip {
         let aux_generator_assigned = self.assign_point(ctx, aux_generator)?;
         self.aux_generator = Some((aux_generator_assigned, aux_generator));
         Ok(())
+    }
+
+    pub fn assign_aux_sub(&mut self, ctx: &mut RegionCtx<'_, Base>) -> Result<(), PlonkError> {
+        match &self.aux_generator {
+            Some((aux, _)) => {
+                let aux_sub = self.neg(ctx, aux)?;
+                let aux_sub_value = aux_sub.value();
+                self.aux_sub = Some((aux_sub, aux_sub_value));
+                Ok(())
+            }
+            // aux generator is not assigned yet
+            None => Err(PlonkError::Synthesis),
+        }
     }
 
     pub fn assign_point(
@@ -288,6 +315,7 @@ mod tests {
                     let mul_assigned = ecc.assign_point(ctx, Value::known(mul))?;
 
                     ecc.assign_aux_generator(ctx, Value::known(aux))?;
+                    ecc.assign_aux_sub(ctx)?;
 
                     // test point addition
                     {
@@ -372,6 +400,7 @@ mod tests {
                     let ctx = &mut RegionCtx::new(region, offset);
 
                     ecc.assign_aux_generator(ctx, Value::known(aux))?;
+                    ecc.assign_aux_sub(ctx)?;
 
                     Ok(())
                 },
