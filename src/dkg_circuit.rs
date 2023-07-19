@@ -321,7 +321,6 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
             instance_offset += 1;
         }
 
-        // todo: move?
         config.config_range(&mut layouter)?;
 
         Ok(())

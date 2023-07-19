@@ -267,7 +267,7 @@ impl GrumpkinChip {
 
     // point double assuming a.y != 0
     // lambda = 3x^2/(2y), xc = lambda^2 - 2x, yc = lambda * (x - xc) - y
-    // if y == 0 then a valid witness cannot be found unless x == 0; (0,0) is not valid point on curve
+    // if y == 0 then a valid witness cannot be found unless x == 0; (0,0), (0,y) or (x, 0) are not valid point on curve
     //
     // the formula below is optimised for halo2wrong's maingate:
     // lambda_third = x^2/(2y), xc = 9*lambda_third^2 - 2x, yc = 3*lambda_third * (x - xc) - y
