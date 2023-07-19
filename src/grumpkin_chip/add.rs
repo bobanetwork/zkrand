@@ -5,11 +5,10 @@ use halo2_maingate::{
 use halo2wrong::curves::ff::Field;
 use halo2wrong::RegionCtx;
 
-// d = s*a*b-c where s is fixed scalar
+// d = a*b-c
 fn mul_sub(
     main_gate: &MainGate<Base>,
     ctx: &mut RegionCtx<'_, Base>,
-    s: Base,
     a: &AssignedValue<Base>,
     b: &AssignedValue<Base>,
     c: &AssignedValue<Base>,
@@ -18,7 +17,7 @@ fn mul_sub(
         .value()
         .zip(b.value())
         .zip(c.value())
-        .map(|((a, b), c)| &s * a * b - c);
+        .map(|((a, b), c)| a * b - c);
 
     Ok(main_gate
         .apply(
@@ -30,16 +29,15 @@ fn mul_sub(
                 Term::unassigned_to_sub(d),
             ],
             Base::zero(),
-            CombinationOptionCommon::CombineToNextScaleMul(Base::ZERO, s).into(),
+            CombinationOptionCommon::OneLinerMul.into(),
         )?
         .swap_remove(3))
 }
 
-// e = s*a*b - c - d where s is fixed scalar
+// e = a*b - c - d
 fn mul_sub_sub(
     main_gate: &MainGate<Base>,
     ctx: &mut RegionCtx<'_, Base>,
-    s: Base,
     a: &AssignedValue<Base>,
     b: &AssignedValue<Base>,
     c: &AssignedValue<Base>,
@@ -50,14 +48,14 @@ fn mul_sub_sub(
         .zip(b.value())
         .zip(c.value())
         .zip(d.value())
-        .map(|(((a, b), c), d)| &s * a * b - c - d);
+        .map(|(((a, b), c), d)| a * b - c - d);
 
     // Witness layout:
     // | A  | B  | C | D | E |
     // | -- | -- | --| --| --|
     // | a  | b  | c | d | e |
 
-    // s* a * b - c - d - e = 0
+    // a * b - c - d - e = 0
     Ok(main_gate
         .apply(
             ctx,
@@ -69,7 +67,7 @@ fn mul_sub_sub(
                 Term::unassigned_to_sub(e),
             ],
             Base::ZERO,
-            CombinationOptionCommon::CombineToNextScaleMul(Base::ZERO, s).into(),
+            CombinationOptionCommon::OneLinerMul.into(),
         )?
         .swap_remove(4))
 }
@@ -207,37 +205,38 @@ fn mul(
         .swap_remove(2))
 }
 
-// lambda_third for point double: lambda_third = x^2/2y assuming y != 0;
-// if y == 0 then a valid witness cannot be found unless x == 0; (0,0) is not valid point on curve
-fn lambda_third_unsafe(
+// lambda for point double: lambda = 3x^2/2y assuming y != 0;
+// if y == 0 then a valid witness cannot be found unless x == 0; (0,0), (0, y), (x, 0) is not valid point on curve
+fn lambda_double_unsafe(
     main_gate: &MainGate<Base>,
     ctx: &mut RegionCtx<'_, Base>,
     a: &AssignedPoint,
 ) -> Result<AssignedValue<Base>, PlonkError> {
-    let lambda_third_value =
+    let s = Base::from(2).invert().unwrap() * Base::from(3);
+    let lambda_value =
         a.x.value()
             .zip(a.y().value())
-            .map(|(x, y)| (y + y).invert().unwrap_or(Base::ZERO) * x * x);
+            .map(|(x, y)| y.invert().unwrap_or(Base::ZERO) * x * x * s);
 
     // Witness layout:
-    // | A   | B | C            | D | E  |
-    // | --- | --| ------------ | --| ---|
-    // | x   | x | lambda_third | y |   |
+    // | A      | B | C | D | E  |
+    // | ------ | --| --| --| ---|
+    // | lambda | y | x | x |   |
 
-    // x * x - 2 * lambda_third * y = 0
+    // lambda * y - (3/2) x * x = 0
     let mut assigned = main_gate.apply(
         ctx,
         [
-            Term::assigned_to_mul(a.x()),
-            Term::assigned_to_mul(a.x()),
-            Term::unassigned_to_mul(lambda_third_value),
+            Term::unassigned_to_mul(lambda_value),
             Term::assigned_to_mul(a.y()),
+            Term::assigned_to_mul(a.x()),
+            Term::assigned_to_mul(a.x()),
         ],
         Base::zero(),
-        CombinationOption::OneLinerDoubleMul(-Base::from(2)),
+        CombinationOption::OneLinerDoubleMul(-s),
     )?;
 
-    Ok(assigned.swap_remove(2))
+    Ok(assigned.swap_remove(0))
 }
 
 impl GrumpkinChip {
@@ -255,11 +254,11 @@ impl GrumpkinChip {
         let lambda = &sub_mul(main_gate, ctx, a.y(), b.y(), inv)?;
 
         // xc =  lambda * lambda - xa - xb
-        let x = mul_sub_sub(main_gate, ctx, Base::ONE, lambda, lambda, a.x(), b.x())?;
+        let x = mul_sub_sub(main_gate, ctx, lambda, lambda, a.x(), b.x())?;
 
         // yc = lambda * (xa - xc) - ya
         let sub = &main_gate.sub(ctx, a.x(), &x)?;
-        let y = mul_sub(main_gate, ctx, Base::ONE, lambda, sub, a.y())?;
+        let y = mul_sub(main_gate, ctx, lambda, sub, a.y())?;
 
         let c = AssignedPoint::new(x, y);
         Ok(c)
@@ -268,9 +267,6 @@ impl GrumpkinChip {
     // point double assuming a.y != 0
     // lambda = 3x^2/(2y), xc = lambda^2 - 2x, yc = lambda * (x - xc) - y
     // if y == 0 then a valid witness cannot be found unless x == 0; (0,0), (0,y) or (x, 0) are not valid point on curve
-    //
-    // the formula below is optimised for halo2wrong's maingate:
-    // lambda_third = x^2/(2y), xc = 9*lambda_third^2 - 2x, yc = 3*lambda_third * (x - xc) - y
     pub fn double_incomplete(
         &self,
         ctx: &mut RegionCtx<'_, Base>,
@@ -278,23 +274,15 @@ impl GrumpkinChip {
     ) -> Result<AssignedPoint, PlonkError> {
         let main_gate = self.main_gate();
 
-        // lambda_third = x^2/(2y)
-        let lambda_third = &lambda_third_unsafe(main_gate, ctx, a)?;
+        // lambda = 3x^2/(2y)
+        let lambda = &lambda_double_unsafe(main_gate, ctx, a)?;
 
-        // xc = 9*lambda_third^2 - 2x
-        let x = mul_sub_sub(
-            main_gate,
-            ctx,
-            Base::from(9),
-            lambda_third,
-            lambda_third,
-            a.x(),
-            a.x(),
-        )?;
+        // xc = lambda^2 - 2x
+        let x = mul_sub_sub(main_gate, ctx, lambda, lambda, a.x(), a.x())?;
 
-        // yc = 3*lambda_third * (x - xc) - y
+        // yc = lambda * (x - xc) - y
         let sub = &main_gate.sub(ctx, a.x(), &x)?;
-        let y = mul_sub(main_gate, ctx, Base::from(3), lambda_third, sub, a.y())?;
+        let y = mul_sub(main_gate, ctx, lambda, sub, a.y())?;
 
         let c = AssignedPoint::new(x, y);
         Ok(c)
@@ -314,11 +302,11 @@ impl GrumpkinChip {
         let lambda = &main_gate.mul(ctx, numerator, inv)?;
 
         // xc = lambda * lambda - 2 * x
-        let x = mul_sub_sub(main_gate, ctx, Base::ONE, lambda, lambda, a.x(), a.x())?;
+        let x = mul_sub_sub(main_gate, ctx, lambda, lambda, a.x(), a.x())?;
 
         // yc = lambda * (x - xc) - y
         let sub = &main_gate.sub(ctx, a.x(), &x)?;
-        let y = mul_sub(main_gate, ctx, Base::ONE, lambda, sub, a.y())?;
+        let y = mul_sub(main_gate, ctx, lambda, sub, a.y())?;
 
         let c = AssignedPoint::new(x, y);
         Ok(c)
