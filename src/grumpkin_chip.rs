@@ -308,6 +308,12 @@ mod tests {
 
                     let main_gate = ecc.main_gate();
 
+                    // test point addition incomplete
+                    {
+                        let d = ecc.add_incomplete(ctx, p0_assigned, p1_assigned)?;
+                        ecc.assert_equal(ctx, &add_assigned, &d)?;
+                    }
+
                     // test point addition
                     {
                         let d = ecc.add(ctx, p0_assigned, p1_assigned)?;
