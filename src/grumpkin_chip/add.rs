@@ -5,6 +5,14 @@ use halo2_maingate::{
 use halo2wrong::curves::ff::Field;
 use halo2wrong::RegionCtx;
 
+// constant 3/2
+const THREE_OVER_TWO: Base = Base::from_raw([
+    0xa1f0fac9f8000002,
+    0x9419f4243cdcb848,
+    0xdc2822db40c0ac2e,
+    0x183227397098d014,
+]);
+
 // d = a*b-c
 fn mul_sub(
     main_gate: &MainGate<Base>,
@@ -106,39 +114,6 @@ fn sub_invert_unsafe(
     Ok(assigned.swap_remove(1))
 }
 
-// c = 1/(a+b); if a + b == 0 then a valid witness cannot be found
-fn add_invert_unsafe(
-    main_gate: &MainGate<Base>,
-    ctx: &mut RegionCtx<'_, Base>,
-    a: &AssignedValue<Base>,
-    b: &AssignedValue<Base>,
-) -> Result<AssignedValue<Base>, PlonkError> {
-    let c = a
-        .value()
-        .zip(b.value())
-        .map(|(a, b)| (a + b).invert().unwrap_or(Base::ZERO));
-
-    // Witness layout:
-    // | A  | B  | C | D | E |
-    // | -- | -- | --| --| --|
-    // | a  | c  | b | c |   |
-
-    // a * c + b * c - 1 = 0
-    let mut assigned = main_gate.apply(
-        ctx,
-        [
-            Term::assigned_to_mul(a),
-            Term::unassigned_to_mul(c),
-            Term::assigned_to_mul(b),
-            Term::unassigned_to_mul(c),
-        ],
-        -Base::ONE,
-        CombinationOption::OneLinerDoubleMul(Base::ONE),
-    )?;
-    ctx.constrain_equal(assigned[1].cell(), assigned[3].cell())?;
-    Ok(assigned.swap_remove(1))
-}
-
 // d = (a-b) * c
 fn sub_mul(
     main_gate: &MainGate<Base>,
@@ -212,11 +187,10 @@ fn lambda_double_unsafe(
     ctx: &mut RegionCtx<'_, Base>,
     a: &AssignedPoint,
 ) -> Result<AssignedValue<Base>, PlonkError> {
-    let s = Base::from(2).invert().unwrap() * Base::from(3);
     let lambda_value =
         a.x.value()
             .zip(a.y().value())
-            .map(|(x, y)| y.invert().unwrap_or(Base::ZERO) * x * x * s);
+            .map(|(x, y)| y.invert().unwrap_or(Base::ZERO) * x * x * THREE_OVER_TWO);
 
     // Witness layout:
     // | A      | B | C | D | E  |
@@ -233,7 +207,7 @@ fn lambda_double_unsafe(
             Term::assigned_to_mul(a.x()),
         ],
         Base::zero(),
-        CombinationOption::OneLinerDoubleMul(-s),
+        CombinationOption::OneLinerDoubleMul(-THREE_OVER_TWO),
     )?;
 
     Ok(assigned.swap_remove(0))
@@ -297,8 +271,8 @@ impl GrumpkinChip {
         let main_gate = self.main_gate();
 
         // lambda = 3x^2/(2y)
-        let numerator = &mul(main_gate, ctx, Base::from(3), a.x(), a.x())?;
-        let inv = &add_invert_unsafe(main_gate, ctx, a.y(), a.y())?;
+        let numerator = &mul(main_gate, ctx, THREE_OVER_TWO, a.x(), a.x())?;
+        let inv = &main_gate.invert_unsafe(ctx, a.y())?;
         let lambda = &main_gate.mul(ctx, numerator, inv)?;
 
         // xc = lambda * lambda - 2 * x
@@ -310,5 +284,16 @@ impl GrumpkinChip {
 
         let c = AssignedPoint::new(x, y);
         Ok(c)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_constant() {
+        let s = Base::from(2).invert().unwrap() * Base::from(3);
+        assert_eq!(s, THREE_OVER_TWO)
     }
 }
