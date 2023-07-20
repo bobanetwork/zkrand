@@ -211,7 +211,6 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
 
     pub fn get_circuit(&self, mut rng: impl RngCore) -> CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS> {
         let aux_generator = BnG1::random(&mut rng);
-        let grumpkin_aux_generator = GkG1::random(&mut rng);
         let coeffs: Vec<_> = self.coeffs.iter().map(|a| Value::known(*a)).collect();
         let public_keys: Vec<_> = self
             .public_keys
@@ -225,7 +224,6 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
             public_keys,
             aux_generator,
             4,
-            grumpkin_aux_generator,
         );
 
         circuit

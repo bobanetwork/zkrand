@@ -249,7 +249,7 @@ impl GrumpkinChip {
         // | A      | B      | C  | D  | E  |
         // | ------ | -------| ---| ---| ---|
         // | lambda | lambda | xa | xb | xc |
-        let mut assigned = main_gate.apply(
+        let assigned = main_gate.apply(
             ctx,
             [
                 Term::unassigned_to_mul(lambda_value),
@@ -274,7 +274,7 @@ impl GrumpkinChip {
         // | A      | B      | C  | D  | E  |
         // | ------ | -------| ---| ---| ---|
         // | lambda | xb | yb | t |  |
-        let mut assigned = main_gate.apply(
+        main_gate.apply(
             ctx,
             [
                 Term::assigned_to_mul(lambda),

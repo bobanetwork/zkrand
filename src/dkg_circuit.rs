@@ -93,7 +93,6 @@ pub struct CircuitDkg<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
     public_keys: [Value<GkG1>; NUMBER_OF_MEMBERS],
     aux_generator: BnG1,
     window_size: usize,
-    grumpkin_aux_generator: GkG1,
 }
 
 impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
@@ -105,7 +104,6 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         public_keys: Vec<Value<GkG1>>,
         aux_generator: BnG1,
         window_size: usize,
-        grumpkin_aux_generator: GkG1,
     ) -> Self {
         assert_eq!(coeffs.len(), THRESHOLD);
         assert_eq!(public_keys.len(), NUMBER_OF_MEMBERS);
@@ -120,7 +118,6 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
                 .expect("unable to convert public key vector"),
             aux_generator,
             window_size,
-            grumpkin_aux_generator,
         }
     }
 }
@@ -207,8 +204,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
             |region| {
                 let offset = 0;
                 let ctx = &mut RegionCtx::new(region, offset);
-                grumpkin_chip
-                    .assign_aux_generator(ctx, Value::known(self.grumpkin_aux_generator))?;
+                grumpkin_chip.assign_aux_generator(ctx)?;
                 grumpkin_chip.assign_aux_sub(ctx)?;
                 Ok(())
             },
@@ -357,7 +353,7 @@ mod tests {
 
     use super::*;
     use crate::poseidon::P128Pow5T3Bn;
-    use crate::utils::{mod_n, setup};
+    use crate::utils::setup;
 
     fn get_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
         mut rng: impl RngCore,
@@ -422,14 +418,12 @@ mod tests {
         let public_keys: Vec<_> = pks.iter().map(|pk| Value::known(*pk)).collect();
 
         let aux_generator = BnG1::random(&mut rng);
-        let grumpkin_aux_generator = GkG1::random(&mut rng);
         let circuit = CircuitDkg {
             coeffs: coeffs.try_into().unwrap(),
             random: Value::known(random),
             public_keys: public_keys.try_into().unwrap(),
             aux_generator,
             window_size: 4,
-            grumpkin_aux_generator,
         };
 
         (circuit, public_data)
@@ -460,14 +454,14 @@ mod tests {
     #[test]
     fn test_vk() {
         let mut rng = ChaCha20Rng::seed_from_u64(42);
-        let (circuit1, public_data1) = get_circuit::<3, 5>(&mut rng);
-        let (circuit2, public_data2) = get_circuit::<3, 5>(&mut rng);
+        let (circuit1, _) = get_circuit::<3, 5>(&mut rng);
+        let (circuit2, _) = get_circuit::<3, 5>(&mut rng);
 
         let degree = 19;
         let setup_message = format!("dkg setup with degree = {}", degree);
         let start1 = start_timer!(|| setup_message);
         let general_params = ParamsKZG::<Bn256>::setup(degree as u32, &mut rng);
-        let verifier_params: ParamsVerifierKZG<Bn256> = general_params.verifier_params().clone();
+        let _verifier_params: ParamsVerifierKZG<Bn256> = general_params.verifier_params().clone();
         end_timer!(start1);
 
         let vk1 = keygen_vk(&general_params, &circuit1).expect("keygen_vk should not fail");
