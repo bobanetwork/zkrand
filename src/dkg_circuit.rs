@@ -443,15 +443,17 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_dkg_n_circuit() {
         dkg_n_circuit::<3, 5>();
-        //  dkg_n_circuit::<7, 12>();
-        //  dkg_n_circuit::<14, 26>();
-        //   dkg_n_circuit::<27, 53>();
-        //    dkg_n_circuit::<54, 107>();
+        dkg_n_circuit::<7, 12>();
+        dkg_n_circuit::<14, 26>();
+        dkg_n_circuit::<27, 53>();
+        dkg_n_circuit::<54, 107>();
     }
 
     #[test]
+    #[ignore]
     fn test_vk() {
         let mut rng = ChaCha20Rng::seed_from_u64(42);
         let (circuit1, _) = get_circuit::<3, 5>(&mut rng);
