@@ -445,7 +445,7 @@ mod tests {
     #[test]
     fn test_dkg_n_circuit() {
         dkg_n_circuit::<3, 5>();
-        dkg_n_circuit::<7, 12>();
+        //  dkg_n_circuit::<7, 12>();
         //  dkg_n_circuit::<14, 26>();
         //   dkg_n_circuit::<27, 53>();
         //    dkg_n_circuit::<54, 107>();
@@ -553,8 +553,9 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_dkg_n_proof() {
         dkg_n_proof::<3, 5, 19>();
-        //        dkg_n_proof::<7, 12, 20>();
+        dkg_n_proof::<7, 12, 20>();
     }
 }

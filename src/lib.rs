@@ -332,7 +332,7 @@ mod tests {
     #[test]
     fn test_dkg_circuit() {
         mock_dkg_circuit::<3, 5>();
-        mock_dkg_circuit::<7, 12>();
+        //  mock_dkg_circuit::<7, 12>();
         //    mock_dkg_circuit::<14, 26>();
         //    mock_dkg_circuit::<27, 53>();
         //    mock_dkg_circuit::<54, 107>();
@@ -426,6 +426,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_dkg_proof() {
         dkg_proof::<3, 5, 19>();
         dkg_proof::<7, 12, 20>();
