@@ -1,7 +1,10 @@
 use blake2b_simd::{blake2b, State as Blake2bState};
+use halo2_ecc::halo2::halo2curves::bn256::G2Prepared;
+use halo2_maingate::halo2::halo2curves::bn256::multi_miller_loop;
 use halo2wrong::curves::bn256::{pairing, Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
 use halo2wrong::curves::ff::FromUniformBytes;
-use halo2wrong::curves::group::{Curve, GroupEncoding};
+use halo2wrong::curves::group::{Curve, Group, GroupEncoding};
+use halo2wrong::curves::pairing::MillerLoopResult;
 use halo2wrong::halo2::arithmetic::Field;
 use rand_core::RngCore;
 
@@ -248,10 +251,13 @@ impl PseudoRandom {
         let hasher = hash_to_curve_bn(EVAL_PREFIX);
         let h: BnG1 = hasher(input).to_affine();
 
-        let left = pairing(&h, &gpk);
-        let right = pairing(&self.proof, &g2);
+        let gpk_prepared = G2Prepared::from_affine(gpk.clone());
+        let g2_prepared = G2Prepared::from_affine(g2);
 
-        if !left.eq(&right) {
+        let t = multi_miller_loop(&[(&-h, &gpk_prepared), (&self.proof, &g2_prepared)])
+            .final_exponentiation();
+
+        if !bool::from(t.is_identity()) {
             return Err(Error::VerifyFailed);
         }
 
