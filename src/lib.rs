@@ -19,7 +19,7 @@ use halo2wrong::curves::grumpkin::{Fr as GkScalar, G1Affine as GkG1};
 use halo2wrong::halo2::arithmetic::Field;
 use halo2wrong::halo2::circuit::Value;
 
-use crate::dkg::check_public_coeffs;
+use crate::dkg::is_dl_equal;
 pub use crate::dkg::{
     combine_partial_evaluations, get_shares, keygen, DkgShareKey, PseudoRandom, EVAL_PREFIX,
 };
@@ -132,6 +132,11 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
 
         let instance = vec![public_data];
         instance
+    }
+
+    // check if ga and g2a have the same exponent
+    pub fn check_public(&self) -> Result<(), Error> {
+        is_dl_equal(&self.ga, &self.g2a)
     }
 }
 
@@ -250,7 +255,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
 {
     // check if ga and g2a have the same exponent
     pub fn check_public(&self) -> Result<(), Error> {
-        check_public_coeffs(&self.ga, &self.g2a)
+        is_dl_equal(&self.ga, &self.g2a)
     }
 }
 
@@ -458,6 +463,10 @@ mod tests {
             .collect();
 
         // simulation skips the snark proof and verify
+        // check g1a and g2a have the same exponent
+        for &dkg in dkgs_pub.iter() {
+            dkg.check_public().unwrap()
+        }
 
         // compute public parameters
         let pp = get_dkg_global_public_params(&dkgs_pub);

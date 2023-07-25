@@ -282,14 +282,16 @@ pub fn keygen(mut rng: impl RngCore) -> (BnScalar, BnG1) {
 }
 
 // check if ga and g2a have the same exponent a
-pub fn check_public_coeffs(ga: &BnG1, g2a: &BnG2) -> Result<(), Error> {
+pub fn is_dl_equal(ga: &BnG1, g2a: &BnG2) -> Result<(), Error> {
     let g = BnG1::generator();
     let g2 = BnG2::generator();
 
-    let left = pairing(&g, g2a);
-    let right = pairing(ga, &g2);
+    let g2a_prepared = G2Prepared::from_affine(g2a.clone());
+    let g2_prepared = G2Prepared::from_affine(g2);
 
-    if left != right {
+    let t = multi_miller_loop(&[(&-g, &g2a_prepared), (ga, &g2_prepared)]).final_exponentiation();
+
+    if !bool::from(t.is_identity()) {
         return Err(Error::VerifyFailed);
     }
 
