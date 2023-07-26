@@ -101,11 +101,11 @@ mod dvrf_benches {
         config = Criterion::default();
         targets =
             partial_evaluate,
-            combine::<3,5>,
-            combine::<7,12>,
-            combine::<14,26>,
-            combine::<27,53>,
-            combine::<54,107>,
+            combine::<5,9>,
+            combine::<11,21>,
+            combine::<22,43>,
+            combine::<45,88>,
+            combine::<89,177>,
             partial_verify,
             pseudo_random_verify,
     }

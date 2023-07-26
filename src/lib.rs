@@ -312,10 +312,11 @@ mod tests {
     };
 
     use rand_chacha::ChaCha20Rng;
-    use rand_core::SeedableRng;
+    use rand_core::{OsRng, SeedableRng};
 
     fn mock_dkg_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
-        let mut rng = ChaCha20Rng::seed_from_u64(42);
+        // let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let mut rng = OsRng;
         let mut members = vec![];
         let mut pks = vec![];
         for _ in 0..NUMBER_OF_MEMBERS {
@@ -336,14 +337,15 @@ mod tests {
     #[test]
     fn test_dkg_circuit() {
         mock_dkg_circuit::<5, 9>();
-        //   mock_dkg_circuit::<11, 20>();
-        //    mock_dkg_circuit::<21, 40>();
-        //    mock_dkg_circuit::<41, 80>();
-        //    mock_dkg_circuit::<81, 160>();
+        //   mock_dkg_circuit::<11, 21>();
+        //    mock_dkg_circuit::<22, 43>();
+        //    mock_dkg_circuit::<45, 88>();
+        //    mock_dkg_circuit::<89, 177>();
     }
 
     fn dkg_proof<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize, const DEGREE: usize>() {
-        let mut rng = ChaCha20Rng::seed_from_u64(42);
+        //    let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let mut rng = OsRng;
         let mut members = vec![];
         let mut mpks = vec![];
         for _ in 0..NUMBER_OF_MEMBERS {
@@ -433,10 +435,10 @@ mod tests {
     #[ignore]
     fn test_dkg_proof() {
         dkg_proof::<5, 9, 18>();
-        dkg_proof::<11, 20, 19>();
-        //  dkg_proof::<14, 26, 21>();
-        //  dkg_proof::<27, 53, 22>();
-        //  dkg_proof::<54, 107, 23>();
+        dkg_proof::<11, 21, 19>();
+        //  dkg_proof::<22, 43, 20>();
+        //  dkg_proof::<45, 88, 21>();
+        //  dkg_proof::<89, 177, 22>();
     }
 
     fn mock_dvrf<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
