@@ -1,7 +1,7 @@
 use blake2b_simd::{blake2b, State as Blake2bState};
 use halo2_ecc::halo2::halo2curves::bn256::G2Prepared;
 use halo2_maingate::halo2::halo2curves::bn256::multi_miller_loop;
-use halo2wrong::curves::bn256::{pairing, Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
+use halo2wrong::curves::bn256::{Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
 use halo2wrong::curves::ff::FromUniformBytes;
 use halo2wrong::curves::group::{Curve, Group, GroupEncoding};
 use halo2wrong::curves::pairing::MillerLoopResult;

@@ -18,6 +18,7 @@ use halo2_maingate::{
     MainGate, MainGateConfig, MainGateInstructions, RangeChip, RangeConfig, RangeInstructions,
 };
 
+use crate::base_field_chip::FixedPointChip;
 use crate::grumpkin_chip::GrumpkinChip;
 use crate::poseidon::P128Pow5T3Bn;
 use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH};
@@ -91,7 +92,7 @@ pub struct CircuitDkg<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
     coeffs: [Value<BnScalar>; THRESHOLD],
     random: Value<BnScalar>,
     public_keys: [Value<GkG1>; NUMBER_OF_MEMBERS],
-    aux_generator: BnG1,
+    //    aux_generator: BnG1,
     window_size: usize,
 }
 
@@ -102,7 +103,6 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         coeffs: Vec<Value<BnScalar>>,
         random: Value<BnScalar>,
         public_keys: Vec<Value<GkG1>>,
-        aux_generator: BnG1,
         window_size: usize,
     ) -> Self {
         assert_eq!(coeffs.len(), THRESHOLD);
@@ -116,7 +116,6 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
             public_keys: public_keys
                 .try_into()
                 .expect("unable to convert public key vector"),
-            aux_generator,
             window_size,
         }
     }
@@ -144,8 +143,9 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
         mut layouter: impl Layouter<BnScalar>,
     ) -> Result<(), PlonkError> {
         let ecc_chip_config = config.ecc_chip_config();
-        let mut ecc_chip =
+        let ecc_chip =
             BaseFieldEccChip::<BnG1, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
+        let mut fixed_chip = FixedPointChip::new(ecc_chip);
         let main_gate = MainGate::<BnScalar>::new(config.main_gate_config.clone());
         let mut grumpkin_chip = GrumpkinChip::new(config.main_gate_config.clone());
 
@@ -188,13 +188,12 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
         )?;
 
         layouter.assign_region(
-            || "assign aux values",
+            || "assign fixed point window table for bn256 chip",
             |region| {
                 let offset = 0;
                 let ctx = &mut RegionCtx::new(region, offset);
-                ecc_chip.assign_aux_generator(ctx, Value::known(self.aux_generator))?;
-                ecc_chip.assign_aux(ctx, self.window_size, 1)?;
-                //      ecc_chip.get_mul_aux(self.window_size, 1)?;
+                let g = BnG1::generator();
+                fixed_chip.assign_fixed_point(ctx, &g, self.window_size)?;
                 Ok(())
             },
         )?;
@@ -210,25 +209,48 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
             },
         )?;
 
-        let (g, ga) = layouter.assign_region(
+        let ga = layouter.assign_region(
             || "region ecc mul g^a",
             |region| {
                 let offset = 0;
                 let ctx = &mut RegionCtx::new(region, offset);
 
-                let g = ecc_chip.assign_constant(ctx, BnG1::generator())?;
-
-                // ga = g^a
-                let ga = ecc_chip.mul(ctx, &g, &a, self.window_size)?;
+                let ga = fixed_chip.mul(ctx, &a)?;
                 // normalise for public inputs
-                let ga = ecc_chip.normalize(ctx, &ga)?;
+                let ga = fixed_chip.base_field_chip().normalize(ctx, &ga)?;
 
-                Ok((g, ga))
+                Ok(ga)
             },
         )?;
 
-        ecc_chip.expose_public(layouter.namespace(|| "cipher g^a"), ga, 0)?;
+        fixed_chip
+            .base_field_chip()
+            .expose_public(layouter.namespace(|| "cipher g^a"), ga, 0)?;
         let mut instance_offset: usize = 8;
+
+        for i in 0..NUMBER_OF_MEMBERS {
+            let gs = layouter.assign_region(
+                || "region ecc mul g^s",
+                |region| {
+                    let offset = 0;
+                    let ctx = &mut RegionCtx::new(region, offset);
+
+                    // gs = g^s
+                    //     let gs = ecc_chip.mul(ctx, &g, &shares[i], self.window_size)?;
+                    let gs = fixed_chip.mul(ctx, &shares[i])?;
+                    // normalise for public inputs
+                    let gs = fixed_chip.base_field_chip().normalize(ctx, &gs)?;
+                    Ok(gs)
+                },
+            )?;
+
+            fixed_chip.base_field_chip().expose_public(
+                layouter.namespace(|| "g^s"),
+                gs,
+                instance_offset,
+            )?;
+            instance_offset += 8;
+        }
 
         let (bits, gr) = layouter.assign_region(
             || "region grumpkin ecc mul g^r",
@@ -249,25 +271,6 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
 
         grumpkin_chip.expose_public(layouter.namespace(|| "cipher g^r"), gr, instance_offset)?;
         instance_offset += 2;
-
-        for i in 0..NUMBER_OF_MEMBERS {
-            let gs = layouter.assign_region(
-                || "region ecc mul g^s",
-                |region| {
-                    let offset = 0;
-                    let ctx = &mut RegionCtx::new(region, offset);
-
-                    // gs = g^s
-                    let gs = ecc_chip.mul(ctx, &g, &shares[i], self.window_size)?;
-                    // normalise for public inputs
-                    let gs = ecc_chip.normalize(ctx, &gs)?;
-                    Ok(gs)
-                },
-            )?;
-
-            ecc_chip.expose_public(layouter.namespace(|| "g^s"), gs, instance_offset)?;
-            instance_offset += 8;
-        }
 
         for i in 0..NUMBER_OF_MEMBERS {
             let (pkr, pk) = layouter.assign_region(
@@ -385,6 +388,13 @@ mod tests {
         let ga_point = Point::new(Rc::clone(&rns_base), ga);
         let mut public_data = ga_point.public();
 
+        let shares = get_shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
+        for i in 0..NUMBER_OF_MEMBERS {
+            let gs = (g * shares[i]).to_affine();
+            let gs_point = Point::new(Rc::clone(&rns_base), gs);
+            public_data.extend(gs_point.public());
+        }
+
         // Draw arandomness for encryption
         let random = BnScalar::random(&mut rng);
         let rs = GkScalar::from_repr(random.to_repr()).unwrap();
@@ -393,16 +403,7 @@ mod tests {
         public_data.push(gr.x);
         public_data.push(gr.y);
 
-        let shares = get_shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
-
         let poseidon = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init();
-
-        for i in 0..NUMBER_OF_MEMBERS {
-            let gs = (g * shares[i]).to_affine();
-            let gs_point = Point::new(Rc::clone(&rns_base), gs);
-            public_data.extend(gs_point.public());
-        }
-
         for i in 0..NUMBER_OF_MEMBERS {
             // Encrypt
             let pkr = (pks[i] * rs).to_affine();
@@ -417,49 +418,26 @@ mod tests {
         let coeffs: Vec<_> = coeffs.iter().map(|a| Value::known(*a)).collect();
         let public_keys: Vec<_> = pks.iter().map(|pk| Value::known(*pk)).collect();
 
-        let aux_generator = BnG1::random(&mut rng);
         let circuit = CircuitDkg {
             coeffs: coeffs.try_into().unwrap(),
             random: Value::known(random),
             public_keys: public_keys.try_into().unwrap(),
-            aux_generator,
-            window_size: 4,
+            window_size: 3,
         };
 
         (circuit, public_data)
-    }
-
-    fn dkg_n_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
-        let mut rng = ChaCha20Rng::seed_from_u64(42);
-        let (circuit, public_data) = get_circuit::<THRESHOLD, NUMBER_OF_MEMBERS>(&mut rng);
-        let instance = vec![public_data];
-        mock_prover_verify(&circuit, instance);
-
-        let dimension = DimensionMeasurement::measure(&circuit).unwrap();
-        println!(
-            "({}, {}) dimention: {:?}",
-            THRESHOLD, NUMBER_OF_MEMBERS, dimension
-        );
-    }
-
-    #[test]
-    #[ignore]
-    fn test_dkg_n_circuit() {
-        dkg_n_circuit::<3, 5>();
-        dkg_n_circuit::<7, 12>();
-        dkg_n_circuit::<14, 26>();
-        dkg_n_circuit::<27, 53>();
-        dkg_n_circuit::<54, 107>();
     }
 
     #[test]
     #[ignore]
     fn test_vk() {
         let mut rng = ChaCha20Rng::seed_from_u64(42);
-        let (circuit1, _) = get_circuit::<3, 5>(&mut rng);
-        let (circuit2, _) = get_circuit::<3, 5>(&mut rng);
+        let (circuit1, instance1) = get_circuit::<5, 9>(&mut rng);
+        let (circuit2, _) = get_circuit::<5, 9>(&mut rng);
 
-        let degree = 19;
+        mock_prover_verify(&circuit1, vec![instance1]);
+
+        let degree = 18;
         let setup_message = format!("dkg setup with degree = {}", degree);
         let start1 = start_timer!(|| setup_message);
         let general_params = ParamsKZG::<Bn256>::setup(degree as u32, &mut rng);
@@ -473,91 +451,5 @@ mod tests {
             vk1.to_bytes(SerdeFormat::RawBytes),
             vk2.to_bytes(SerdeFormat::RawBytes)
         )
-    }
-
-    fn dkg_n_proof<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize, const DEGREE: usize>() {
-        let mut rng = ChaCha20Rng::seed_from_u64(42);
-        let (circuit, public_data) = get_circuit::<THRESHOLD, NUMBER_OF_MEMBERS>(&mut rng);
-        let instance = vec![public_data];
-        let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
-
-        let dimension = DimensionMeasurement::measure(&circuit).unwrap();
-        println!("dimention: {:?}", dimension);
-
-        let degree = DEGREE;
-        let setup_message = format!("dkg setup with degree = {}", degree);
-        let start1 = start_timer!(|| setup_message);
-        let general_params = ParamsKZG::<Bn256>::setup(degree as u32, &mut rng);
-        let verifier_params: ParamsVerifierKZG<Bn256> = general_params.verifier_params().clone();
-        end_timer!(start1);
-
-        // Initialize the proving key
-        let vk = keygen_vk(&general_params, &circuit).expect("keygen_vk should not fail");
-
-        {
-            let vk_bytes = vk.to_bytes(SerdeFormat::RawBytes);
-            println!("size of verification key (raw bytes) {}", vk_bytes.len());
-        }
-
-        let pk = keygen_pk(&general_params, vk, &circuit).expect("keygen_pk should not fail");
-
-        {
-            let pk_bytes = pk.to_bytes(SerdeFormat::RawBytes);
-            println!("size of proving key (raw bytes) {}", pk_bytes.len());
-        }
-
-        // Create a proof
-        let mut transcript = Blake2bWrite::<_, BnG1, Challenge255<_>>::init(vec![]);
-
-        // Bench proof generation time
-        let proof_message = format!("dkg proof with degree = {}", degree);
-        let start2 = start_timer!(|| proof_message);
-        create_proof::<
-            KZGCommitmentScheme<Bn256>,
-            ProverSHPLONK<'_, Bn256>,
-            Challenge255<BnG1>,
-            ChaCha20Rng,
-            Blake2bWrite<Vec<u8>, BnG1, Challenge255<BnG1>>,
-            CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>,
-        >(
-            &general_params,
-            &pk,
-            &[circuit],
-            &[instance_ref.as_slice()],
-            rng,
-            &mut transcript,
-        )
-        .expect("proof generation should not fail");
-        let proof = transcript.finalize();
-        end_timer!(start2);
-
-        println!("proof size = {:?}", proof.len());
-
-        let start3 = start_timer!(|| format!("verify snark proof for dkg"));
-        let mut verifier_transcript = Blake2bRead::<_, BnG1, Challenge255<_>>::init(&proof[..]);
-        let strategy = SingleStrategy::new(&general_params);
-
-        verify_proof::<
-            KZGCommitmentScheme<Bn256>,
-            VerifierSHPLONK<'_, Bn256>,
-            Challenge255<BnG1>,
-            Blake2bRead<&[u8], BnG1, Challenge255<BnG1>>,
-            SingleStrategy<'_, Bn256>,
-        >(
-            &verifier_params,
-            pk.get_vk(),
-            strategy,
-            &[instance_ref.as_slice()],
-            &mut verifier_transcript,
-        )
-        .expect("failed to verify dkg circuit");
-        end_timer!(start3);
-    }
-
-    #[test]
-    #[ignore]
-    fn test_dkg_n_proof() {
-        dkg_n_proof::<3, 5, 19>();
-        dkg_n_proof::<7, 12, 20>();
     }
 }

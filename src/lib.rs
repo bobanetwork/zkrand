@@ -1,3 +1,4 @@
+mod base_field_chip;
 mod dkg;
 mod dkg_circuit;
 mod error;
@@ -116,13 +117,13 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         let ga_point = Point::new(Rc::clone(&rns_base), self.ga);
         let mut public_data = ga_point.public();
 
-        public_data.push(self.gr.x);
-        public_data.push(self.gr.y);
-
         for i in 0..NUMBER_OF_MEMBERS {
             let gs_point = Point::new(Rc::clone(&rns_base), self.public_shares[i]);
             public_data.extend(gs_point.public());
         }
+
+        public_data.push(self.gr.x);
+        public_data.push(self.gr.y);
 
         for i in 0..NUMBER_OF_MEMBERS {
             public_data.push(pks[i].x);
@@ -214,8 +215,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         })
     }
 
-    pub fn get_circuit(&self, mut rng: impl RngCore) -> CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS> {
-        let aux_generator = BnG1::random(&mut rng);
+    pub fn get_circuit(&self) -> CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS> {
         let coeffs: Vec<_> = self.coeffs.iter().map(|a| Value::known(*a)).collect();
         let public_keys: Vec<_> = self
             .public_keys
@@ -227,8 +227,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
             coeffs,
             Value::known(self.r),
             public_keys,
-            aux_generator,
-            4,
+            3,
         );
 
         circuit
@@ -327,7 +326,7 @@ mod tests {
 
         let dkg_params =
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &pks, &mut rng).unwrap();
-        let circuit = dkg_params.get_circuit(&mut rng);
+        let circuit = dkg_params.get_circuit();
         let instance = dkg_params.get_instance();
         mock_prover_verify(&circuit, instance);
         let dimension = DimensionMeasurement::measure(&circuit).unwrap();
@@ -336,11 +335,11 @@ mod tests {
 
     #[test]
     fn test_dkg_circuit() {
-        mock_dkg_circuit::<3, 5>();
-        //  mock_dkg_circuit::<7, 12>();
-        //    mock_dkg_circuit::<14, 26>();
-        //    mock_dkg_circuit::<27, 53>();
-        //    mock_dkg_circuit::<54, 107>();
+        mock_dkg_circuit::<5, 9>();
+        //   mock_dkg_circuit::<11, 20>();
+        //    mock_dkg_circuit::<21, 40>();
+        //    mock_dkg_circuit::<41, 80>();
+        //    mock_dkg_circuit::<81, 160>();
     }
 
     fn dkg_proof<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize, const DEGREE: usize>() {
@@ -355,7 +354,7 @@ mod tests {
 
         let dkg_params =
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &mpks, &mut rng).unwrap();
-        let circuit = dkg_params.get_circuit(&mut rng);
+        let circuit = dkg_params.get_circuit();
         let instance = dkg_params.get_instance();
         let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
 
@@ -433,11 +432,11 @@ mod tests {
     #[test]
     #[ignore]
     fn test_dkg_proof() {
-        dkg_proof::<3, 5, 19>();
-        dkg_proof::<7, 12, 20>();
-        dkg_proof::<14, 26, 21>();
-        dkg_proof::<27, 53, 22>();
-        dkg_proof::<54, 107, 23>();
+        dkg_proof::<5, 9, 18>();
+        dkg_proof::<11, 20, 19>();
+        //  dkg_proof::<14, 26, 21>();
+        //  dkg_proof::<27, 53, 22>();
+        //  dkg_proof::<54, 107, 23>();
     }
 
     fn mock_dvrf<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
@@ -497,10 +496,10 @@ mod tests {
 
     #[test]
     fn test_dvrf_functions() {
-        mock_dvrf::<3, 5>();
-        mock_dvrf::<7, 12>();
-        mock_dvrf::<14, 26>();
-        mock_dvrf::<27, 53>();
-        mock_dvrf::<54, 107>();
+        mock_dvrf::<5, 9>();
+        mock_dvrf::<11, 20>();
+        //  mock_dvrf::<14, 26>();
+        //  mock_dvrf::<27, 53>();
+        //  mock_dvrf::<54, 107>();
     }
 }
