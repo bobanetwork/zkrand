@@ -344,8 +344,8 @@ mod tests {
     }
 
     fn dkg_proof<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize, const DEGREE: usize>() {
-        //    let mut rng = ChaCha20Rng::seed_from_u64(42);
-        let mut rng = OsRng;
+        let mut rng = ChaCha20Rng::seed_from_u64(42);
+       // let mut rng = OsRng;
         let mut members = vec![];
         let mut mpks = vec![];
         for _ in 0..NUMBER_OF_MEMBERS {
