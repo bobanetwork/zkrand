@@ -1,37 +1,112 @@
 mod fix_mul;
-pub use fix_mul::FixedPointChip;
 
-use halo2wrong::curves::bn256::{Fq as Base, G1Affine as Point};
+use halo2_ecc::integer::IntegerInstructions;
+use halo2_ecc::{AssignedPoint, BaseFieldEccChip, EccConfig};
+use halo2_maingate::{AssignedCondition, MainGate};
+use halo2wrong::curves::CurveAffine;
+use halo2wrong::halo2::circuit::Layouter;
+use halo2wrong::halo2::plonk::Error as PlonkError;
+use halo2wrong::RegionCtx;
 
-pub const AUX_GENERATOR: Point = Point {
-    x: Base::from_raw([
-        0xc552bb41dfa2ba0d,
-        0x691f7d5660b8fa62,
-        0xbee345f4407f92ee,
-        0x16097d51a463fa51,
-    ]),
-    y: Base::from_raw([
-        0x5bed59dd2ef9fb53,
-        0xa0f30dda198abe8b,
-        0x82ba6900b8e98ee8,
-        0x1be3e56d90c3a2cb,
-    ]),
-};
+// windowed fix point multiplication
+pub struct FixedPointChip<C: CurveAffine, const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize> {
+    base_field_chip: BaseFieldEccChip<C, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
+    assigned_fixed_point: Option<AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>>,
+    assigned_table:
+        Option<Vec<Vec<AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>>>>,
+    assigned_correction: Option<AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>>,
+    window_size: Option<usize>,
+}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::hash_to_curve_bn;
-    use halo2wrong::curves::bn256::{Fq as Base, Fr as Scalar, G1Affine as Point};
-    use halo2wrong::curves::{group::Curve, CurveAffine};
+impl<C: CurveAffine, const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
+    FixedPointChip<C, NUMBER_OF_LIMBS, BIT_LEN_LIMB>
+{
+    pub fn new(config: EccConfig) -> Self {
+        let base_field_chip = BaseFieldEccChip::<C, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(config);
+        Self {
+            base_field_chip,
+            assigned_fixed_point: None,
+            assigned_table: None,
+            assigned_correction: None,
+            window_size: None,
+        }
+    }
 
-    #[test]
-    fn test_bn_aux_generator() {
-        let hasher = hash_to_curve_bn("another generator for Bn256 curve");
-        let input = b"auxiliary generator reserved for scalar multiplication; please do not use it for anything else";
-        let h: Point = hasher(input).to_affine();
-        assert!(bool::from(h.is_on_curve()));
+    pub fn base_field_chip(&self) -> &BaseFieldEccChip<C, NUMBER_OF_LIMBS, BIT_LEN_LIMB> {
+        &self.base_field_chip
+    }
 
-        assert_eq!(h, AUX_GENERATOR);
+    pub fn main_gate(&self) -> &MainGate<C::Scalar> {
+        self.base_field_chip.main_gate()
+    }
+
+    pub fn expose_public(
+        &self,
+        mut layouter: impl Layouter<C::Scalar>,
+        point: AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
+        offset: usize,
+    ) -> Result<(), PlonkError> {
+        self.base_field_chip.expose_public(layouter, point, offset)
+    }
+
+    pub fn normalize(
+        &self,
+        ctx: &mut RegionCtx<'_, C::Scalar>,
+        point: &AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
+    ) -> Result<AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>, PlonkError> {
+        self.base_field_chip.normalize(ctx, point)
+    }
+
+    // algorithm from https://github.com/privacy-scaling-explorations/halo2wrong/blob/v2023_04_20/ecc/src/base_field_ecc/add.rs#L17
+    fn add_incomplete(
+        &self,
+        ctx: &mut RegionCtx<'_, C::Scalar>,
+        a: &AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
+        b: &AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
+    ) -> Result<AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>, PlonkError> {
+        let ecc_chip = self.base_field_chip();
+        let ch = ecc_chip.integer_chip();
+
+        // lambda = b_y - a_y / b_x - a_x
+        let numerator = &ch.sub(ctx, &b.y(), &a.y())?;
+        let denominator = &ch.sub(ctx, &b.x(), &a.x())?;
+
+        let lambda = &ch.div_incomplete(ctx, numerator, denominator)?;
+
+        // c_x =  lambda * lambda - a_x - b_x
+        let lambda_square = &ch.square(ctx, lambda)?;
+        let x = &ch.sub_sub(ctx, lambda_square, &a.x(), &b.x())?;
+
+        // c_y = lambda * (a_x - c_x) - a_y
+        let t = &ch.sub(ctx, &a.x(), x)?;
+        let t = &ch.mul(ctx, t, lambda)?;
+        let y = ch.sub(ctx, t, &a.y())?;
+
+        let p_0 = AssignedPoint::new(x.clone(), y);
+
+        Ok(p_0)
+    }
+
+    // algorithm from https://github.com/privacy-scaling-explorations/halo2wrong/blob/v2023_04_20/ecc/src/base_field_ecc/mul.rs#L69
+    fn select_multi(
+        &self,
+        ctx: &mut RegionCtx<'_, C::Scalar>,
+        selector: &[AssignedCondition<C::Scalar>],
+        table: &[AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>],
+    ) -> Result<AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>, PlonkError> {
+        let number_of_points = table.len();
+        let number_of_selectors = selector.len();
+        assert_eq!(number_of_points, 1 << number_of_selectors);
+
+        let ecc_chip = self.base_field_chip();
+        let mut reducer = table.to_vec();
+        for (i, selector) in selector.iter().enumerate() {
+            let n = 1 << (number_of_selectors - 1 - i);
+            for j in 0..n {
+                let k = 2 * j;
+                reducer[j] = ecc_chip.select(ctx, selector, &reducer[k + 1], &reducer[k])?;
+            }
+        }
+        Ok(reducer[0].clone())
     }
 }

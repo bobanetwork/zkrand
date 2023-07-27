@@ -10,7 +10,7 @@ use halo2wrong::halo2::{
 
 use halo2_ecc::integer::rns::Rns;
 use halo2_ecc::maingate::RegionCtx;
-use halo2_ecc::{BaseFieldEccChip, EccConfig};
+use halo2_ecc::EccConfig;
 use halo2_gadgets::poseidon::{
     primitives::ConstantLength, Hash as PoseidonHash, Pow5Chip, Pow5Config,
 };
@@ -92,7 +92,6 @@ pub struct CircuitDkg<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
     coeffs: [Value<BnScalar>; THRESHOLD],
     random: Value<BnScalar>,
     public_keys: [Value<GkG1>; NUMBER_OF_MEMBERS],
-    //    aux_generator: BnG1,
     window_size: usize,
 }
 
@@ -143,9 +142,8 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
         mut layouter: impl Layouter<BnScalar>,
     ) -> Result<(), PlonkError> {
         let ecc_chip_config = config.ecc_chip_config();
-        let ecc_chip =
-            BaseFieldEccChip::<BnG1, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
-        let mut fixed_chip = FixedPointChip::new(ecc_chip);
+        let mut fixed_chip =
+            FixedPointChip::<BnG1, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
         let main_gate = MainGate::<BnScalar>::new(config.main_gate_config.clone());
         let mut grumpkin_chip = GrumpkinChip::new(config.main_gate_config.clone());
 
@@ -217,15 +215,13 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
 
                 let ga = fixed_chip.mul(ctx, &a)?;
                 // normalise for public inputs
-                let ga = fixed_chip.base_field_chip().normalize(ctx, &ga)?;
+                let ga = fixed_chip.normalize(ctx, &ga)?;
 
                 Ok(ga)
             },
         )?;
 
-        fixed_chip
-            .base_field_chip()
-            .expose_public(layouter.namespace(|| "cipher g^a"), ga, 0)?;
+        fixed_chip.expose_public(layouter.namespace(|| "cipher g^a"), ga, 0)?;
         let mut instance_offset: usize = 8;
 
         for i in 0..NUMBER_OF_MEMBERS {
@@ -236,19 +232,14 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
                     let ctx = &mut RegionCtx::new(region, offset);
 
                     // gs = g^s
-                    //     let gs = ecc_chip.mul(ctx, &g, &shares[i], self.window_size)?;
                     let gs = fixed_chip.mul(ctx, &shares[i])?;
                     // normalise for public inputs
-                    let gs = fixed_chip.base_field_chip().normalize(ctx, &gs)?;
+                    let gs = fixed_chip.normalize(ctx, &gs)?;
                     Ok(gs)
                 },
             )?;
 
-            fixed_chip.base_field_chip().expose_public(
-                layouter.namespace(|| "g^s"),
-                gs,
-                instance_offset,
-            )?;
+            fixed_chip.expose_public(layouter.namespace(|| "g^s"), gs, instance_offset)?;
             instance_offset += 8;
         }
 
@@ -330,23 +321,16 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
 mod tests {
     use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash};
     use halo2wrong::curves::group::Curve;
-    use halo2wrong::utils::{mock_prover_verify, DimensionMeasurement};
+    use halo2wrong::utils::mock_prover_verify;
 
     use ark_std::{end_timer, start_timer};
     use halo2_ecc::halo2::SerdeFormat;
     use halo2wrong::curves::bn256::Bn256;
     use halo2wrong::curves::grumpkin::{Fr as GkScalar, G1Affine as GkG1};
     use halo2wrong::halo2::arithmetic::Field;
-    use halo2wrong::halo2::plonk::{create_proof, keygen_pk, keygen_vk, verify_proof};
+    use halo2wrong::halo2::plonk::keygen_vk;
     use halo2wrong::halo2::poly::commitment::ParamsProver;
-    use halo2wrong::halo2::poly::kzg::commitment::{
-        KZGCommitmentScheme, ParamsKZG, ParamsVerifierKZG,
-    };
-    use halo2wrong::halo2::poly::kzg::multiopen::{ProverSHPLONK, VerifierSHPLONK};
-    use halo2wrong::halo2::poly::kzg::strategy::SingleStrategy;
-    use halo2wrong::halo2::transcript::{
-        Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
-    };
+    use halo2wrong::halo2::poly::kzg::commitment::{ParamsKZG, ParamsVerifierKZG};
 
     use crate::dkg::get_shares;
     use halo2_ecc::Point;

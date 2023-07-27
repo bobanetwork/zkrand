@@ -1,7 +1,6 @@
-use crate::base_field_chip::AUX_GENERATOR;
-use halo2_ecc::integer::IntegerInstructions;
-use halo2_ecc::{AssignedPoint, BaseFieldEccChip};
-use halo2_maingate::{AssignedCondition, AssignedValue, MainGate, MainGateInstructions};
+use crate::base_field_chip::FixedPointChip;
+use halo2_ecc::AssignedPoint;
+use halo2_maingate::{AssignedValue, MainGate, MainGateInstructions};
 use halo2wrong::curves::bn256::{Fq as Base, Fr as Scalar, G1Affine as Point};
 use halo2wrong::curves::ff::{Field, PrimeField};
 use halo2wrong::curves::group::Curve;
@@ -9,36 +8,26 @@ use halo2wrong::curves::CurveAffine;
 use halo2wrong::halo2::plonk::Error as PlonkError;
 use halo2wrong::RegionCtx;
 
-// windowed fix point multiplication
-pub struct FixedPointChip<const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize> {
-    ecc_chip: BaseFieldEccChip<Point, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
-    assigned_fixed_point: Option<AssignedPoint<Base, Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>>,
-    assigned_table: Option<Vec<Vec<AssignedPoint<Base, Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>>>>,
-    assigned_correction: Option<AssignedPoint<Base, Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>>,
-    window_size: Option<usize>,
-}
+// windowed scalar mul for fixed point on bn256 curve
+
+pub const AUX_GENERATOR: Point = Point {
+    x: Base::from_raw([
+        0xc552bb41dfa2ba0d,
+        0x691f7d5660b8fa62,
+        0xbee345f4407f92ee,
+        0x16097d51a463fa51,
+    ]),
+    y: Base::from_raw([
+        0x5bed59dd2ef9fb53,
+        0xa0f30dda198abe8b,
+        0x82ba6900b8e98ee8,
+        0x1be3e56d90c3a2cb,
+    ]),
+};
 
 impl<const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
-    FixedPointChip<NUMBER_OF_LIMBS, BIT_LEN_LIMB>
+    FixedPointChip<Point, NUMBER_OF_LIMBS, BIT_LEN_LIMB>
 {
-    pub fn new(ecc_chip: BaseFieldEccChip<Point, NUMBER_OF_LIMBS, BIT_LEN_LIMB>) -> Self {
-        Self {
-            ecc_chip,
-            assigned_fixed_point: None,
-            assigned_table: None,
-            assigned_correction: None,
-            window_size: None,
-        }
-    }
-
-    pub fn base_field_chip(&self) -> &BaseFieldEccChip<Point, NUMBER_OF_LIMBS, BIT_LEN_LIMB> {
-        &self.ecc_chip
-    }
-
-    pub fn main_gate(&self) -> &MainGate<Scalar> {
-        self.ecc_chip.main_gate()
-    }
-
     fn prepare_fixed_point_table(
         window_size: usize,
         fixed_point: &Point,
@@ -102,36 +91,6 @@ impl<const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
         (table, -correction)
     }
 
-    // algorithm from https://github.com/privacy-scaling-explorations/halo2wrong/blob/v2023_04_20/ecc/src/base_field_ecc/add.rs#L17
-    fn add_incomplete(
-        &self,
-        ctx: &mut RegionCtx<'_, Scalar>,
-        a: &AssignedPoint<Base, Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
-        b: &AssignedPoint<Base, Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
-    ) -> Result<AssignedPoint<Base, Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>, PlonkError> {
-        let ecc_chip = self.base_field_chip();
-        let ch = ecc_chip.integer_chip();
-
-        // lambda = b_y - a_y / b_x - a_x
-        let numerator = &ch.sub(ctx, &b.y(), &a.y())?;
-        let denominator = &ch.sub(ctx, &b.x(), &a.x())?;
-
-        let lambda = &ch.div_incomplete(ctx, numerator, denominator)?;
-
-        // c_x =  lambda * lambda - a_x - b_x
-        let lambda_square = &ch.square(ctx, lambda)?;
-        let x = &ch.sub_sub(ctx, lambda_square, &a.x(), &b.x())?;
-
-        // c_y = lambda * (a_x - c_x) - a_y
-        let t = &ch.sub(ctx, &a.x(), x)?;
-        let t = &ch.mul(ctx, t, lambda)?;
-        let y = ch.sub(ctx, t, &a.y())?;
-
-        let p_0 = AssignedPoint::new(x.clone(), y);
-
-        Ok(p_0)
-    }
-
     pub fn assign_fixed_point(
         &mut self,
         ctx: &mut RegionCtx<'_, Scalar>,
@@ -175,29 +134,6 @@ impl<const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
         self.window_size = Some(window_size);
 
         Ok(())
-    }
-
-    // algorithm from https://github.com/privacy-scaling-explorations/halo2wrong/blob/v2023_04_20/ecc/src/base_field_ecc/mul.rs#L69
-    fn select_multi(
-        &self,
-        ctx: &mut RegionCtx<'_, Scalar>,
-        selector: &[AssignedCondition<Scalar>],
-        table: &[AssignedPoint<Base, Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>],
-    ) -> Result<AssignedPoint<Base, Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>, PlonkError> {
-        let number_of_points = table.len();
-        let number_of_selectors = selector.len();
-        assert_eq!(number_of_points, 1 << number_of_selectors);
-
-        let ecc_chip = self.base_field_chip();
-        let mut reducer = table.to_vec();
-        for (i, selector) in selector.iter().enumerate() {
-            let n = 1 << (number_of_selectors - 1 - i);
-            for j in 0..n {
-                let k = 2 * j;
-                reducer[j] = ecc_chip.select(ctx, selector, &reducer[k + 1], &reducer[k])?;
-            }
-        }
-        Ok(reducer[0].clone())
     }
 
     pub fn mul(
@@ -246,14 +182,14 @@ impl<const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
         // add for the last row
         let selector = &decomposed[begin..];
         let q = self.select_multi(ctx, selector, &table[n - 1])?;
-        acc = self.ecc_chip.add(ctx, &acc, &q)?;
+        acc = self.base_field_chip.add(ctx, &acc, &q)?;
 
         // add correcton point
         let correction = match &self.assigned_correction {
             Some(c) => Ok(c),
             None => Err(PlonkError::Synthesis),
         }?;
-        acc = self.ecc_chip.add(ctx, &acc, correction)?;
+        acc = self.base_field_chip.add(ctx, &acc, correction)?;
 
         Ok(acc)
     }
@@ -262,8 +198,7 @@ impl<const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::{rns, setup};
-    use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS};
+    use crate::{hash_to_curve_bn, BIT_LEN_LIMB, NUMBER_OF_LIMBS};
     use ark_std::{end_timer, start_timer};
     use halo2_ecc::integer::rns::Rns;
     use halo2_ecc::EccConfig;
@@ -277,7 +212,16 @@ mod tests {
     use halo2wrong::utils::{mock_prover_verify, DimensionMeasurement};
     use rand_chacha::ChaCha20Rng;
     use rand_core::{OsRng, SeedableRng};
-    use std::ffi::OsStr;
+
+    #[test]
+    fn test_bn_aux_generator() {
+        let hasher = hash_to_curve_bn("another generator for Bn256 curve");
+        let input = b"auxiliary generator reserved for scalar multiplication; please do not use it for anything else";
+        let h: Point = hasher(input).to_affine();
+        assert!(bool::from(h.is_on_curve()));
+
+        assert_eq!(h, AUX_GENERATOR);
+    }
 
     #[derive(Clone, Debug)]
     struct TestCircuitConfig {
@@ -349,9 +293,8 @@ mod tests {
             mut layouter: impl Layouter<Scalar>,
         ) -> Result<(), PlonkError> {
             let ecc_chip_config = config.ecc_chip_config();
-            let ecc_chip =
-                BaseFieldEccChip::<Point, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
-            let mut fixed_chip = FixedPointChip::new(ecc_chip);
+            let mut fixed_chip =
+                FixedPointChip::<Point, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
             let main_gate = MainGate::<Scalar>::new(config.main_gate_config.clone());
 
             let g = self.generator;
