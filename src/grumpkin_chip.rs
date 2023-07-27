@@ -12,52 +12,6 @@ use halo2wrong::RegionCtx;
 mod add;
 mod mul;
 
-pub const AUX_GENERATOR: Point = Point {
-    x: Base::from_raw([
-        0x2fa17e86cc14754f,
-        0xc85a19181b3969dc,
-        0x57b2c7a3b84fa599,
-        0x0003219fb174e836,
-    ]),
-    y: Base::from_raw([
-        0x5f8ab38d165ee376,
-        0xcbd0e7d95c0d2d52,
-        0xfbc06869fffe3519,
-        0x0e9d8d7d7a9b3471,
-    ]),
-};
-
-pub const AUX_GENERATOR_NEG: Point = Point {
-    x: Base::from_raw([
-        0x2fa17e86cc14754f,
-        0xc85a19181b3969dc,
-        0x57b2c7a3b84fa599,
-        0x0003219fb174e836,
-    ]),
-    y: Base::from_raw([
-        0xe4574206d9a11c8b,
-        0x5c63006f1dac433e,
-        0xbc8fdd4c81832343,
-        0x21c6c0f566966bb7,
-    ]),
-};
-
-// [2^254 - 1]AUX_GENERATOR
-pub const AUX_GENERATOR_LADDR: Point = Point {
-    x: Base::from_raw([
-        0xfac7dcf9f6e8b405,
-        0xa935e5d80595ff5d,
-        0x283e59d9d56223a2,
-        0x2786b633082918b7,
-    ]),
-    y: Base::from_raw([
-        0xf594ca360ab31849,
-        0xb37f4d65ad644c72,
-        0x4f4416cbbe3e1826,
-        0x2cae2150d1a549f7,
-    ]),
-};
-
 #[derive(Clone, Debug)]
 /// point that is assumed to be on curve and not infinity
 pub struct AssignedPoint {
@@ -89,8 +43,8 @@ impl AssignedPoint {
 #[derive(Clone, Debug)]
 pub struct GrumpkinChip {
     main_gate: MainGate<Base>,
-    aux_generator: Option<(AssignedPoint, Value<Point>)>,
-    aux_sub: Option<(AssignedPoint, Value<Point>)>,
+    aux_generator: Option<AssignedPoint>,
+    aux_correction: Option<AssignedPoint>,
 }
 
 impl GrumpkinChip {
@@ -99,7 +53,7 @@ impl GrumpkinChip {
         Self {
             main_gate,
             aux_generator: None,
-            aux_sub: None,
+            aux_correction: None,
         }
     }
 
@@ -148,22 +102,26 @@ impl GrumpkinChip {
     pub fn assign_aux_generator(
         &mut self,
         ctx: &mut RegionCtx<'_, Base>,
-        //      aux_generator: Value<Point>,
+        aux_generator: Value<Point>,
     ) -> Result<(), PlonkError> {
-        let aux_generator_assigned = self.assign_constant(ctx, AUX_GENERATOR)?;
-        self.aux_generator = Some((aux_generator_assigned, Value::known(AUX_GENERATOR)));
+        let aux_generator_assigned = self.assign_point(ctx, aux_generator)?;
+        self.aux_generator = Some(aux_generator_assigned);
         Ok(())
     }
 
-    pub fn assign_aux_sub(&mut self, ctx: &mut RegionCtx<'_, Base>) -> Result<(), PlonkError> {
-        if self.aux_generator.is_none() {
-            return Err(PlonkError::Synthesis);
+    pub fn assign_aux_correction(
+        &mut self,
+        ctx: &mut RegionCtx<'_, Base>,
+    ) -> Result<(), PlonkError> {
+        match &self.aux_generator {
+            Some(aux) => {
+                let aux_correction = self.neg(ctx, aux)?;
+                self.aux_correction = Some(aux_correction);
+                Ok(())
+            }
+            // aux generator is not assigned yet
+            None => Err(PlonkError::Synthesis),
         }
-
-        let aux_sub = self.assign_constant(ctx, AUX_GENERATOR_NEG)?;
-        self.aux_sub = Some((aux_sub, Value::known(AUX_GENERATOR_NEG)));
-
-        Ok(())
     }
 
     pub fn assign_point(
@@ -297,29 +255,6 @@ mod tests {
     use rand_chacha::ChaCha20Rng;
     use rand_core::{OsRng, SeedableRng};
 
-    #[test]
-    fn test_aux_generator() {
-        let hasher = hash_to_curve_grumpkin("another generator for Grumpkin curve");
-        let input = b"auxiliary generator reserved for scalar multiplication; please do not use it for anything else";
-        let h: Point = hasher(input).to_affine();
-        assert!(bool::from(h.is_on_curve()));
-
-        assert_eq!(h, AUX_GENERATOR);
-
-        let h_neg = -h;
-        assert_eq!(h_neg, AUX_GENERATOR_NEG);
-
-        let n = Base::NUM_BITS as usize;
-        // (2^n - 1)h
-        let mut t = h;
-        for _ in 0..n {
-            t = (t + t).to_affine();
-        }
-        let h_laddr = (t - h).to_affine();
-
-        assert_eq!(h_laddr, AUX_GENERATOR_LADDR);
-    }
-
     #[derive(Clone, Debug, Default)]
     struct TestGrumpkin;
 
@@ -370,8 +305,9 @@ mod tests {
                     let mul = (p0 * rr).to_affine();
                     let mul_assigned = ecc.assign_point(ctx, Value::known(mul))?;
 
-                    ecc.assign_aux_generator(ctx)?;
-                    ecc.assign_aux_sub(ctx)?;
+                    let aux = Point::random(&mut rng);
+                    ecc.assign_aux_generator(ctx, Value::known(aux))?;
+                    ecc.assign_aux_correction(ctx)?;
 
                     let main_gate = ecc.main_gate();
 
@@ -457,6 +393,7 @@ mod tests {
 
             let p0 = Point::random(&mut rng);
             let r = Base::random(&mut rng);
+            let aux = Point::random(&mut rng);
 
             layouter.assign_region(
                 || "region aux generator",
@@ -464,8 +401,8 @@ mod tests {
                     let offset = 0;
                     let ctx = &mut RegionCtx::new(region, offset);
 
-                    ecc.assign_aux_generator(ctx)?;
-                    ecc.assign_aux_sub(ctx)?;
+                    ecc.assign_aux_generator(ctx, Value::known(aux))?;
+                    ecc.assign_aux_correction(ctx)?;
 
                     Ok(())
                 },

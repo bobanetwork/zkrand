@@ -24,11 +24,11 @@ impl GrumpkinChip {
         bits: &[AssignedCondition<Base>],
     ) -> Result<AssignedPoint, PlonkError> {
         let aux = match self.aux_generator.clone() {
-            Some((assigned, _)) => Ok(assigned),
+            Some(assigned) => Ok(assigned),
             None => Err(PlonkError::Synthesis),
         }?;
-        let aux_sub = match self.aux_sub.clone() {
-            Some((assigned, _)) => Ok(assigned),
+        let aux_neg = match self.aux_correction.clone() {
+            Some(assigned) => Ok(assigned),
             None => Err(PlonkError::Synthesis),
         }?;
 
@@ -40,7 +40,7 @@ impl GrumpkinChip {
             double = self.double_incomplete(ctx, &double)?;
         }
 
-        res = self.add(ctx, &res, &aux_sub)?;
+        res = self.add(ctx, &res, &aux_neg)?;
         Ok(res)
     }
 }

@@ -215,7 +215,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         })
     }
 
-    pub fn get_circuit(&self) -> CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS> {
+    pub fn get_circuit(&self, mut rng: impl RngCore) -> CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS> {
         let coeffs: Vec<_> = self.coeffs.iter().map(|a| Value::known(*a)).collect();
         let public_keys: Vec<_> = self
             .public_keys
@@ -223,11 +223,13 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
             .map(|pk| Value::known(*pk))
             .collect();
 
+        let grumpkin_aux_generator = GkG1::random(&mut rng);
         let circuit = CircuitDkg::<THRESHOLD, NUMBER_OF_MEMBERS>::new(
             coeffs,
             Value::known(self.r),
             public_keys,
             3,
+            grumpkin_aux_generator,
         );
 
         circuit
@@ -327,7 +329,7 @@ mod tests {
 
         let dkg_params =
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &pks, &mut rng).unwrap();
-        let circuit = dkg_params.get_circuit();
+        let circuit = dkg_params.get_circuit(&mut rng);
         let instance = dkg_params.get_instance();
         mock_prover_verify(&circuit, instance);
         let dimension = DimensionMeasurement::measure(&circuit).unwrap();
@@ -356,7 +358,7 @@ mod tests {
 
         let dkg_params =
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &mpks, &mut rng).unwrap();
-        let circuit = dkg_params.get_circuit();
+        let circuit = dkg_params.get_circuit(&mut rng);
         let instance = dkg_params.get_instance();
         let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
 

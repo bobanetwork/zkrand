@@ -93,6 +93,7 @@ pub struct CircuitDkg<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
     random: Value<BnScalar>,
     public_keys: [Value<GkG1>; NUMBER_OF_MEMBERS],
     window_size: usize,
+    grumpkin_aux_generator: GkG1,
 }
 
 impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
@@ -103,6 +104,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         random: Value<BnScalar>,
         public_keys: Vec<Value<GkG1>>,
         window_size: usize,
+        grumpkin_aux_generator: GkG1,
     ) -> Self {
         assert_eq!(coeffs.len(), THRESHOLD);
         assert_eq!(public_keys.len(), NUMBER_OF_MEMBERS);
@@ -116,6 +118,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
                 .try_into()
                 .expect("unable to convert public key vector"),
             window_size,
+            grumpkin_aux_generator,
         }
     }
 }
@@ -201,8 +204,9 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
             |region| {
                 let offset = 0;
                 let ctx = &mut RegionCtx::new(region, offset);
-                grumpkin_chip.assign_aux_generator(ctx)?;
-                grumpkin_chip.assign_aux_sub(ctx)?;
+                grumpkin_chip
+                    .assign_aux_generator(ctx, Value::known(self.grumpkin_aux_generator))?;
+                grumpkin_chip.assign_aux_correction(ctx)?;
                 Ok(())
             },
         )?;
@@ -401,12 +405,14 @@ mod tests {
 
         let coeffs: Vec<_> = coeffs.iter().map(|a| Value::known(*a)).collect();
         let public_keys: Vec<_> = pks.iter().map(|pk| Value::known(*pk)).collect();
+        let aux = GkG1::random(&mut rng);
 
         let circuit = CircuitDkg {
             coeffs: coeffs.try_into().unwrap(),
             random: Value::known(random),
             public_keys: public_keys.try_into().unwrap(),
             window_size: 3,
+            grumpkin_aux_generator: aux,
         };
 
         (circuit, public_data)
