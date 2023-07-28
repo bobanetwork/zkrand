@@ -1,30 +1,15 @@
 use crate::base_field_chip::FixedPointChip;
+use crate::hash_to_curve_bn;
 use halo2_ecc::AssignedPoint;
-use halo2_maingate::{AssignedValue, MainGate, MainGateInstructions};
+use halo2_maingate::{AssignedValue, MainGateInstructions};
 use halo2wrong::curves::bn256::{Fq as Base, Fr as Scalar, G1Affine as Point};
-use halo2wrong::curves::ff::{Field, PrimeField};
-use halo2wrong::curves::group::Curve;
+use halo2wrong::curves::ff::PrimeField;
+use halo2wrong::curves::group::{Curve, GroupEncoding};
 use halo2wrong::curves::CurveAffine;
 use halo2wrong::halo2::plonk::Error as PlonkError;
 use halo2wrong::RegionCtx;
 
 // windowed scalar mul for fixed point on bn256 curve
-
-pub const AUX_GENERATOR: Point = Point {
-    x: Base::from_raw([
-        0xc552bb41dfa2ba0d,
-        0x691f7d5660b8fa62,
-        0xbee345f4407f92ee,
-        0x16097d51a463fa51,
-    ]),
-    y: Base::from_raw([
-        0x5bed59dd2ef9fb53,
-        0xa0f30dda198abe8b,
-        0x82ba6900b8e98ee8,
-        0x1be3e56d90c3a2cb,
-    ]),
-};
-
 impl<const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
     FixedPointChip<Point, NUMBER_OF_LIMBS, BIT_LEN_LIMB>
 {
@@ -45,6 +30,8 @@ impl<const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
         let window_last: usize = 1 << last;
 
         // for the first n-1 rows T[0..(n−1))[0..2^w): T[i][k]=[(k+2)⋅(2^w)^i]P
+        // this is only safe for bn256; for other curves, it might need to
+        // use auxiliary generator for the last two rows instead of one
         let mut t = vec![];
         for k in 0..window {
             let k2 = Scalar::from((k + 2) as u64);
@@ -67,15 +54,21 @@ impl<const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
         }
 
         // for the last row, we use auxiliary generator:
-        // the last row has 2^last elements instead of 2^window
         // T[n-1][k]=[(k+2)⋅(2^w)^{n-1}]P + aux
+        // the last row has 2^last elements instead of 2^window
+        let hasher =
+            hash_to_curve_bn("auxiliary generator for windowed scalar multiplication on bn256");
+        let aux = hasher(fixed_point.to_bytes().as_ref()).to_affine();
+
         let mut t = vec![];
         for k in 0..window_last {
             let mut p = table[n - 2][k].clone();
             for _ in 0..window_size {
                 p = (p + p).to_affine();
             }
-            p = (p + AUX_GENERATOR).to_affine();
+            p = (p + aux).to_affine();
+
+            assert!(bool::from(p.is_on_curve()));
             t.push(p);
         }
 
@@ -87,6 +80,7 @@ impl<const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
         for i in 1..n {
             correction = (&correction + &table[i][0]).to_affine();
         }
+        assert!(bool::from(correction.is_on_curve()));
 
         (table, -correction)
     }
@@ -102,17 +96,6 @@ impl<const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
         };
 
         let (table, correction) = Self::prepare_fixed_point_table(window_size, &fixed_point);
-
-        // check if the last row is on curve
-        for p in table[table.len() - 1].iter() {
-            if !bool::from(p.is_on_curve()) {
-                return Err(PlonkError::Synthesis);
-            };
-        }
-
-        if !bool::from(correction.is_on_curve()) {
-            return Err(PlonkError::Synthesis);
-        };
 
         let mut assigned_table = vec![];
         let ecc_chip = self.base_field_chip();
@@ -202,8 +185,9 @@ mod tests {
     use ark_std::{end_timer, start_timer};
     use halo2_ecc::integer::rns::Rns;
     use halo2_ecc::EccConfig;
-    use halo2_maingate::{MainGateConfig, RangeChip, RangeConfig, RangeInstructions};
+    use halo2_maingate::{MainGate, MainGateConfig, RangeChip, RangeConfig, RangeInstructions};
     use halo2wrong::curves::bn256::Bn256;
+    use halo2wrong::curves::ff::Field;
     use halo2wrong::halo2::circuit::{Layouter, SimpleFloorPlanner, Value};
     use halo2wrong::halo2::plonk::{keygen_vk, Circuit, ConstraintSystem};
     use halo2wrong::halo2::poly::commitment::ParamsProver;
@@ -212,6 +196,21 @@ mod tests {
     use halo2wrong::utils::{mock_prover_verify, DimensionMeasurement};
     use rand_chacha::ChaCha20Rng;
     use rand_core::{OsRng, SeedableRng};
+
+    const AUX_GENERATOR: Point = Point {
+        x: Base::from_raw([
+            0xc552bb41dfa2ba0d,
+            0x691f7d5660b8fa62,
+            0xbee345f4407f92ee,
+            0x16097d51a463fa51,
+        ]),
+        y: Base::from_raw([
+            0x5bed59dd2ef9fb53,
+            0xa0f30dda198abe8b,
+            0x82ba6900b8e98ee8,
+            0x1be3e56d90c3a2cb,
+        ]),
+    };
 
     #[test]
     fn test_bn_aux_generator() {
