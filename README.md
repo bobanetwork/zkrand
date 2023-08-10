@@ -30,6 +30,7 @@ Below are the evaluation results running on AWS instance r6i.8xlarge, which has 
 | (45, 88) |  21  |   161.630       |	9.544           |	3840	           |       37          | 
 | (89, 177) | 22  |   322.693       |	13.837	        |       3840               |	   73         |
 
+The proof size remains constant and the verification time can be further reduced by hashing the public inputs which is not yet implemented. 
 
 DVRF benchmark evaluates the performance of the DVRF functions excluding NI-DKG. 
 
