@@ -3,7 +3,7 @@ use halo2wrong::halo2::arithmetic::Field;
 
 use lazy_static::lazy_static;
 
-/// the code below is from https://github.com/scroll-tech/poseidon-circuit/blob/main/src/poseidon/primitives/bn256/fp.rs
+// the code below is from https://github.com/scroll-tech/poseidon-circuit/blob/main/src/poseidon/primitives/bn256/fp.rs
 
 lazy_static! {
     pub static ref ROUND_CONSTANTS: [[Fp; 3]; 65] = {
