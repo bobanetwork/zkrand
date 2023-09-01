@@ -1,6 +1,7 @@
 mod base_field_chip;
 mod dkg;
 mod dkg_circuit;
+mod ecc_chip;
 mod error;
 mod grumpkin_chip;
 mod hash_to_curve;
