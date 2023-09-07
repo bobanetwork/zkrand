@@ -1,4 +1,4 @@
-use crate::base_field_chip::{AuxGen, FixedPointChip, Selector, Windowed};
+use crate::ecc_chip::{point_base_chip::AuxGen, FixedPointChip, Selector, Windowed};
 use halo2_ecc::AssignedPoint;
 use halo2_maingate::{AssignedCondition, AssignedValue, MainGateInstructions};
 use halo2wrong::curves::ff::PrimeField;
@@ -201,7 +201,7 @@ impl<C: CurveAffine + AuxGen, const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{hash_to_curve_bn, BIT_LEN_LIMB, NUMBER_OF_LIMBS};
+    use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS};
     use ark_std::{end_timer, start_timer};
     use halo2_ecc::integer::rns::Rns;
     use halo2_ecc::EccConfig;
@@ -293,7 +293,7 @@ mod tests {
 
             let g = self.generator;
 
-            //   let mut rng = ChaCha20Rng::seed_from_u64(42);
+            // let mut rng = ChaCha20Rng::seed_from_u64(42);
             let mut rng = OsRng;
 
             layouter.assign_region(
@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_mul_fix() {
-        //    let mut rng = ChaCha20Rng::seed_from_u64(42);
+        // let mut rng = ChaCha20Rng::seed_from_u64(42);
         let mut rng = OsRng;
         let g = Point::random(&mut rng);
 

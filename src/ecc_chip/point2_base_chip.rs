@@ -250,9 +250,8 @@ mod tests {
             mut layouter: impl Layouter<C::ScalarExt>,
         ) -> Result<(), PlonkError> {
             let integer_config = config.integer_config();
-            let mut fixed_chip =
+            let fixed_chip =
                 FixedPoint2Chip::<W, C, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(integer_config);
-            let main_gate = MainGate::<C::ScalarExt>::new(config.main_gate_config.clone());
 
             let g = self.g;
             let h = self.h;

@@ -29,10 +29,13 @@ blake2b_simd = "1"
 rand_chacha = "0.3.1"
 criterion = { version = "0.4", features = ["html_reports"] }
 
+[features]
+default = []
+g2chip = []
+
 [[bench]]
 name = "dvrf_benchmark"
 harness = false
-
 
 #[[bench]]
 #name = "dkg_benchmark"

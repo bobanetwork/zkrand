@@ -53,7 +53,7 @@ impl AuxGen for G2Affine {
 #[cfg(test)]
 mod tests {
     use crate::ecc_chip::bn256::AUX_GENERATOR;
-    use halo2wrong::curves::bn256::{Fq, Fq2, G2Affine};
+    use halo2wrong::curves::bn256::G2Affine;
     use halo2wrong::curves::group::cofactor::{CofactorCurveAffine, CofactorGroup};
     use halo2wrong::curves::CurveExt;
     use rand_chacha::ChaCha20Rng;

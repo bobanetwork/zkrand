@@ -1,4 +1,4 @@
-use crate::base_field_chip::AuxGen;
+use crate::ecc_chip::point_base_chip::AuxGen;
 use crate::hash_to_curve_bn;
 use halo2wrong::curves::bn256::G1Affine;
 use halo2wrong::curves::group::Curve;
@@ -16,8 +16,7 @@ impl AuxGen for G1Affine {
 mod tests {
     use super::*;
     use crate::hash_to_curve_bn;
-    use ark_std::{end_timer, start_timer};
-    use halo2wrong::curves::bn256::{Bn256, Fq, Fr};
+    use halo2wrong::curves::bn256::Fq;
     use halo2wrong::curves::CurveAffine;
 
     const AUX_GENERATOR: G1Affine = G1Affine {

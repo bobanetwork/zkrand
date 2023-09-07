@@ -1,5 +1,5 @@
 use halo2wrong::curves::{
-    bn256::{Fq as BnBase, Fr as BnScalar, G1Affine as BnG1},
+    bn256::{Fq as BnBase, Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2},
     ff::PrimeField,
     grumpkin::G1Affine as GkG1,
 };
@@ -8,7 +8,15 @@ use halo2wrong::halo2::{
     plonk::{Circuit, ConstraintSystem, Error as PlonkError},
 };
 
+#[cfg(feature = "g2chip")]
+use crate::ecc_chip::FixedPoint2Chip;
+use crate::ecc_chip::FixedPointChip;
+use crate::grumpkin_chip::GrumpkinChip;
+use crate::poseidon::P128Pow5T3Bn;
+use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH};
 use halo2_ecc::integer::rns::Rns;
+#[cfg(feature = "g2chip")]
+use halo2_ecc::integer::IntegerConfig;
 use halo2_ecc::maingate::RegionCtx;
 use halo2_ecc::EccConfig;
 use halo2_gadgets::poseidon::{
@@ -17,11 +25,6 @@ use halo2_gadgets::poseidon::{
 use halo2_maingate::{
     MainGate, MainGateConfig, MainGateInstructions, RangeChip, RangeConfig, RangeInstructions,
 };
-
-use crate::base_field_chip::FixedPointChip;
-use crate::grumpkin_chip::GrumpkinChip;
-use crate::poseidon::P128Pow5T3Bn;
-use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH};
 
 #[derive(Clone, Debug)]
 pub struct CircuitDkgConfig {
@@ -74,6 +77,11 @@ impl CircuitDkgConfig {
 
     pub fn ecc_chip_config(&self) -> EccConfig {
         EccConfig::new(self.range_config.clone(), self.main_gate_config.clone())
+    }
+
+    #[cfg(feature = "g2chip")]
+    fn integer_config(&self) -> IntegerConfig {
+        IntegerConfig::new(self.range_config.clone(), self.main_gate_config.clone())
     }
 
     pub fn config_range<N: PrimeField>(
@@ -147,6 +155,13 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
         let ecc_chip_config = config.ecc_chip_config();
         let mut fixed_chip =
             FixedPointChip::<BnG1, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
+
+        #[cfg(feature = "g2chip")]
+        let integer_config = config.integer_config();
+        #[cfg(feature = "g2chip")]
+        let mut fixed2_chip =
+            FixedPoint2Chip::<BnBase, BnG2, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(integer_config);
+
         let main_gate = MainGate::<BnScalar>::new(config.main_gate_config.clone());
         let mut grumpkin_chip = GrumpkinChip::new(config.main_gate_config.clone());
 
@@ -195,6 +210,11 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
                 let ctx = &mut RegionCtx::new(region, offset);
                 let g = BnG1::generator();
                 fixed_chip.assign_fixed_point(ctx, &g, self.window_size)?;
+
+                #[cfg(feature = "g2chip")]
+                let g2 = BnG2::generator();
+                #[cfg(feature = "g2chip")]
+                fixed2_chip.assign_fixed_point(ctx, &g2, self.window_size)?;
                 Ok(())
             },
         )?;
@@ -315,131 +335,29 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
             instance_offset += 1;
         }
 
+        // compute g2^a
+        #[cfg(feature = "g2chip")]
+        let g2a = layouter.assign_region(
+            || "region mul",
+            |region| {
+                let offset = 0;
+                let ctx = &mut RegionCtx::new(region, offset);
+
+                let g2a = fixed2_chip.mul(ctx, &a)?;
+                let g2a = fixed2_chip.normalize(ctx, &g2a)?;
+
+                Ok(g2a)
+            },
+        )?;
+
+        #[cfg(feature = "g2chip")]
+        {
+            fixed2_chip.expose_public(layouter.namespace(|| "g2^a"), g2a, instance_offset)?;
+            instance_offset += 16;
+        }
+
         config.config_range(&mut layouter)?;
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash};
-    use halo2wrong::curves::group::Curve;
-    use halo2wrong::utils::mock_prover_verify;
-
-    use ark_std::{end_timer, start_timer};
-    use halo2_ecc::halo2::SerdeFormat;
-    use halo2wrong::curves::bn256::Bn256;
-    use halo2wrong::curves::grumpkin::{Fr as GkScalar, G1Affine as GkG1};
-    use halo2wrong::halo2::arithmetic::Field;
-    use halo2wrong::halo2::plonk::keygen_vk;
-    use halo2wrong::halo2::poly::commitment::ParamsProver;
-    use halo2wrong::halo2::poly::kzg::commitment::{ParamsKZG, ParamsVerifierKZG};
-
-    use crate::dkg::get_shares;
-    use halo2_ecc::Point;
-    use rand_chacha::ChaCha20Rng;
-    use rand_core::{RngCore, SeedableRng};
-    use std::rc::Rc;
-
-    use super::*;
-    use crate::poseidon::P128Pow5T3Bn;
-    use crate::utils::setup;
-
-    fn get_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
-        mut rng: impl RngCore,
-    ) -> (CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>, Vec<BnScalar>) {
-        let (rns_base, _) = setup::<BnG1>(0);
-        let rns_base = Rc::new(rns_base);
-
-        let g = BnG1::generator();
-        let gg = GkG1::generator();
-
-        // Generate a key pair for encryption
-        let mut sks = vec![];
-        let mut pks = vec![];
-        for _ in 0..NUMBER_OF_MEMBERS {
-            let sk = GkScalar::random(&mut rng);
-            let pk = (gg * sk).to_affine();
-
-            sks.push(sk);
-            pks.push(pk);
-        }
-
-        let mut coeffs = vec![];
-        for _ in 0..THRESHOLD {
-            let a = BnScalar::random(&mut rng);
-            coeffs.push(a);
-        }
-
-        let ga = (g * coeffs[0]).to_affine();
-        let ga_point = Point::new(Rc::clone(&rns_base), ga);
-        let mut public_data = ga_point.public();
-
-        let shares = get_shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
-        for i in 0..NUMBER_OF_MEMBERS {
-            let gs = (g * shares[i]).to_affine();
-            let gs_point = Point::new(Rc::clone(&rns_base), gs);
-            public_data.extend(gs_point.public());
-        }
-
-        // Draw arandomness for encryption
-        let random = BnScalar::random(&mut rng);
-        let rs = GkScalar::from_repr(random.to_repr()).unwrap();
-        let gr = (gg * rs).to_affine();
-
-        public_data.push(gr.x);
-        public_data.push(gr.y);
-
-        let poseidon = Hash::<_, P128Pow5T3Bn, ConstantLength<2>, 3, 2>::init();
-        for i in 0..NUMBER_OF_MEMBERS {
-            // Encrypt
-            let pkr = (pks[i] * rs).to_affine();
-            let key = poseidon.clone().hash([pkr.x, pkr.y]);
-            let cipher = key + shares[i];
-
-            public_data.push(pks[i].x);
-            public_data.push(pks[i].y);
-            public_data.push(cipher);
-        }
-
-        let coeffs: Vec<_> = coeffs.iter().map(|a| Value::known(*a)).collect();
-        let public_keys: Vec<_> = pks.iter().map(|pk| Value::known(*pk)).collect();
-        let aux = GkG1::random(&mut rng);
-
-        let circuit = CircuitDkg {
-            coeffs: coeffs.try_into().unwrap(),
-            random: Value::known(random),
-            public_keys: public_keys.try_into().unwrap(),
-            window_size: 3,
-            grumpkin_aux_generator: aux,
-        };
-
-        (circuit, public_data)
-    }
-
-    #[test]
-    #[ignore]
-    fn test_vk() {
-        let mut rng = ChaCha20Rng::seed_from_u64(42);
-        let (circuit1, instance1) = get_circuit::<5, 9>(&mut rng);
-        let (circuit2, _) = get_circuit::<5, 9>(&mut rng);
-
-        mock_prover_verify(&circuit1, vec![instance1]);
-
-        let degree = 18;
-        let setup_message = format!("dkg setup with degree = {}", degree);
-        let start1 = start_timer!(|| setup_message);
-        let general_params = ParamsKZG::<Bn256>::setup(degree as u32, &mut rng);
-        let _verifier_params: ParamsVerifierKZG<Bn256> = general_params.verifier_params().clone();
-        end_timer!(start1);
-
-        let vk1 = keygen_vk(&general_params, &circuit1).expect("keygen_vk should not fail");
-        let vk2 = keygen_vk(&general_params, &circuit2).expect("keygen_vk should not fail");
-
-        assert_eq!(
-            vk1.to_bytes(SerdeFormat::RawBytes),
-            vk2.to_bytes(SerdeFormat::RawBytes)
-        )
     }
 }

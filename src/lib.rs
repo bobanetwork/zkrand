@@ -1,4 +1,3 @@
-mod base_field_chip;
 mod dkg;
 mod dkg_circuit;
 mod ecc_chip;
@@ -26,6 +25,7 @@ pub use crate::dkg::{
     combine_partial_evaluations, get_shares, keygen, DkgShareKey, PseudoRandom, EVAL_PREFIX,
 };
 pub use crate::dkg_circuit::CircuitDkg;
+use crate::ecc_chip::Point2;
 pub use crate::error::Error;
 pub use crate::poseidon::P128Pow5T3Bn;
 pub use crate::utils::{hash_to_curve_bn, hash_to_curve_grumpkin, mod_n, setup};
@@ -131,6 +131,9 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
             public_data.push(pks[i].y);
             public_data.push(self.ciphers[i]);
         }
+
+        let g2a_point = Point2::new(Rc::clone(&rns_base), self.g2a);
+        public_data.extend(g2a_point.public());
 
         let instance = vec![public_data];
         instance
@@ -317,9 +320,9 @@ mod tests {
     use rand_chacha::ChaCha20Rng;
     use rand_core::{OsRng, SeedableRng};
 
-    fn mock_dkg_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
-        // let mut rng = ChaCha20Rng::seed_from_u64(42);
-        let mut rng = OsRng;
+    fn get_members<const NUMBER_OF_MEMBERS: usize>(
+        mut rng: impl RngCore,
+    ) -> (Vec<GkG1>, Vec<MemberKey>) {
         let mut members = vec![];
         let mut pks = vec![];
         for _ in 0..NUMBER_OF_MEMBERS {
@@ -327,7 +330,15 @@ mod tests {
             pks.push(member.get_public_key());
             members.push(member);
         }
+        (pks, members)
+    }
 
+    fn mock_dkg_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
+        // let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let mut rng = OsRng;
+
+        let (pks, members) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
+        // simulate member 1
         let dkg_params =
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &pks, &mut rng).unwrap();
         let circuit = dkg_params.get_circuit(&mut rng);
@@ -339,24 +350,79 @@ mod tests {
 
     #[test]
     fn test_dkg_circuit() {
-        mock_dkg_circuit::<5, 9>();
-        //   mock_dkg_circuit::<11, 21>();
-        //    mock_dkg_circuit::<22, 43>();
-        //    mock_dkg_circuit::<45, 89>();
-        //    mock_dkg_circuit::<89, 177>();
+        #[cfg(not(feature = "g2chip"))]
+        {
+            mock_dkg_circuit::<5, 9>();
+            //   mock_dkg_circuit::<11, 21>();
+            //    mock_dkg_circuit::<22, 43>();
+            //    mock_dkg_circuit::<45, 89>();
+            //    mock_dkg_circuit::<89, 177>();
+        }
+
+        #[cfg(feature = "g2chip")]
+        {
+            mock_dkg_circuit::<3, 5>();
+            //  mock_dkg_circuit::<9, 16>();
+            //   mock_dkg_circuit::<20, 39>();
+            //    mock_dkg_circuit::<43, 84>();
+            //    mock_dkg_circuit::<88, 174>();
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn test_vk() {
+        // let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let mut rng = OsRng;
+
+        #[cfg(not(feature = "g2chip"))]
+        const THRESHOLD: usize = 5;
+        #[cfg(not(feature = "g2chip"))]
+        const NUMBER_OF_MEMBERS: usize = 9;
+
+        #[cfg(feature = "g2chip")]
+        const THRESHOLD: usize = 3;
+        #[cfg(feature = "g2chip")]
+        const NUMBER_OF_MEMBERS: usize = 5;
+
+        let degree = 18;
+
+        let (pks, members) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
+        // simulate member 1
+        let dkg_params =
+            DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &pks, &mut rng).unwrap();
+        let circuit1 = dkg_params.get_circuit(&mut rng);
+        let instance1 = dkg_params.get_instance();
+
+        let (pks, members) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
+        // simulate member 3
+        let dkg_params =
+            DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(3, &pks, &mut rng).unwrap();
+        let circuit2 = dkg_params.get_circuit(&mut rng);
+        let instance2 = dkg_params.get_instance();
+
+        mock_prover_verify(&circuit1, instance1);
+
+        let setup_message = format!("dkg setup with degree = {}", degree);
+        let start1 = start_timer!(|| setup_message);
+        let general_params = ParamsKZG::<Bn256>::setup(degree as u32, &mut rng);
+        let _verifier_params: ParamsVerifierKZG<Bn256> = general_params.verifier_params().clone();
+        end_timer!(start1);
+
+        let vk1 = keygen_vk(&general_params, &circuit1).expect("keygen_vk should not fail");
+        let vk2 = keygen_vk(&general_params, &circuit2).expect("keygen_vk should not fail");
+
+        assert_eq!(
+            vk1.to_bytes(SerdeFormat::RawBytes),
+            vk2.to_bytes(SerdeFormat::RawBytes)
+        )
     }
 
     fn dkg_proof<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize, const DEGREE: usize>() {
-        let mut rng = ChaCha20Rng::seed_from_u64(42);
-        // let mut rng = OsRng;
-        let mut members = vec![];
-        let mut mpks = vec![];
-        for _ in 0..NUMBER_OF_MEMBERS {
-            let member = MemberKey::new(&mut rng);
-            mpks.push(member.get_public_key());
-            members.push(member);
-        }
+        // let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let mut rng = OsRng;
 
+        let (mpks, members) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
         let dkg_params =
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &mpks, &mut rng).unwrap();
         let circuit = dkg_params.get_circuit(&mut rng);
@@ -396,7 +462,7 @@ mod tests {
             KZGCommitmentScheme<Bn256>,
             ProverSHPLONK<'_, Bn256>,
             Challenge255<BnG1>,
-            ChaCha20Rng,
+            _,
             Blake2bWrite<Vec<u8>, BnG1, Challenge255<BnG1>>,
             CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>,
         >(
@@ -437,24 +503,29 @@ mod tests {
     #[test]
     #[ignore]
     fn test_dkg_proof() {
-        dkg_proof::<5, 9, 18>();
-        dkg_proof::<11, 21, 19>();
-        //  dkg_proof::<22, 43, 20>();
-        //  dkg_proof::<45, 89, 21>();
-        //  dkg_proof::<89, 177, 22>();
+        #[cfg(not(feature = "g2chip"))]
+        {
+            dkg_proof::<5, 9, 18>();
+            // dkg_proof::<11, 21, 19>();
+            //  dkg_proof::<22, 43, 20>();
+            //  dkg_proof::<45, 89, 21>();
+            //  dkg_proof::<89, 177, 22>();
+        }
+
+        #[cfg(feature = "g2chip")]
+        {
+            dkg_proof::<3, 5, 18>();
+            //  dkg_proof::<9, 16, 19>();
+            //  dkg_proof::<20, 39, 20>();
+            //  dkg_proof::<43, 84, 21>();
+            //  dkg_proof::<88, 174, 22>();
+        }
     }
 
     fn mock_dvrf<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
         let mut rng = ChaCha20Rng::seed_from_u64(42);
 
-        let mut members = vec![];
-        let mut pks = vec![];
-        for _ in 0..NUMBER_OF_MEMBERS {
-            let member = MemberKey::new(&mut rng);
-            pks.push(member.pk.clone());
-            members.push(member);
-        }
-
+        let (pks, members) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
         let dkgs: Vec<_> = (0..NUMBER_OF_MEMBERS)
             .map(|i| {
                 DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(i + 1, &pks, &mut rng).unwrap()
@@ -467,9 +538,13 @@ mod tests {
             .collect();
 
         // simulation skips the snark proof and verify
-        // check g1a and g2a have the same exponent
-        for &dkg in dkgs_pub.iter() {
-            dkg.check_public().unwrap()
+
+        #[cfg(not(feature = "g2chip"))]
+        {
+            // check g1a and g2a have the same exponent
+            for &dkg in dkgs_pub.iter() {
+                dkg.check_public().unwrap()
+            }
         }
 
         // compute public parameters
@@ -503,7 +578,7 @@ mod tests {
     fn test_dvrf_functions() {
         mock_dvrf::<5, 9>();
         mock_dvrf::<11, 21>();
-        //  mock_dvrf::<22, 43>();
+        mock_dvrf::<22, 43>();
         //  mock_dvrf::<45, 89>();
         //  mock_dvrf::<89, 177>();
     }

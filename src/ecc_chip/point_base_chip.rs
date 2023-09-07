@@ -10,11 +10,6 @@ use halo2wrong::halo2::circuit::Layouter;
 use halo2wrong::halo2::plonk::Error as PlonkError;
 use halo2wrong::RegionCtx;
 
-#[derive(Default)]
-pub(crate) struct Selector<F: PrimeField>(Vec<AssignedCondition<F>>);
-
-pub(crate) struct Windowed<F: PrimeField>(Vec<Selector<F>>);
-
 // windowed fix point multiplication
 pub struct FixedPointChip<
     C: CurveAffine + AuxGen,
