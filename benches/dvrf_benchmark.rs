@@ -104,7 +104,7 @@ mod dvrf_benches {
             combine::<5,9>,
             combine::<11,21>,
             combine::<22,43>,
-            combine::<45,88>,
+            combine::<45,89>,
             combine::<89,177>,
             partial_verify,
             pseudo_random_verify,

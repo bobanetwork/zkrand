@@ -342,7 +342,7 @@ mod tests {
         mock_dkg_circuit::<5, 9>();
         //   mock_dkg_circuit::<11, 21>();
         //    mock_dkg_circuit::<22, 43>();
-        //    mock_dkg_circuit::<45, 88>();
+        //    mock_dkg_circuit::<45, 89>();
         //    mock_dkg_circuit::<89, 177>();
     }
 
@@ -440,7 +440,7 @@ mod tests {
         dkg_proof::<5, 9, 18>();
         dkg_proof::<11, 21, 19>();
         //  dkg_proof::<22, 43, 20>();
-        //  dkg_proof::<45, 88, 21>();
+        //  dkg_proof::<45, 89, 21>();
         //  dkg_proof::<89, 177, 22>();
     }
 
@@ -502,9 +502,9 @@ mod tests {
     #[test]
     fn test_dvrf_functions() {
         mock_dvrf::<5, 9>();
-        mock_dvrf::<11, 20>();
-        //  mock_dvrf::<14, 26>();
-        //  mock_dvrf::<27, 53>();
-        //  mock_dvrf::<54, 107>();
+        mock_dvrf::<11, 21>();
+        //  mock_dvrf::<22, 43>();
+        //  mock_dvrf::<45, 89>();
+        //  mock_dvrf::<89, 177>();
     }
 }

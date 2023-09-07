@@ -107,7 +107,7 @@ mod dkg_benches {
             dkg_proof_verify::<5,9,18>,
     //        dkg_proof_verify::<11,21,19>,
     //        dkg_proof_verify::<22,43,20>,
-    //        dkg_proof_verify::<45,88,21>,
+    //        dkg_proof_verify::<45,89,21>,
     //        dkg_proof_verify::<89,177,22>,
     }
 }

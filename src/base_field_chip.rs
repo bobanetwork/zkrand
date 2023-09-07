@@ -1,24 +1,38 @@
+mod bn256;
 mod fix_mul;
 
 use halo2_ecc::integer::IntegerInstructions;
 use halo2_ecc::{AssignedPoint, BaseFieldEccChip, EccConfig};
 use halo2_maingate::{AssignedCondition, MainGate};
+use halo2wrong::curves::ff::PrimeField;
 use halo2wrong::curves::CurveAffine;
 use halo2wrong::halo2::circuit::Layouter;
 use halo2wrong::halo2::plonk::Error as PlonkError;
 use halo2wrong::RegionCtx;
 
+#[derive(Default)]
+pub(crate) struct Selector<F: PrimeField>(Vec<AssignedCondition<F>>);
+
+pub(crate) struct Windowed<F: PrimeField>(Vec<Selector<F>>);
+
 // windowed fix point multiplication
-pub struct FixedPointChip<C: CurveAffine, const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize> {
+pub struct FixedPointChip<
+    C: CurveAffine + AuxGen,
+    const NUMBER_OF_LIMBS: usize,
+    const BIT_LEN_LIMB: usize,
+> {
     base_field_chip: BaseFieldEccChip<C, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
     assigned_fixed_point: Option<AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>>,
     assigned_table:
         Option<Vec<Vec<AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>>>>,
-    assigned_correction: Option<AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>>,
     window_size: Option<usize>,
 }
 
-impl<C: CurveAffine, const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
+pub trait AuxGen {
+    fn aux_generator(bytes: &[u8]) -> Self;
+}
+
+impl<C: CurveAffine + AuxGen, const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
     FixedPointChip<C, NUMBER_OF_LIMBS, BIT_LEN_LIMB>
 {
     pub fn new(config: EccConfig) -> Self {
@@ -27,7 +41,6 @@ impl<C: CurveAffine, const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
             base_field_chip,
             assigned_fixed_point: None,
             assigned_table: None,
-            assigned_correction: None,
             window_size: None,
         }
     }
@@ -38,6 +51,15 @@ impl<C: CurveAffine, const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
 
     pub fn main_gate(&self) -> &MainGate<C::Scalar> {
         self.base_field_chip.main_gate()
+    }
+
+    pub fn fixed_point(
+        &self,
+    ) -> Result<&AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>, PlonkError> {
+        match &self.assigned_fixed_point {
+            Some(w) => Ok(w),
+            None => Err(PlonkError::Synthesis),
+        }
     }
 
     pub fn expose_public(
@@ -85,28 +107,5 @@ impl<C: CurveAffine, const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: usize>
         let p_0 = AssignedPoint::new(x.clone(), y);
 
         Ok(p_0)
-    }
-
-    // algorithm from https://github.com/privacy-scaling-explorations/halo2wrong/blob/v2023_04_20/ecc/src/base_field_ecc/mul.rs#L69
-    fn select_multi(
-        &self,
-        ctx: &mut RegionCtx<'_, C::Scalar>,
-        selector: &[AssignedCondition<C::Scalar>],
-        table: &[AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>],
-    ) -> Result<AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>, PlonkError> {
-        let number_of_points = table.len();
-        let number_of_selectors = selector.len();
-        assert_eq!(number_of_points, 1 << number_of_selectors);
-
-        let ecc_chip = self.base_field_chip();
-        let mut reducer = table.to_vec();
-        for (i, selector) in selector.iter().enumerate() {
-            let n = 1 << (number_of_selectors - 1 - i);
-            for j in 0..n {
-                let k = 2 * j;
-                reducer[j] = ecc_chip.select(ctx, selector, &reducer[k + 1], &reducer[k])?;
-            }
-        }
-        Ok(reducer[0].clone())
     }
 }
