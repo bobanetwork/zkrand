@@ -343,15 +343,17 @@ mod tests {
         let mut rng = OsRng;
         let g = Point::random(&mut rng);
 
-        let circuit = TestEccMulFix {
-            window_size: 3,
-            generator: g,
-        };
-        let instance = vec![vec![]];
-        mock_prover_verify(&circuit, instance);
+        for window_size in 2..6 {
+            let circuit = TestEccMulFix {
+                window_size: window_size,
+                generator: g,
+            };
+            let instance = vec![vec![]];
+            mock_prover_verify(&circuit, instance);
 
-        let dimension = DimensionMeasurement::measure(&circuit).unwrap();
-        println!("mul fix dimention: {:?}", dimension);
+            let dimension = DimensionMeasurement::measure(&circuit).unwrap();
+            println!("window size {:?}, mul fix: {:?}", window_size, dimension);
+        }
     }
 
     #[test]
