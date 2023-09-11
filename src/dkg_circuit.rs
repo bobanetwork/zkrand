@@ -1,5 +1,7 @@
+#[cfg(feature = "g2chip")]
+use halo2wrong::curves::bn256::G2Affine as BnG2;
 use halo2wrong::curves::{
-    bn256::{Fq as BnBase, Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2},
+    bn256::{Fq as BnBase, Fr as BnScalar, G1Affine as BnG1},
     ff::PrimeField,
     grumpkin::G1Affine as GkG1,
 };
@@ -215,6 +217,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
                 let g2 = BnG2::generator();
                 #[cfg(feature = "g2chip")]
                 fixed2_chip.assign_fixed_point(ctx, &g2, self.window_size)?;
+
                 Ok(())
             },
         )?;
@@ -245,8 +248,12 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
             },
         )?;
 
-        fixed_chip.expose_public(layouter.namespace(|| "cipher g^a"), ga, 0)?;
-        let mut instance_offset: usize = 8;
+        let mut instance_offset = 0usize;
+        fixed_chip.expose_public(
+            layouter.namespace(|| "cipher g^a"),
+            ga,
+            &mut instance_offset,
+        )?;
 
         for i in 0..NUMBER_OF_MEMBERS {
             let gs = layouter.assign_region(
@@ -263,8 +270,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
                 },
             )?;
 
-            fixed_chip.expose_public(layouter.namespace(|| "g^s"), gs, instance_offset)?;
-            instance_offset += 8;
+            fixed_chip.expose_public(layouter.namespace(|| "g^s"), gs, &mut instance_offset)?;
         }
 
         let (bits, gr) = layouter.assign_region(
@@ -284,8 +290,11 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
             },
         )?;
 
-        grumpkin_chip.expose_public(layouter.namespace(|| "cipher g^r"), gr, instance_offset)?;
-        instance_offset += 2;
+        grumpkin_chip.expose_public(
+            layouter.namespace(|| "cipher g^r"),
+            gr,
+            &mut instance_offset,
+        )?;
 
         for i in 0..NUMBER_OF_MEMBERS {
             let (pkr, pk) = layouter.assign_region(
@@ -302,8 +311,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
                 },
             )?;
 
-            grumpkin_chip.expose_public(layouter.namespace(|| "pk"), pk, instance_offset)?;
-            instance_offset += 2;
+            grumpkin_chip.expose_public(layouter.namespace(|| "pk"), pk, &mut instance_offset)?;
 
             let message = [pkr.x, pkr.y];
 
@@ -351,10 +359,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
         )?;
 
         #[cfg(feature = "g2chip")]
-        {
-            fixed2_chip.expose_public(layouter.namespace(|| "g2^a"), g2a, instance_offset)?;
-            instance_offset += 16;
-        }
+        fixed2_chip.expose_public(layouter.namespace(|| "g2^a"), g2a, &mut instance_offset)?;
 
         config.config_range(&mut layouter)?;
 

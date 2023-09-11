@@ -30,7 +30,7 @@ fn evaluate_poly(coeffs: &[BnScalar], i: usize) -> BnScalar {
 }
 
 // compute secret shares for n parties
-pub fn get_shares<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
+pub fn shares<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
     coeffs: &[BnScalar],
 ) -> [BnScalar; NUMBER_OF_MEMBERS] {
     assert_eq!(coeffs.len(), THRESHOLD);
@@ -332,7 +332,7 @@ mod tests {
         let g2 = BnG2::generator();
 
         let coeffs: Vec<_> = (0..THRESHOLD).map(|_| BnScalar::random(&mut rng)).collect();
-        let shares = get_shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
+        let shares = shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
         let keys: Vec<_> = shares
             .iter()
             .enumerate()

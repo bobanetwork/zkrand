@@ -15,6 +15,7 @@ use halo2_ecc::Point;
 use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash};
 use halo2wrong::curves::bn256::{Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
 use halo2wrong::curves::ff::PrimeField;
+use halo2wrong::curves::group::prime::PrimeCurveAffine;
 use halo2wrong::curves::group::Curve;
 use halo2wrong::curves::grumpkin::{Fr as GkScalar, G1Affine as GkG1};
 use halo2wrong::halo2::arithmetic::Field;
@@ -22,9 +23,10 @@ use halo2wrong::halo2::circuit::Value;
 
 use crate::dkg::is_dl_equal;
 pub use crate::dkg::{
-    combine_partial_evaluations, get_shares, keygen, DkgShareKey, PseudoRandom, EVAL_PREFIX,
+    combine_partial_evaluations, keygen, shares, DkgShareKey, PseudoRandom, EVAL_PREFIX,
 };
 pub use crate::dkg_circuit::CircuitDkg;
+#[cfg(feature = "g2chip")]
 use crate::ecc_chip::Point2;
 pub use crate::error::Error;
 pub use crate::poseidon::P128Pow5T3Bn;
@@ -72,7 +74,7 @@ impl MemberKey {
     }
 
     // decrypt ciphers from other members (including its own cipher) and aggregate shares
-    pub fn get_dkg_share_key<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
+    pub fn dkg_share_key<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
         &self,
         index: usize,
         pps: &[&DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS>],
@@ -109,7 +111,7 @@ pub struct DkgMemberPublicParams<const THRESHOLD: usize, const NUMBER_OF_MEMBERS
 impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
     DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS>
 {
-    pub fn get_instance(&self, pks: &[GkG1]) -> Vec<Vec<BnScalar>> {
+    pub fn instance(&self, pks: &[GkG1]) -> Vec<Vec<BnScalar>> {
         assert_eq!(pks.len(), NUMBER_OF_MEMBERS);
 
         let (rns_base, _) = setup::<BnG1>(0);
@@ -132,7 +134,9 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
             public_data.push(self.ciphers[i]);
         }
 
+        #[cfg(feature = "g2chip")]
         let g2a_point = Point2::new(Rc::clone(&rns_base), self.g2a);
+        #[cfg(feature = "g2chip")]
         public_data.extend(g2a_point.public());
 
         let instance = vec![public_data];
@@ -175,7 +179,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         let g2a = (g2 * coeffs[0]).to_affine();
 
         // compute secret shares for members
-        let shares = get_shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
+        let shares = shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
         let public_shares: Vec<_> = shares.iter().map(|s| (g * s).to_affine()).collect();
 
         // draw arandomness for encryption
@@ -219,7 +223,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         })
     }
 
-    pub fn get_circuit(&self, mut rng: impl RngCore) -> CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS> {
+    pub fn circuit(&self, mut rng: impl RngCore) -> CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS> {
         let coeffs: Vec<_> = self.coeffs.iter().map(|a| Value::known(*a)).collect();
         let public_keys: Vec<_> = self
             .public_keys
@@ -239,11 +243,11 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         circuit
     }
 
-    pub fn get_instance(&self) -> Vec<Vec<BnScalar>> {
-        self.public_params.get_instance(&self.public_keys)
+    pub fn instance(&self) -> Vec<Vec<BnScalar>> {
+        self.public_params.instance(&self.public_keys)
     }
 
-    pub fn get_member_public_params(&self) -> &DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS> {
+    pub fn member_public_params(&self) -> &DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS> {
         &self.public_params
     }
 }
@@ -264,11 +268,10 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
     }
 }
 
-pub fn get_dkg_global_public_params<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
+pub fn dkg_global_public_params<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
     pps: &[&DkgMemberPublicParams<THRESHOLD, NUMBER_OF_MEMBERS>],
 ) -> DkgGlobalPubParams<THRESHOLD, NUMBER_OF_MEMBERS> {
     // combine ga and g2a to get global public keys
-    // todo: optimise to_affine?
     let ga = pps
         .iter()
         .skip(1)
@@ -281,11 +284,11 @@ pub fn get_dkg_global_public_params<const THRESHOLD: usize, const NUMBER_OF_MEMB
     // compute vk_1, ... vk_n
     let mut vks = vec![];
     for i in 0..NUMBER_OF_MEMBERS {
-        let mut vk = pps[0].public_shares[i];
+        let mut vk = pps[0].public_shares[i].to_curve();
         for pp in pps.iter().skip(1) {
-            vk = (vk + pp.public_shares[i]).to_affine();
+            vk = vk + pp.public_shares[i];
         }
-        vks.push(vk);
+        vks.push(vk.to_affine());
     }
 
     DkgGlobalPubParams {
@@ -337,12 +340,12 @@ mod tests {
         // let mut rng = ChaCha20Rng::seed_from_u64(42);
         let mut rng = OsRng;
 
-        let (pks, members) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
+        let (pks, _) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
         // simulate member 1
         let dkg_params =
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &pks, &mut rng).unwrap();
-        let circuit = dkg_params.get_circuit(&mut rng);
-        let instance = dkg_params.get_instance();
+        let circuit = dkg_params.circuit(&mut rng);
+        let instance = dkg_params.instance();
         mock_prover_verify(&circuit, instance);
         let dimension = DimensionMeasurement::measure(&circuit).unwrap();
         println!("dimention: {:?}", dimension);
@@ -387,19 +390,18 @@ mod tests {
 
         let degree = 18;
 
-        let (pks, members) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
+        let (pks, _) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
         // simulate member 1
         let dkg_params =
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &pks, &mut rng).unwrap();
-        let circuit1 = dkg_params.get_circuit(&mut rng);
-        let instance1 = dkg_params.get_instance();
+        let circuit1 = dkg_params.circuit(&mut rng);
+        let instance1 = dkg_params.instance();
 
-        let (pks, members) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
+        let (pks, _) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
         // simulate member 3
         let dkg_params =
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(3, &pks, &mut rng).unwrap();
-        let circuit2 = dkg_params.get_circuit(&mut rng);
-        let instance2 = dkg_params.get_instance();
+        let circuit2 = dkg_params.circuit(&mut rng);
 
         mock_prover_verify(&circuit1, instance1);
 
@@ -422,11 +424,11 @@ mod tests {
         // let mut rng = ChaCha20Rng::seed_from_u64(42);
         let mut rng = OsRng;
 
-        let (mpks, members) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
+        let (mpks, _) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
         let dkg_params =
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &mpks, &mut rng).unwrap();
-        let circuit = dkg_params.get_circuit(&mut rng);
-        let instance = dkg_params.get_instance();
+        let circuit = dkg_params.circuit(&mut rng);
+        let instance = dkg_params.instance();
         let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
 
         let dimension = DimensionMeasurement::measure(&circuit).unwrap();
@@ -532,10 +534,7 @@ mod tests {
             })
             .collect();
 
-        let dkgs_pub: Vec<_> = dkgs
-            .iter()
-            .map(|dkg| dkg.get_member_public_params())
-            .collect();
+        let dkgs_pub: Vec<_> = dkgs.iter().map(|dkg| dkg.member_public_params()).collect();
 
         // simulation skips the snark proof and verify
 
@@ -548,13 +547,13 @@ mod tests {
         }
 
         // compute public parameters
-        let pp = get_dkg_global_public_params(&dkgs_pub);
+        let pp = dkg_global_public_params(&dkgs_pub);
 
         // each member decrypt to obtain their own shares
         let mut shares = vec![];
         for i in 0..NUMBER_OF_MEMBERS {
             assert_eq!(members[i].pk, pks[i]);
-            let share = members[i].get_dkg_share_key(i + 1, &dkgs_pub).unwrap();
+            let share = members[i].dkg_share_key(i + 1, &dkgs_pub).unwrap();
             share.verify(&pp.verify_keys).unwrap();
 
             shares.push(share);

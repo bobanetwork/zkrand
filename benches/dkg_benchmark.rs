@@ -37,8 +37,8 @@ mod dkg_benches {
 
         let dkg_params =
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &pks, &mut rng).unwrap();
-        let circuit = dkg_params.get_circuit(&mut rng);
-        let instance = dkg_params.get_instance();
+        let circuit = dkg_params.circuit(&mut rng);
+        let instance = dkg_params.instance();
         let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
 
         let dimension = DimensionMeasurement::measure(&circuit).unwrap();

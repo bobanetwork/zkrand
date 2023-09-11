@@ -8,8 +8,8 @@ mod dvrf_benches {
     use halo2wrong::halo2::arithmetic::Field;
     use rand_core::OsRng;
     use zkdvrf::{
-        combine_partial_evaluations, get_shares, hash_to_curve_bn, keygen, DkgShareKey,
-        PseudoRandom, EVAL_PREFIX,
+        combine_partial_evaluations, hash_to_curve_bn, keygen, shares, DkgShareKey, PseudoRandom,
+        EVAL_PREFIX,
     };
 
     // partial evaluation time independent of the values of threshold and number of members
@@ -31,7 +31,7 @@ mod dvrf_benches {
         // simplified setup only used for benchmark
         let g = BnG1::generator();
         let coeffs: Vec<_> = (0..THRESHOLD).map(|_| BnScalar::random(&mut rng)).collect();
-        let shares = get_shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
+        let shares = shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
         let keys: Vec<_> = shares
             .iter()
             .enumerate()

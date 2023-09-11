@@ -69,16 +69,17 @@ impl GrumpkinChip {
         &self,
         mut layouter: impl Layouter<Base>,
         point: AssignedPoint,
-        offset: usize,
+        offset: &mut usize,
     ) -> Result<(), PlonkError> {
         let main_gate = self.main_gate();
 
-        main_gate.expose_public(layouter.namespace(|| "x coord"), point.x().clone(), offset)?;
+        main_gate.expose_public(layouter.namespace(|| "x coord"), point.x().clone(), *offset)?;
         main_gate.expose_public(
             layouter.namespace(|| "y coord"),
             point.y().clone(),
-            offset + 1,
+            *offset + 1,
         )?;
+        *offset += 2;
 
         Ok(())
     }
@@ -284,7 +285,7 @@ mod tests {
                     let offset = 0;
                     let ctx = &mut RegionCtx::new(region, offset);
 
-                    //          let mut rng = ChaCha20Rng::seed_from_u64(42);
+                    // let mut rng = ChaCha20Rng::seed_from_u64(42);
                     let mut rng = OsRng;
 
                     let p0 = Point::random(&mut rng);

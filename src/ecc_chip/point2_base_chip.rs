@@ -75,7 +75,7 @@ impl<
         &self,
         mut layouter: impl Layouter<C::ScalarExt>,
         point: AssignedPoint2<W, C::ScalarExt, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
-        offset: usize,
+        offset: &mut usize,
     ) -> Result<(), PlonkError> {
         let main_gate = self.main_gate();
 
@@ -84,11 +84,10 @@ impl<
         let y0 = &point.y().i0;
         let y1 = &point.y().i1;
 
-        let mut offset = offset;
         for a in [x0, x1, y0, y1] {
             for limb in a.limbs().iter() {
-                main_gate.expose_public(layouter.namespace(|| "x coords"), limb.into(), offset)?;
-                offset += 1;
+                main_gate.expose_public(layouter.namespace(|| "x coords"), limb.into(), *offset)?;
+                *offset += 1;
             }
         }
 
@@ -376,7 +375,7 @@ mod tests {
                 },
             )?;
 
-            fixed_chip.expose_public(layouter.namespace(|| "g2^s"), out, 0)?;
+            fixed_chip.expose_public(layouter.namespace(|| "g2^s"), out, &mut 0)?;
 
             config.config_range(&mut layouter)?;
 

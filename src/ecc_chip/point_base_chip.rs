@@ -3,8 +3,7 @@ mod fix_mul;
 
 use halo2_ecc::integer::IntegerInstructions;
 use halo2_ecc::{AssignedPoint, BaseFieldEccChip, EccConfig};
-use halo2_maingate::{AssignedCondition, MainGate};
-use halo2wrong::curves::ff::PrimeField;
+use halo2_maingate::MainGate;
 use halo2wrong::curves::CurveAffine;
 use halo2wrong::halo2::circuit::Layouter;
 use halo2wrong::halo2::plonk::Error as PlonkError;
@@ -61,9 +60,12 @@ impl<C: CurveAffine + AuxGen, const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: 
         &self,
         mut layouter: impl Layouter<C::Scalar>,
         point: AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
-        offset: usize,
+        offset: &mut usize,
     ) -> Result<(), PlonkError> {
-        self.base_field_chip.expose_public(layouter, point, offset)
+        self.base_field_chip
+            .expose_public(layouter, point, *offset)?;
+        *offset += 8;
+        Ok(())
     }
 
     pub fn normalize(
