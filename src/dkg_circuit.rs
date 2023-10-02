@@ -1,16 +1,4 @@
 #[cfg(feature = "g2chip")]
-use halo2wrong::curves::bn256::G2Affine as BnG2;
-use halo2wrong::curves::{
-    bn256::{Fq as BnBase, Fr as BnScalar, G1Affine as BnG1},
-    ff::PrimeField,
-    grumpkin::G1Affine as GkG1,
-};
-use halo2wrong::halo2::{
-    circuit::{Layouter, SimpleFloorPlanner, Value},
-    plonk::{Circuit, ConstraintSystem, Error as PlonkError},
-};
-
-#[cfg(feature = "g2chip")]
 use crate::ecc_chip::FixedPoint2Chip;
 use crate::ecc_chip::FixedPointChip;
 use crate::grumpkin_chip::GrumpkinChip;
@@ -27,6 +15,18 @@ use halo2_gadgets::poseidon::{
 use halo2_maingate::{
     MainGate, MainGateConfig, MainGateInstructions, RangeChip, RangeConfig, RangeInstructions,
 };
+#[cfg(feature = "g2chip")]
+use halo2wrong::curves::bn256::G2Affine as BnG2;
+use halo2wrong::curves::{
+    bn256::{Fq as BnBase, Fr as BnScalar, G1Affine as BnG1},
+    ff::PrimeField,
+    grumpkin::G1Affine as GkG1,
+};
+use halo2wrong::halo2::{
+    circuit::{Layouter, SimpleFloorPlanner, Value},
+    plonk::{Circuit, ConstraintSystem, Error as PlonkError},
+};
+use rand_core::RngCore;
 
 #[derive(Clone, Debug)]
 pub struct CircuitDkgConfig {
@@ -103,7 +103,7 @@ pub struct CircuitDkg<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
     random: Value<BnScalar>,
     public_keys: [Value<GkG1>; NUMBER_OF_MEMBERS],
     window_size: usize,
-    grumpkin_aux_generator: GkG1,
+    grumpkin_aux_generator: Value<GkG1>,
 }
 
 impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
@@ -114,10 +114,29 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         random: Value<BnScalar>,
         public_keys: Vec<Value<GkG1>>,
         window_size: usize,
-        grumpkin_aux_generator: GkG1,
+        grumpkin_aux_generator: Value<GkG1>,
     ) -> Self {
         assert_eq!(coeffs.len(), THRESHOLD);
         assert_eq!(public_keys.len(), NUMBER_OF_MEMBERS);
+
+        CircuitDkg {
+            coeffs: coeffs
+                .try_into()
+                .expect("unable to convert coefficient vector"),
+            random,
+            public_keys: public_keys
+                .try_into()
+                .expect("unable to convert public key vector"),
+            window_size,
+            grumpkin_aux_generator,
+        }
+    }
+
+    pub fn dummy(window_size: usize) -> Self {
+        let coeffs: Vec<_> = (0..THRESHOLD).map(|_| Value::unknown()).collect();
+        let random = Value::unknown();
+        let public_keys: Vec<_> = (0..NUMBER_OF_MEMBERS).map(|_| Value::unknown()).collect();
+        let grumpkin_aux_generator = Value::unknown();
 
         CircuitDkg {
             coeffs: coeffs
@@ -227,8 +246,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
             |region| {
                 let offset = 0;
                 let ctx = &mut RegionCtx::new(region, offset);
-                grumpkin_chip
-                    .assign_aux_generator(ctx, Value::known(self.grumpkin_aux_generator))?;
+                grumpkin_chip.assign_aux_generator(ctx, self.grumpkin_aux_generator)?;
                 grumpkin_chip.assign_aux_correction(ctx)?;
                 Ok(())
             },

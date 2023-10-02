@@ -30,13 +30,14 @@ pub use crate::dkg_circuit::CircuitDkg;
 use crate::ecc_chip::Point2;
 pub use crate::error::Error;
 pub use crate::poseidon::P128Pow5T3Bn;
-pub use crate::utils::{hash_to_curve_bn, hash_to_curve_grumpkin, mod_n, setup};
+pub use crate::utils::{hash_to_curve_bn, hash_to_curve_grumpkin, mod_n, rns_setup};
 
 const BIT_LEN_LIMB: usize = 68;
 const NUMBER_OF_LIMBS: usize = 4;
 const POSEIDON_WIDTH: usize = 3;
 const POSEIDON_RATE: usize = 2;
 const POSEIDON_LEN: usize = 2;
+const DEFAULT_WINDOW_SIZE: usize = 3;
 
 pub struct MemberKey {
     sk: GkScalar,
@@ -114,7 +115,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
     pub fn instance(&self, pks: &[GkG1]) -> Vec<Vec<BnScalar>> {
         assert_eq!(pks.len(), NUMBER_OF_MEMBERS);
 
-        let (rns_base, _) = setup::<BnG1>(0);
+        let (rns_base, _) = rns_setup::<BnG1>(0);
         let rns_base = Rc::new(rns_base);
 
         let ga_point = Point::new(Rc::clone(&rns_base), self.ga);
@@ -231,12 +232,12 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
             .map(|pk| Value::known(*pk))
             .collect();
 
-        let grumpkin_aux_generator = GkG1::random(&mut rng);
+        let grumpkin_aux_generator = Value::known(GkG1::random(&mut rng));
         let circuit = CircuitDkg::<THRESHOLD, NUMBER_OF_MEMBERS>::new(
             coeffs,
             Value::known(self.r),
             public_keys,
-            3,
+            DEFAULT_WINDOW_SIZE,
             grumpkin_aux_generator,
         );
 
@@ -304,8 +305,7 @@ pub fn dkg_global_public_params<const THRESHOLD: usize, const NUMBER_OF_MEMBERS:
 mod tests {
     use super::*;
     use crate::dkg::combine_partial_evaluations;
-    use halo2wrong::utils::{mock_prover_verify, DimensionMeasurement};
-
+    use crate::utils::{load_or_create_params, load_or_create_pk, load_or_create_vk};
     use ark_std::{end_timer, start_timer};
     use halo2_ecc::halo2::SerdeFormat;
     use halo2wrong::curves::bn256::Bn256;
@@ -319,7 +319,7 @@ mod tests {
     use halo2wrong::halo2::transcript::{
         Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
     };
-
+    use halo2wrong::utils::{mock_prover_verify, DimensionMeasurement};
     use rand_chacha::ChaCha20Rng;
     use rand_core::{OsRng, SeedableRng};
 
@@ -374,7 +374,7 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn test_vk() {
+    fn test_pk_vk() {
         // let mut rng = ChaCha20Rng::seed_from_u64(42);
         let mut rng = OsRng;
 
@@ -396,14 +396,9 @@ mod tests {
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &pks, &mut rng).unwrap();
         let circuit1 = dkg_params.circuit(&mut rng);
         let instance1 = dkg_params.instance();
-
-        let (pks, _) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
-        // simulate member 3
-        let dkg_params =
-            DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(3, &pks, &mut rng).unwrap();
-        let circuit2 = dkg_params.circuit(&mut rng);
-
         mock_prover_verify(&circuit1, instance1);
+
+        let circuit2 = CircuitDkg::<THRESHOLD, NUMBER_OF_MEMBERS>::dummy(DEFAULT_WINDOW_SIZE);
 
         let setup_message = format!("dkg setup with degree = {}", degree);
         let start1 = start_timer!(|| setup_message);
@@ -417,7 +412,15 @@ mod tests {
         assert_eq!(
             vk1.to_bytes(SerdeFormat::RawBytes),
             vk2.to_bytes(SerdeFormat::RawBytes)
-        )
+        );
+
+        let pk1 = keygen_pk(&general_params, vk1, &circuit1).expect("keygen_pk should not fail");
+        let pk2 = keygen_pk(&general_params, vk2, &circuit2).expect("keygen_pk should not fail");
+
+        assert_eq!(
+            pk1.to_bytes(SerdeFormat::RawBytes),
+            pk2.to_bytes(SerdeFormat::RawBytes)
+        );
     }
 
     fn dkg_proof<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize, const DEGREE: usize>() {
@@ -522,6 +525,86 @@ mod tests {
             //  dkg_proof::<43, 84, 21>();
             //  dkg_proof::<88, 174, 22>();
         }
+    }
+
+    #[test]
+    #[ignore]
+    fn test_dkg_proof_kzg_params() {
+        // let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let mut rng = OsRng;
+        const THRESHOLD: usize = 3;
+        const NUMBER_OF_MEMBERS: usize = 5;
+        const DEGREE: usize = 18;
+
+        let (mpks, _) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
+        let dkg_params =
+            DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &mpks, &mut rng).unwrap();
+        let circuit = dkg_params.circuit(&mut rng);
+        let instance = dkg_params.instance();
+        let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
+
+        let dimension = DimensionMeasurement::measure(&circuit).unwrap();
+        println!("dimention: {:?}", dimension);
+
+        let start1 = start_timer!(|| format!("kzg load or setup with degree {}", DEGREE));
+        let params_dir = "./kzg_params";
+        let general_params = load_or_create_params(params_dir, DEGREE).unwrap();
+        let verifier_params: ParamsVerifierKZG<Bn256> = general_params.verifier_params().clone();
+        end_timer!(start1);
+
+        let pk =
+            load_or_create_pk::<THRESHOLD, NUMBER_OF_MEMBERS>(params_dir, &general_params, DEGREE)
+                .unwrap();
+
+        // Create a proof
+        let mut transcript = Blake2bWrite::<_, BnG1, Challenge255<_>>::init(vec![]);
+
+        // Bench proof generation time
+        let proof_message = format!("dkg proof with degree = {}", DEGREE);
+        let start2 = start_timer!(|| proof_message);
+        create_proof::<
+            KZGCommitmentScheme<Bn256>,
+            ProverSHPLONK<'_, Bn256>,
+            Challenge255<BnG1>,
+            _,
+            Blake2bWrite<Vec<u8>, BnG1, Challenge255<BnG1>>,
+            CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>,
+        >(
+            &general_params,
+            &pk,
+            &[circuit],
+            &[instance_ref.as_slice()],
+            rng,
+            &mut transcript,
+        )
+        .expect("proof generation should not fail");
+        let proof = transcript.finalize();
+        end_timer!(start2);
+
+        println!("proof size = {:?}", proof.len());
+
+        let start3 = start_timer!(|| format!("verify snark proof for dkg"));
+        let mut verifier_transcript = Blake2bRead::<_, BnG1, Challenge255<_>>::init(&proof[..]);
+        let strategy = SingleStrategy::new(&general_params);
+        let vk =
+            load_or_create_vk::<THRESHOLD, NUMBER_OF_MEMBERS>(params_dir, &general_params, DEGREE)
+                .unwrap();
+
+        verify_proof::<
+            KZGCommitmentScheme<Bn256>,
+            VerifierSHPLONK<'_, Bn256>,
+            Challenge255<BnG1>,
+            Blake2bRead<&[u8], BnG1, Challenge255<BnG1>>,
+            SingleStrategy<'_, Bn256>,
+        >(
+            &verifier_params,
+            &vk,
+            strategy,
+            &[instance_ref.as_slice()],
+            &mut verifier_transcript,
+        )
+        .expect("failed to verify dkg circuit");
+        end_timer!(start3);
     }
 
     fn mock_dvrf<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
