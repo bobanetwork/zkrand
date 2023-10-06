@@ -102,32 +102,43 @@ fn main() {
     let instance = dkg_params.instance();
     let num_instances = instance[0].len();
 
+    let start = start_timer!(|| format!("kzg load or setup params with degree {}", DEGREE));
     let params_dir = "./kzg_params";
     let general_params = load_or_create_params(params_dir, degree).unwrap();
     let _verifier_params: ParamsVerifierKZG<Bn256> = general_params.verifier_params().clone();
+    end_timer!(start);
 
+    let start = start_timer!(|| format!("kzg load or setup proving keys with degree {}", DEGREE));
     let pk = load_or_create_pk::<THRESHOLD, NUMBER_OF_MEMBERS>(params_dir, &general_params, degree)
         .unwrap();
     let vk = pk.get_vk();
+    end_timer!(start);
 
     let generator = SolidityGenerator::new(&general_params, vk, Bdfg21, num_instances);
     let (verifier_solidity, vk_solidity) = generator.render_separately().unwrap();
     save_solidity("Halo2Verifier.sol", &verifier_solidity);
     save_solidity(format!("Halo2VerifyingKey-{degree}.sol"), &vk_solidity);
+    end_timer!(start);
 
+    let start = start_timer!(|| format!("create solidity contracts"));
     let verifier_creation_code = compile_solidity(&verifier_solidity);
     let verifier_creation_code_size = verifier_creation_code.len();
     println!("Verifier creation code size: {verifier_creation_code_size}");
+    end_timer!(start);
 
     let mut evm = Evm::default();
     let verifier_address = evm.create(verifier_creation_code);
 
     let calldata = {
+        let start = start_timer!(|| format!("create and verify proof"));
         let proof = create_proof_checked(&general_params, &pk, circuit, &instance[0], &mut rng);
+        end_timer!(start);
         println!("size of proof {:?}", proof.len());
         encode_calldata(Some(verifier_address.into()), &proof, &instance[0])
     };
+    let start = start_timer!(|| format!("evm call.."));
     let (gas_cost, output) = evm.call(verifier_address, calldata);
+    end_timer!(start);
     assert_eq!(output, [vec![0; 31], vec![1]].concat());
     println!("Gas cost of verifying standard Plonk with 2^{degree} rows: {gas_cost}");
 }
