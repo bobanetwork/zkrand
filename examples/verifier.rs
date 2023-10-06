@@ -102,13 +102,13 @@ fn main() {
     let instance = dkg_params.instance();
     let num_instances = instance[0].len();
 
-    let start = start_timer!(|| format!("kzg load or setup params with degree {}", DEGREE));
+    let start = start_timer!(|| format!("kzg load or setup params with degree {}", degree));
     let params_dir = "./kzg_params";
     let general_params = load_or_create_params(params_dir, degree).unwrap();
     let _verifier_params: ParamsVerifierKZG<Bn256> = general_params.verifier_params().clone();
     end_timer!(start);
 
-    let start = start_timer!(|| format!("kzg load or setup proving keys with degree {}", DEGREE));
+    let start = start_timer!(|| format!("kzg load or setup proving keys with degree {}", degree));
     let pk = load_or_create_pk::<THRESHOLD, NUMBER_OF_MEMBERS>(params_dir, &general_params, degree)
         .unwrap();
     let vk = pk.get_vk();
