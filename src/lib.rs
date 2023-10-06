@@ -7,6 +7,8 @@ mod hash_to_curve;
 mod poseidon;
 mod utils;
 
+pub use utils::{load_or_create_params, load_or_create_pk, load_or_create_vk};
+
 use rand_core::RngCore;
 use std::rc::Rc;
 
@@ -37,7 +39,7 @@ const NUMBER_OF_LIMBS: usize = 4;
 const POSEIDON_WIDTH: usize = 3;
 const POSEIDON_RATE: usize = 2;
 const POSEIDON_LEN: usize = 2;
-const DEFAULT_WINDOW_SIZE: usize = 3;
+pub const DEFAULT_WINDOW_SIZE: usize = 3;
 
 pub struct MemberKey {
     sk: GkScalar,
