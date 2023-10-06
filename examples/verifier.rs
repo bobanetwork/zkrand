@@ -114,13 +114,14 @@ fn main() {
     let vk = pk.get_vk();
     end_timer!(start);
 
+    let start = start_timer!(|| format!("create solidity contracts"));
     let generator = SolidityGenerator::new(&general_params, vk, Bdfg21, num_instances);
     let (verifier_solidity, vk_solidity) = generator.render_separately().unwrap();
     save_solidity("Halo2Verifier.sol", &verifier_solidity);
     save_solidity(format!("Halo2VerifyingKey-{degree}.sol"), &vk_solidity);
     end_timer!(start);
 
-    let start = start_timer!(|| format!("create solidity contracts"));
+    let start = start_timer!(|| format!("compile solidity contracts"));
     let verifier_creation_code = compile_solidity(&verifier_solidity);
     let verifier_creation_code_size = verifier_creation_code.len();
     println!("Verifier creation code size: {verifier_creation_code_size}");
