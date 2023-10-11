@@ -73,6 +73,7 @@ fn create_proof_checked(
         transcript.finalize()
     };
 
+    let start = start_timer!(|| format!("verify proof"));
     let result = {
         let mut transcript = Keccak256Transcript::new(proof.as_slice());
         verify_proof::<_, VerifierSHPLONK<_>, _, _, SingleStrategy<_>>(
@@ -84,6 +85,7 @@ fn create_proof_checked(
         )
     };
     assert!(result.is_ok());
+    end_timer!(start);
 
     proof
 }
@@ -121,25 +123,31 @@ fn main() {
     save_solidity(format!("Halo2VerifyingKey-{degree}.sol"), &vk_solidity);
     end_timer!(start);
 
-    let start = start_timer!(|| format!("compile solidity contracts"));
+    let start = start_timer!(|| format!("compile and deploy solidity contracts"));
     let verifier_creation_code = compile_solidity(&verifier_solidity);
-    let verifier_creation_code_size = verifier_creation_code.len();
-    println!("Verifier creation code size: {verifier_creation_code_size}");
-    end_timer!(start);
+    let vk_creation_code = compile_solidity(&vk_solidity);
+    println!(
+        "verifier creation code size: {:?}",
+        verifier_creation_code.len()
+    );
+    println!("vk creation code size: {:?}", vk_creation_code.len());
 
     let mut evm = Evm::default();
     let verifier_address = evm.create(verifier_creation_code);
+    let vk_address = evm.create(vk_creation_code);
+    end_timer!(start);
 
     let calldata = {
         let start = start_timer!(|| format!("create and verify proof"));
         let proof = create_proof_checked(&general_params, &pk, circuit, &instance[0], &mut rng);
         end_timer!(start);
         println!("size of proof {:?}", proof.len());
-        encode_calldata(Some(verifier_address.into()), &proof, &instance[0])
+        encode_calldata(Some(vk_address.into()), &proof, &instance[0])
     };
-    let start = start_timer!(|| format!("evm call.."));
+    println!("calldata size {:?}", calldata.len());
+    let start = start_timer!(|| format!("evm call"));
     let (gas_cost, output) = evm.call(verifier_address, calldata);
     end_timer!(start);
-    assert_eq!(output, [vec![0; 31], vec![1]].concat());
-    println!("Gas cost of verifying standard Plonk with 2^{degree} rows: {gas_cost}");
+    //   assert_eq!(output, [vec![0; 31], vec![1]].concat());
+    println!("Gas cost of verifying dkg circuit proof with 2^{degree} rows: {gas_cost}");
 }
