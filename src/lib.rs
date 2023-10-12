@@ -361,7 +361,7 @@ mod tests {
             //   mock_dkg_circuit::<11, 21>();
             //    mock_dkg_circuit::<22, 43>();
             //    mock_dkg_circuit::<45, 89>();
-            //    mock_dkg_circuit::<89, 177>();
+            //    mock_dkg_circuit::<90, 178>();
         }
 
         #[cfg(feature = "g2chip")]
@@ -370,7 +370,7 @@ mod tests {
             //  mock_dkg_circuit::<9, 16>();
             //   mock_dkg_circuit::<20, 39>();
             //    mock_dkg_circuit::<43, 84>();
-            //    mock_dkg_circuit::<88, 174>();
+            //     mock_dkg_circuit::<87, 173>();
         }
     }
 
@@ -516,7 +516,7 @@ mod tests {
             // dkg_proof::<11, 21, 19>();
             //  dkg_proof::<22, 43, 20>();
             //  dkg_proof::<45, 89, 21>();
-            //  dkg_proof::<89, 177, 22>();
+            //  dkg_proof::<90, 178, 22>();
         }
 
         #[cfg(feature = "g2chip")]

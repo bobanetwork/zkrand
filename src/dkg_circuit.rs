@@ -50,10 +50,10 @@ impl CircuitDkgConfig {
         );
 
         // poseidon configure
-        let state = (0..POSEIDON_WIDTH)
-            .map(|_| meta.advice_column())
-            .collect::<Vec<_>>();
-        let partial_sbox = meta.advice_column();
+        let main_advices = main_gate_config.advices();
+        let state = main_advices[0..POSEIDON_WIDTH].to_vec();
+        let partial_sbox = main_advices[POSEIDON_WIDTH];
+
         let rc_a = (0..POSEIDON_WIDTH)
             .map(|_| meta.fixed_column())
             .collect::<Vec<_>>();
