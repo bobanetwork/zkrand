@@ -346,6 +346,7 @@ mod tests {
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &pks, &mut rng).unwrap();
         let circuit = dkg_params.circuit(&mut rng);
         let instance = dkg_params.instance();
+        println!("instance size {:?}", instance[0].len());
         mock_prover_verify(&circuit, instance);
         let dimension = DimensionMeasurement::measure(&circuit).unwrap();
         println!("dimention: {:?}", dimension);

@@ -207,15 +207,12 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
                 }
                 shares.push(s0);
 
-                // compute s1,..., s_n-1
                 for i in 2..=NUMBER_OF_MEMBERS {
                     let ii = BnScalar::from(i as u64);
-                    let mut x = ii;
-                    let mut s = coeffs[0].clone();
-                    for j in 1..THRESHOLD {
-                        let y = main_gate.assign_constant(ctx, x)?;
-                        s = main_gate.mul_add(ctx, &coeffs[j], &y, &s)?;
-                        x = x * ii;
+                    let x = main_gate.assign_constant(ctx, ii)?;
+                    let mut s = coeffs[THRESHOLD - 1].clone();
+                    for j in (0..THRESHOLD - 1).rev() {
+                        s = main_gate.mul_add(ctx, &s, &x, &coeffs[j])?;
                     }
                     shares.push(s);
                 }
