@@ -26,5 +26,5 @@ The two components proceed as follows:
   only the final pseudorandom value and its proof needs to be verified onchain.
 
 <p align="center">
-    <img src="./assets/random.png" width="400">
+    <img src="./assets/random.png" width="500">
 </p>
