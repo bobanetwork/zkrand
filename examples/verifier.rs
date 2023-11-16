@@ -17,7 +17,7 @@ use rand_core::{OsRng, RngCore};
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 use zkdvrf::{
-    load_or_create_params, load_or_create_pk, CircuitDkg, DkgMemberParams, MemberKey,
+    load_or_create_params, load_or_create_pk, DkgCircuit, DkgMemberParams, MemberKey,
     DEFAULT_WINDOW_SIZE,
 };
 
@@ -148,6 +148,6 @@ fn main() {
     let start = start_timer!(|| format!("evm call"));
     let (gas_cost, output) = evm.call(verifier_address, calldata);
     end_timer!(start);
-    //   assert_eq!(output, [vec![0; 31], vec![1]].concat());
+    assert_eq!(output, [vec![0; 31], vec![1]].concat());
     println!("Gas cost of verifying dkg circuit proof with 2^{degree} rows: {gas_cost}");
 }

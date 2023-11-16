@@ -27,7 +27,7 @@ use crate::dkg::is_dl_equal;
 pub use crate::dkg::{
     combine_partial_evaluations, keygen, shares, DkgShareKey, PseudoRandom, EVAL_PREFIX,
 };
-pub use crate::dkg_circuit::CircuitDkg;
+pub use crate::dkg_circuit::DkgCircuit;
 #[cfg(feature = "g2chip")]
 use crate::ecc_chip::Point2;
 pub use crate::error::Error;
@@ -226,7 +226,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         })
     }
 
-    pub fn circuit(&self, mut rng: impl RngCore) -> CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS> {
+    pub fn circuit(&self, mut rng: impl RngCore) -> DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS> {
         let coeffs: Vec<_> = self.coeffs.iter().map(|a| Value::known(*a)).collect();
         let public_keys: Vec<_> = self
             .public_keys
@@ -235,7 +235,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
             .collect();
 
         let grumpkin_aux_generator = Value::known(GkG1::random(&mut rng));
-        let circuit = CircuitDkg::<THRESHOLD, NUMBER_OF_MEMBERS>::new(
+        let circuit = DkgCircuit::<THRESHOLD, NUMBER_OF_MEMBERS>::new(
             coeffs,
             Value::known(self.r),
             public_keys,
@@ -400,7 +400,7 @@ mod tests {
         let instance1 = dkg_params.instance();
         mock_prover_verify(&circuit1, instance1);
 
-        let circuit2 = CircuitDkg::<THRESHOLD, NUMBER_OF_MEMBERS>::dummy(DEFAULT_WINDOW_SIZE);
+        let circuit2 = DkgCircuit::<THRESHOLD, NUMBER_OF_MEMBERS>::dummy(DEFAULT_WINDOW_SIZE);
 
         let setup_message = format!("dkg setup with degree = {}", degree);
         let start1 = start_timer!(|| setup_message);
@@ -471,7 +471,7 @@ mod tests {
             Challenge255<BnG1>,
             _,
             Blake2bWrite<Vec<u8>, BnG1, Challenge255<BnG1>>,
-            CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>,
+            DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS>,
         >(
             &general_params,
             &pk,
@@ -570,7 +570,7 @@ mod tests {
             Challenge255<BnG1>,
             _,
             Blake2bWrite<Vec<u8>, BnG1, Challenge255<BnG1>>,
-            CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>,
+            DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS>,
         >(
             &general_params,
             &pk,

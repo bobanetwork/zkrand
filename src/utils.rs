@@ -1,6 +1,6 @@
 use crate::hash_to_curve::svdw_hash_to_curve;
 use crate::{
-    CircuitDkg, BIT_LEN_LIMB, DEFAULT_WINDOW_SIZE, NUMBER_OF_LIMBS, NUMBER_OF_LOOKUP_LIMBS,
+    DkgCircuit, BIT_LEN_LIMB, DEFAULT_WINDOW_SIZE, NUMBER_OF_LIMBS, NUMBER_OF_LOOKUP_LIMBS,
 };
 use anyhow::Result;
 use halo2_ecc::integer::rns::Rns;
@@ -140,7 +140,7 @@ pub fn load_pk<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
     };
     let f = File::open(pk_path)?;
 
-    let pk = ProvingKey::read::<_, CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>>(
+    let pk = ProvingKey::read::<_, DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS>>(
         &mut BufReader::new(f),
         serde_format,
     )?;
@@ -166,7 +166,7 @@ pub fn load_vk<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
     };
     let f = File::open(vk_path)?;
 
-    let vk = VerifyingKey::read::<_, CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>>(
+    let vk = VerifyingKey::read::<_, DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS>>(
         &mut BufReader::new(f),
         serde_format,
     )?;
@@ -193,7 +193,7 @@ pub fn load_or_create_vk<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
     }
 
     log::info!("load vk failed; create and store a new vk!");
-    let circuit_dummy = CircuitDkg::<THRESHOLD, NUMBER_OF_MEMBERS>::dummy(DEFAULT_WINDOW_SIZE);
+    let circuit_dummy = DkgCircuit::<THRESHOLD, NUMBER_OF_MEMBERS>::dummy(DEFAULT_WINDOW_SIZE);
     let vk = keygen_vk(params, &circuit_dummy).expect("keygen_vk should not fail");
     let vk_path = {
         // auto load
@@ -229,7 +229,7 @@ pub fn load_or_create_pk<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
 
     log::info!("load pk failed; create and store a new vk and pk!");
     let vk = load_or_create_vk::<THRESHOLD, NUMBER_OF_MEMBERS>(params_dir, params, degree)?;
-    let circuit_dummy = CircuitDkg::<THRESHOLD, NUMBER_OF_MEMBERS>::dummy(DEFAULT_WINDOW_SIZE);
+    let circuit_dummy = DkgCircuit::<THRESHOLD, NUMBER_OF_MEMBERS>::dummy(DEFAULT_WINDOW_SIZE);
     let pk = keygen_pk(params, vk, &circuit_dummy).expect("keygen_pk should not fail");
     let pk_path = {
         // auto load

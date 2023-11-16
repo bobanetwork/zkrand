@@ -16,7 +16,7 @@ mod dkg_benches {
     };
     use halo2wrong::utils::DimensionMeasurement;
     use rand_core::OsRng;
-    use zkdvrf::{CircuitDkg, DkgMemberParams, MemberKey};
+    use zkdvrf::{DkgCircuit, DkgMemberParams, MemberKey};
 
     fn dkg_proof_verify<
         const THRESHOLD: usize,
@@ -62,7 +62,7 @@ mod dkg_benches {
             Challenge255<BnG1>,
             OsRng,
             Blake2bWrite<Vec<u8>, BnG1, Challenge255<BnG1>>,
-            CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>,
+            DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS>,
         >(
             &general_params,
             &pk,
