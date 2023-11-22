@@ -13,10 +13,6 @@ halo2wrong = { git = "https://github.com/kitounliu/halo2wrong.git", branch = "gr
 halo2_ecc ={ package = "ecc", git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin"}
 halo2_maingate =  { package = "maingate", git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin"}
 
-#halo2wrong = { path = "../halo2wrong/halo2wrong"}
-#halo2_ecc = { package = "ecc", path = "../halo2wrong/ecc"}
-#halo2_maingate = { package = "maingate", path = "../halo2wrong/maingate"}
-
 sha3 = "0.9.1"
 rand_core = { version = "0.6", default-features = false }
 static_assertions = "1.1.0"
@@ -24,6 +20,7 @@ subtle = "2.4"
 blake2b_simd = "1"
 log = "0.4"
 anyhow = "1.0"
+itertools = "0.10.3"
 
 [dev-dependencies]
 ark-std = { version = "0.3", features = ["print-trace"] }
@@ -31,7 +28,7 @@ rand_chacha = "0.3.1"
 criterion = { version = "0.4", features = ["html_reports"] }
 env_logger = "0.9.0"
 halo2_solidity_verifier = { git = "https://github.com/kitounliu/halo2-solidity-verifier.git", branch = "grumpkin", features = ["evm"] }
-#snark-verifier = { path = "../local/snark-verifier/snark-verifier" }
+serde_json = "1.0.108"
 
 [features]
 default = []

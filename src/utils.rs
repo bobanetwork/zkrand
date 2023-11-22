@@ -13,10 +13,8 @@ use halo2wrong::halo2::poly::commitment::Params;
 use halo2wrong::halo2::poly::kzg::commitment::ParamsKZG;
 use halo2wrong::halo2::SerdeFormat;
 use halo2wrong::utils::{big_to_fe, fe_to_big};
-use std::fmt::format;
 use std::fs::{metadata, File};
 use std::io::BufReader;
-use std::path::Path;
 
 pub(crate) const DEFAULT_SERDE_FORMAT: SerdeFormat = SerdeFormat::RawBytesUnchecked;
 pub(crate) const MAX_DEGREE: usize = 22;
