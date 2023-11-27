@@ -172,6 +172,8 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
         config: Self::Config,
         mut layouter: impl Layouter<BnScalar>,
     ) -> Result<(), PlonkError> {
+        config.config_range(&mut layouter)?;
+
         let ecc_chip_config = config.ecc_chip_config();
         let mut fixed_chip =
             FixedPointChip::<BnG1, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
@@ -377,8 +379,6 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
 
         #[cfg(feature = "g2chip")]
         fixed2_chip.expose_public(layouter.namespace(|| "g2^a"), g2a, &mut instance_offset)?;
-
-        config.config_range(&mut layouter)?;
 
         Ok(())
     }

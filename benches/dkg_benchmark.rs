@@ -109,7 +109,7 @@ mod dkg_benches {
     //        dkg_proof_verify::<11,21,19>,
     //        dkg_proof_verify::<22,43,20>,
     //        dkg_proof_verify::<45,89,21>,
-    //        dkg_proof_verify::<89,177,22>,
+    //        dkg_proof_verify::<90,178,22>,
     }
 
     #[cfg(feature = "g2chip")]
@@ -121,7 +121,7 @@ mod dkg_benches {
     //        dkg_proof_verify::<9,16,19>,
     //        dkg_proof_verify::<20,39,20>,
     //        dkg_proof_verify::<43,84,21>,
-    //        dkg_proof_verify::<88,174,22>,
+    //        dkg_proof_verify::<87,173,22>,
     }
 }
 
