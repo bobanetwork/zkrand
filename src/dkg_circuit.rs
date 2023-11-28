@@ -26,16 +26,15 @@ use halo2wrong::halo2::{
     circuit::{Layouter, SimpleFloorPlanner, Value},
     plonk::{Circuit, ConstraintSystem, Error as PlonkError},
 };
-use rand_core::RngCore;
 
 #[derive(Clone, Debug)]
-pub struct CircuitDkgConfig {
+pub struct DkgCircuitConfig {
     main_gate_config: MainGateConfig,
     range_config: RangeConfig,
     poseidon_config: Pow5Config<BnScalar, POSEIDON_WIDTH, POSEIDON_RATE>,
 }
 
-impl CircuitDkgConfig {
+impl DkgCircuitConfig {
     pub fn new(meta: &mut ConstraintSystem<BnScalar>) -> Self {
         let rns = Rns::<BnBase, BnScalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::construct();
         let main_gate_config = MainGate::<BnScalar>::configure(meta);
@@ -50,10 +49,10 @@ impl CircuitDkgConfig {
         );
 
         // poseidon configure
-        let state = (0..POSEIDON_WIDTH)
-            .map(|_| meta.advice_column())
-            .collect::<Vec<_>>();
-        let partial_sbox = meta.advice_column();
+        let main_advices = main_gate_config.advices();
+        let state = main_advices[0..POSEIDON_WIDTH].to_vec();
+        let partial_sbox = main_advices[POSEIDON_WIDTH];
+
         let rc_a = (0..POSEIDON_WIDTH)
             .map(|_| meta.fixed_column())
             .collect::<Vec<_>>();
@@ -70,7 +69,7 @@ impl CircuitDkgConfig {
             rc_b.try_into().unwrap(),
         );
 
-        CircuitDkgConfig {
+        DkgCircuitConfig {
             main_gate_config,
             range_config,
             poseidon_config,
@@ -98,7 +97,7 @@ impl CircuitDkgConfig {
 }
 
 #[derive(Clone)]
-pub struct CircuitDkg<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
+pub struct DkgCircuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
     coeffs: [Value<BnScalar>; THRESHOLD],
     random: Value<BnScalar>,
     public_keys: [Value<GkG1>; NUMBER_OF_MEMBERS],
@@ -107,7 +106,7 @@ pub struct CircuitDkg<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
 }
 
 impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
-    CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>
+    DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS>
 {
     pub fn new(
         coeffs: Vec<Value<BnScalar>>,
@@ -119,7 +118,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         assert_eq!(coeffs.len(), THRESHOLD);
         assert_eq!(public_keys.len(), NUMBER_OF_MEMBERS);
 
-        CircuitDkg {
+        DkgCircuit {
             coeffs: coeffs
                 .try_into()
                 .expect("unable to convert coefficient vector"),
@@ -138,7 +137,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         let public_keys: Vec<_> = (0..NUMBER_OF_MEMBERS).map(|_| Value::unknown()).collect();
         let grumpkin_aux_generator = Value::unknown();
 
-        CircuitDkg {
+        DkgCircuit {
             coeffs: coeffs
                 .try_into()
                 .expect("unable to convert coefficient vector"),
@@ -153,9 +152,9 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
 }
 
 impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
-    for CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>
+    for DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS>
 {
-    type Config = CircuitDkgConfig;
+    type Config = DkgCircuitConfig;
     type FloorPlanner = SimpleFloorPlanner;
     #[cfg(feature = "circuit-params")]
     type Params = ();
@@ -165,7 +164,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
     }
 
     fn configure(meta: &mut ConstraintSystem<BnScalar>) -> Self::Config {
-        CircuitDkgConfig::new(meta)
+        DkgCircuitConfig::new(meta)
     }
 
     fn synthesize(
@@ -173,6 +172,8 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
         config: Self::Config,
         mut layouter: impl Layouter<BnScalar>,
     ) -> Result<(), PlonkError> {
+        config.config_range(&mut layouter)?;
+
         let ecc_chip_config = config.ecc_chip_config();
         let mut fixed_chip =
             FixedPointChip::<BnG1, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(ecc_chip_config);
@@ -375,8 +376,6 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
 
         #[cfg(feature = "g2chip")]
         fixed2_chip.expose_public(layouter.namespace(|| "g2^a"), g2a, &mut instance_offset)?;
-
-        config.config_range(&mut layouter)?;
 
         Ok(())
     }

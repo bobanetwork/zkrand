@@ -7,6 +7,8 @@ mod hash_to_curve;
 mod poseidon;
 mod utils;
 
+pub use utils::{load_or_create_params, load_or_create_pk, load_or_create_vk};
+
 use rand_core::RngCore;
 use std::rc::Rc;
 
@@ -25,7 +27,7 @@ use crate::dkg::is_dl_equal;
 pub use crate::dkg::{
     combine_partial_evaluations, keygen, shares, DkgShareKey, PseudoRandom, EVAL_PREFIX,
 };
-pub use crate::dkg_circuit::CircuitDkg;
+pub use crate::dkg_circuit::DkgCircuit;
 #[cfg(feature = "g2chip")]
 use crate::ecc_chip::Point2;
 pub use crate::error::Error;
@@ -37,7 +39,7 @@ const NUMBER_OF_LIMBS: usize = 4;
 const POSEIDON_WIDTH: usize = 3;
 const POSEIDON_RATE: usize = 2;
 const POSEIDON_LEN: usize = 2;
-const DEFAULT_WINDOW_SIZE: usize = 3;
+pub const DEFAULT_WINDOW_SIZE: usize = 3;
 
 pub struct MemberKey {
     sk: GkScalar,
@@ -224,7 +226,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         })
     }
 
-    pub fn circuit(&self, mut rng: impl RngCore) -> CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS> {
+    pub fn circuit(&self, mut rng: impl RngCore) -> DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS> {
         let coeffs: Vec<_> = self.coeffs.iter().map(|a| Value::known(*a)).collect();
         let public_keys: Vec<_> = self
             .public_keys
@@ -233,7 +235,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
             .collect();
 
         let grumpkin_aux_generator = Value::known(GkG1::random(&mut rng));
-        let circuit = CircuitDkg::<THRESHOLD, NUMBER_OF_MEMBERS>::new(
+        let circuit = DkgCircuit::<THRESHOLD, NUMBER_OF_MEMBERS>::new(
             coeffs,
             Value::known(self.r),
             public_keys,
@@ -360,7 +362,7 @@ mod tests {
             //   mock_dkg_circuit::<11, 21>();
             //    mock_dkg_circuit::<22, 43>();
             //    mock_dkg_circuit::<45, 89>();
-            //    mock_dkg_circuit::<89, 177>();
+            //    mock_dkg_circuit::<90, 178>();
         }
 
         #[cfg(feature = "g2chip")]
@@ -369,7 +371,7 @@ mod tests {
             //  mock_dkg_circuit::<9, 16>();
             //   mock_dkg_circuit::<20, 39>();
             //    mock_dkg_circuit::<43, 84>();
-            //    mock_dkg_circuit::<88, 174>();
+            //     mock_dkg_circuit::<87, 173>();
         }
     }
 
@@ -399,7 +401,7 @@ mod tests {
         let instance1 = dkg_params.instance();
         mock_prover_verify(&circuit1, instance1);
 
-        let circuit2 = CircuitDkg::<THRESHOLD, NUMBER_OF_MEMBERS>::dummy(DEFAULT_WINDOW_SIZE);
+        let circuit2 = DkgCircuit::<THRESHOLD, NUMBER_OF_MEMBERS>::dummy(DEFAULT_WINDOW_SIZE);
 
         let setup_message = format!("dkg setup with degree = {}", degree);
         let start1 = start_timer!(|| setup_message);
@@ -470,7 +472,7 @@ mod tests {
             Challenge255<BnG1>,
             _,
             Blake2bWrite<Vec<u8>, BnG1, Challenge255<BnG1>>,
-            CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>,
+            DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS>,
         >(
             &general_params,
             &pk,
@@ -515,7 +517,7 @@ mod tests {
             // dkg_proof::<11, 21, 19>();
             //  dkg_proof::<22, 43, 20>();
             //  dkg_proof::<45, 89, 21>();
-            //  dkg_proof::<89, 177, 22>();
+            //  dkg_proof::<90, 178, 22>();
         }
 
         #[cfg(feature = "g2chip")]
@@ -524,7 +526,7 @@ mod tests {
             //  dkg_proof::<9, 16, 19>();
             //  dkg_proof::<20, 39, 20>();
             //  dkg_proof::<43, 84, 21>();
-            //  dkg_proof::<88, 174, 22>();
+            //  dkg_proof::<87, 173, 22>();
         }
     }
 
@@ -569,7 +571,7 @@ mod tests {
             Challenge255<BnG1>,
             _,
             Blake2bWrite<Vec<u8>, BnG1, Challenge255<BnG1>>,
-            CircuitDkg<THRESHOLD, NUMBER_OF_MEMBERS>,
+            DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS>,
         >(
             &general_params,
             &pk,
