@@ -64,7 +64,7 @@ impl<C: CurveAffine + AuxGen, const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: 
     ) -> Result<(), PlonkError> {
         self.base_field_chip
             .expose_public(layouter, point, *offset)?;
-        *offset += 8;
+        *offset += NUMBER_OF_LIMBS * 2;
         Ok(())
     }
 
