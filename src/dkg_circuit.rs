@@ -3,7 +3,7 @@ use crate::ecc_chip::FixedPoint2Chip;
 use crate::ecc_chip::FixedPointChip;
 use crate::grumpkin_chip::GrumpkinChip;
 use crate::poseidon::P128Pow5T3Bn;
-use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH};
+use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH, WRAP_LEN};
 use halo2_ecc::integer::rns::Rns;
 #[cfg(feature = "g2chip")]
 use halo2_ecc::integer::IntegerConfig;
@@ -265,9 +265,11 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
         )?;
 
         let mut instance_offset = 0usize;
-        fixed_chip.expose_public(
+        let assigned_base = fixed_chip.expose_public_optimal(
             layouter.namespace(|| "cipher g^a"),
             ga,
+            WRAP_LEN,
+            None,
             &mut instance_offset,
         )?;
 
@@ -286,7 +288,13 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
                 },
             )?;
 
-            fixed_chip.expose_public(layouter.namespace(|| "g^s"), gs, &mut instance_offset)?;
+            fixed_chip.expose_public_optimal(
+                layouter.namespace(|| "cipher g^s"),
+                gs,
+                WRAP_LEN,
+                Some(assigned_base.clone()),
+                &mut instance_offset,
+            )?;
         }
 
         let (bits, gr) = layouter.assign_region(
@@ -375,7 +383,13 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
         )?;
 
         #[cfg(feature = "g2chip")]
-        fixed2_chip.expose_public(layouter.namespace(|| "g2^a"), g2a, &mut instance_offset)?;
+        fixed2_chip.expose_public_optimal(
+            layouter.namespace(|| "g2^a"),
+            g2a,
+            WRAP_LEN,
+            Some(assigned_base),
+            &mut instance_offset,
+        )?;
 
         Ok(())
     }

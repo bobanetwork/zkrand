@@ -13,7 +13,6 @@ use rand_core::RngCore;
 use std::rc::Rc;
 
 pub use halo2_ecc::integer::NUMBER_OF_LOOKUP_LIMBS;
-use halo2_ecc::Point;
 use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash};
 use halo2wrong::curves::bn256::{Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
 use halo2wrong::curves::ff::PrimeField;
@@ -28,14 +27,16 @@ pub use crate::dkg::{
     combine_partial_evaluations, keygen, shares, DkgShareKey, PseudoRandom, EVAL_PREFIX,
 };
 pub use crate::dkg_circuit::DkgCircuit;
-#[cfg(feature = "g2chip")]
-use crate::ecc_chip::Point2;
 pub use crate::error::Error;
 pub use crate::poseidon::P128Pow5T3Bn;
+#[cfg(feature = "g2chip")]
+use crate::utils::point2_to_public;
+use crate::utils::point_to_public;
 pub use crate::utils::{hash_to_curve_bn, hash_to_curve_grumpkin, mod_n, rns_setup};
 
 const BIT_LEN_LIMB: usize = 68;
 const NUMBER_OF_LIMBS: usize = 4;
+const WRAP_LEN: usize = 2;
 const POSEIDON_WIDTH: usize = 3;
 const POSEIDON_RATE: usize = 2;
 const POSEIDON_LEN: usize = 2;
@@ -120,12 +121,11 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         let (rns_base, _) = rns_setup::<BnG1>(0);
         let rns_base = Rc::new(rns_base);
 
-        let ga_point = Point::new(Rc::clone(&rns_base), self.ga);
-        let mut public_data = ga_point.public();
+        let mut public_data = point_to_public(Rc::clone(&rns_base), self.ga, WRAP_LEN);
 
         for i in 0..NUMBER_OF_MEMBERS {
-            let gs_point = Point::new(Rc::clone(&rns_base), self.public_shares[i]);
-            public_data.extend(gs_point.public());
+            let gs_public = point_to_public(Rc::clone(&rns_base), self.public_shares[i], WRAP_LEN);
+            public_data.extend(gs_public);
         }
 
         public_data.push(self.gr.x);
@@ -138,9 +138,9 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         }
 
         #[cfg(feature = "g2chip")]
-        let g2a_point = Point2::new(Rc::clone(&rns_base), self.g2a);
+        let g2a_public = point2_to_public(Rc::clone(&rns_base), self.g2a, WRAP_LEN);
         #[cfg(feature = "g2chip")]
-        public_data.extend(g2a_point.public());
+        public_data.extend(g2a_public);
 
         let instance = vec![public_data];
         instance
@@ -339,7 +339,7 @@ mod tests {
     }
 
     fn mock_dkg_circuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
-        // let mut rng = ChaCha20Rng::seed_from_u64(42);
+        //let mut rng = ChaCha20Rng::seed_from_u64(42);
         let mut rng = OsRng;
 
         let (pks, _) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
@@ -348,7 +348,7 @@ mod tests {
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &pks, &mut rng).unwrap();
         let circuit = dkg_params.circuit(&mut rng);
         let instance = dkg_params.instance();
-        println!("instance size {:?}", instance[0].len());
+
         mock_prover_verify(&circuit, instance);
         let dimension = DimensionMeasurement::measure(&circuit).unwrap();
         println!("dimention: {:?}", dimension);
@@ -358,20 +358,20 @@ mod tests {
     fn test_dkg_circuit() {
         #[cfg(not(feature = "g2chip"))]
         {
-            mock_dkg_circuit::<5, 9>();
+            //mock_dkg_circuit::<5, 9>();
             //   mock_dkg_circuit::<11, 21>();
             //    mock_dkg_circuit::<22, 43>();
-            //    mock_dkg_circuit::<45, 89>();
-            //    mock_dkg_circuit::<90, 178>();
+            //    mock_dkg_circuit::<45, 88>();
+            mock_dkg_circuit::<89, 176>();
         }
 
         #[cfg(feature = "g2chip")]
         {
             mock_dkg_circuit::<3, 5>();
             //  mock_dkg_circuit::<9, 16>();
-            //   mock_dkg_circuit::<20, 39>();
-            //    mock_dkg_circuit::<43, 84>();
-            //     mock_dkg_circuit::<87, 173>();
+            //   mock_dkg_circuit::<20, 38>();
+            //   mock_dkg_circuit::<42, 83>();
+            //   mock_dkg_circuit::<86, 171>();
         }
     }
 
@@ -516,17 +516,17 @@ mod tests {
             dkg_proof::<5, 9, 18>();
             // dkg_proof::<11, 21, 19>();
             //  dkg_proof::<22, 43, 20>();
-            //  dkg_proof::<45, 89, 21>();
-            //  dkg_proof::<90, 178, 22>();
+            //  dkg_proof::<45, 88, 21>();
+            //  dkg_proof::<89, 176, 22>();
         }
 
         #[cfg(feature = "g2chip")]
         {
             dkg_proof::<3, 5, 18>();
             //  dkg_proof::<9, 16, 19>();
-            //  dkg_proof::<20, 39, 20>();
-            //  dkg_proof::<43, 84, 21>();
-            //  dkg_proof::<87, 173, 22>();
+            //  dkg_proof::<20, 38, 20>();
+            //  dkg_proof::<42, 83, 21>();
+            //  dkg_proof::<86, 171, 22>();
         }
     }
 

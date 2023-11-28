@@ -4,6 +4,8 @@ use crate::{
 };
 use anyhow::Result;
 use halo2_ecc::integer::rns::Rns;
+use halo2_ecc::Point;
+use halo2wrong::curves::ff::PrimeField;
 use halo2wrong::curves::{
     bn256::{self, Bn256},
     grumpkin, CurveAffine, CurveExt,
@@ -15,6 +17,10 @@ use halo2wrong::halo2::SerdeFormat;
 use halo2wrong::utils::{big_to_fe, fe_to_big};
 use std::fs::{metadata, File};
 use std::io::BufReader;
+use std::rc::Rc;
+
+#[cfg(feature = "g2chip")]
+use crate::ecc_chip::{Point2, SplitBase};
 
 pub(crate) const DEFAULT_SERDE_FORMAT: SerdeFormat = SerdeFormat::RawBytesUnchecked;
 pub(crate) const MAX_DEGREE: usize = 22;
@@ -38,6 +44,67 @@ pub fn rns_setup<C: CurveAffine>(
         k = k_override;
     }
     (rns, k)
+}
+
+pub fn point_to_public<W: PrimeField, N: PrimeField>(
+    rns: Rc<Rns<W, N, NUMBER_OF_LIMBS, BIT_LEN_LIMB>>,
+    point: impl CurveAffine<Base = W>,
+    wrap_len: usize,
+) -> Vec<N> {
+    assert!(BIT_LEN_LIMB < 128);
+    assert!(BIT_LEN_LIMB * wrap_len < N::NUM_BITS as usize);
+    // for simplicity
+    assert_eq!(NUMBER_OF_LIMBS % wrap_len, 0);
+
+    let num = NUMBER_OF_LIMBS / wrap_len;
+    let base = N::from_u128(1 << BIT_LEN_LIMB);
+
+    let point = Point::new(rns, point);
+
+    let mut wrapped = vec![];
+    for limbs in [point.x().limbs(), point.y().limbs()] {
+        for i in 0..num {
+            let begin = i * wrap_len;
+            let mut s = limbs[begin + wrap_len - 1].clone().into();
+            for j in (0..wrap_len - 1).rev() {
+                s = s * base + limbs[begin + j];
+            }
+            wrapped.push(s);
+        }
+    }
+
+    wrapped
+}
+
+#[cfg(feature = "g2chip")]
+pub fn point2_to_public<W: PrimeField, N: PrimeField, C: CurveAffine + SplitBase<C::Base, W>>(
+    rns: Rc<Rns<W, N, NUMBER_OF_LIMBS, BIT_LEN_LIMB>>,
+    point: C,
+    wrap_len: usize,
+) -> Vec<N> {
+    assert!(BIT_LEN_LIMB < 128);
+    assert!(BIT_LEN_LIMB * wrap_len < N::NUM_BITS as usize);
+    // for simplicity
+    assert_eq!(NUMBER_OF_LIMBS * 2 % wrap_len, 0);
+
+    let num = NUMBER_OF_LIMBS * 2 / wrap_len;
+    let base = N::from_u128(1 << BIT_LEN_LIMB);
+
+    let point = Point2::new(rns, point);
+
+    let mut wrapped = vec![];
+    for limbs in [point.x().limbs(), point.y().limbs()] {
+        for i in 0..num {
+            let begin = i * wrap_len;
+            let mut s = limbs[begin + wrap_len - 1].clone().into();
+            for j in (0..wrap_len - 1).rev() {
+                s = s * base + limbs[begin + j];
+            }
+            wrapped.push(s);
+        }
+    }
+
+    wrapped
 }
 
 pub fn hash_to_curve_bn<'a>(domain_prefix: &'a str) -> Box<dyn Fn(&[u8]) -> bn256::G1 + 'a> {

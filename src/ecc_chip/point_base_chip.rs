@@ -1,9 +1,10 @@
 mod bn256;
 mod fix_mul;
 
-use halo2_ecc::integer::IntegerInstructions;
+use halo2_ecc::integer::{IntegerInstructions, UnassignedInteger};
 use halo2_ecc::{AssignedPoint, BaseFieldEccChip, EccConfig};
-use halo2_maingate::MainGate;
+use halo2_maingate::{AssignedValue, MainGate, MainGateInstructions, RangeChip};
+use halo2wrong::curves::ff::PrimeField;
 use halo2wrong::curves::CurveAffine;
 use halo2wrong::halo2::circuit::Layouter;
 use halo2wrong::halo2::plonk::Error as PlonkError;
@@ -64,8 +65,67 @@ impl<C: CurveAffine + AuxGen, const NUMBER_OF_LIMBS: usize, const BIT_LEN_LIMB: 
     ) -> Result<(), PlonkError> {
         self.base_field_chip
             .expose_public(layouter, point, *offset)?;
-        *offset += 8;
+        *offset += NUMBER_OF_LIMBS * 2;
         Ok(())
+    }
+
+    pub fn expose_public_optimal(
+        &self,
+        mut layouter: impl Layouter<C::Scalar>,
+        point: AssignedPoint<C::Base, C::Scalar, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
+        wrap_len: usize,
+        assigned_base: Option<AssignedValue<C::Scalar>>,
+        offset: &mut usize,
+    ) -> Result<AssignedValue<C::Scalar>, PlonkError> {
+        assert!(BIT_LEN_LIMB < 128);
+        assert!(BIT_LEN_LIMB * wrap_len < C::Scalar::NUM_BITS as usize);
+        // for simplicity
+        assert_eq!(NUMBER_OF_LIMBS % wrap_len, 0);
+
+        let num = NUMBER_OF_LIMBS / wrap_len;
+        let main_gate = self.main_gate();
+
+        let (assigned_base, wrapped) = layouter.assign_region(
+            || "region wrap up public inputs",
+            |region| {
+                let ctx = &mut RegionCtx::new(region, *offset);
+
+                let assigned_base = match &assigned_base {
+                    Some(base) => base.clone(),
+                    None => {
+                        let base = C::Scalar::from_u128(1 << BIT_LEN_LIMB);
+                        main_gate.assign_constant(ctx, base)?
+                    }
+                };
+
+                // wrap up x, y coordinates
+                let mut wrapped = vec![];
+                for limbs in [point.x().limbs(), point.y().limbs()] {
+                    for i in 0..num {
+                        let begin = i * wrap_len;
+                        let mut s = limbs[begin + wrap_len - 1].clone().into();
+                        for j in (0..wrap_len - 1).rev() {
+                            s = main_gate.mul_add(
+                                ctx,
+                                &s,
+                                &assigned_base,
+                                &limbs[begin + j].clone().into(),
+                            )?
+                        }
+                        wrapped.push(s);
+                    }
+                }
+
+                Ok((assigned_base, wrapped))
+            },
+        )?;
+
+        for limb in wrapped.into_iter() {
+            main_gate.expose_public(layouter.namespace(|| "G point coords"), limb, *offset)?;
+            *offset += 1;
+        }
+
+        Ok(assigned_base)
     }
 
     pub fn normalize(

@@ -39,6 +39,16 @@ impl<W: PrimeField, N: PrimeField, const NUMBER_OF_LIMBS: usize, const BIT_LEN_L
         public_data.extend(self.y.limbs());
         public_data
     }
+
+    /// Returns $x$ coordinate
+    pub fn x(&self) -> &Integer2<W, N, NUMBER_OF_LIMBS, BIT_LEN_LIMB> {
+        &self.x
+    }
+
+    /// Returns $y$ coordinate
+    pub fn y(&self) -> &Integer2<W, N, NUMBER_OF_LIMBS, BIT_LEN_LIMB> {
+        &self.y
+    }
 }
 
 #[derive(Clone)]

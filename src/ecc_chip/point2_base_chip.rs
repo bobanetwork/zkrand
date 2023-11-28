@@ -4,7 +4,7 @@ use halo2_ecc::halo2::halo2curves::ff::PrimeField;
 use halo2_ecc::integer::rns::Rns;
 use halo2_ecc::integer::IntegerConfig;
 
-use halo2_maingate::{AssignedCondition, MainGate, MainGateInstructions};
+use halo2_maingate::{AssignedCondition, AssignedValue, MainGate, MainGateInstructions};
 use halo2wrong::curves::group::cofactor::{CofactorCurveAffine, CofactorGroup};
 use halo2wrong::curves::CurveAffine;
 use halo2wrong::halo2::circuit::Layouter;
@@ -92,6 +92,70 @@ impl<
         }
 
         Ok(())
+    }
+
+    pub fn expose_public_optimal(
+        &self,
+        mut layouter: impl Layouter<C::ScalarExt>,
+        point: AssignedPoint2<W, C::ScalarExt, NUMBER_OF_LIMBS, BIT_LEN_LIMB>,
+        wrap_len: usize,
+        assigned_base: Option<AssignedValue<C::ScalarExt>>,
+        offset: &mut usize,
+    ) -> Result<AssignedValue<C::ScalarExt>, PlonkError> {
+        assert!(BIT_LEN_LIMB < 128);
+        assert!(BIT_LEN_LIMB * wrap_len < C::ScalarExt::NUM_BITS as usize);
+        // for simplicity
+        assert_eq!(NUMBER_OF_LIMBS % wrap_len, 0);
+
+        let num = NUMBER_OF_LIMBS / wrap_len;
+        let main_gate = self.main_gate();
+
+        let (assigned_base, wrapped) = layouter.assign_region(
+            || "region wrap up public inputs",
+            |region| {
+                let ctx = &mut RegionCtx::new(region, *offset);
+
+                let assigned_base = match &assigned_base {
+                    Some(base) => base.clone(),
+                    None => {
+                        let base = C::ScalarExt::from_u128(1 << BIT_LEN_LIMB);
+                        main_gate.assign_constant(ctx, base)?
+                    }
+                };
+
+                // wrap up x, y coordinates
+                let mut wrapped = vec![];
+                for limbs in [
+                    point.x().i0.limbs(),
+                    point.x().i1.limbs(),
+                    point.y().i0.limbs(),
+                    point.y().i1.limbs(),
+                ] {
+                    for i in 0..num {
+                        let begin = i * wrap_len;
+                        let mut s = limbs[begin + wrap_len - 1].clone().into();
+                        for j in (0..wrap_len - 1).rev() {
+                            s = main_gate.mul_add(
+                                ctx,
+                                &s,
+                                &assigned_base,
+                                &limbs[begin + j].clone().into(),
+                            )?
+                        }
+                        wrapped.push(s);
+                    }
+                }
+
+                Ok((assigned_base, wrapped))
+            },
+        )?;
+
+        for limb in wrapped.into_iter() {
+            main_gate.expose_public(layouter.namespace(|| "G2 point coords"), limb, *offset)?;
+            *offset += 1;
+        }
+
+        Ok(assigned_base)
     }
 
     pub fn assign_constant(

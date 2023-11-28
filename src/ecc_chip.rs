@@ -12,7 +12,7 @@ mod point2_base_chip;
 #[cfg(feature = "g2chip")]
 pub use point2::Point2;
 #[cfg(feature = "g2chip")]
-pub use point2_base_chip::FixedPoint2Chip;
+pub use point2_base_chip::{FixedPoint2Chip, SplitBase};
 
 mod point_base_chip;
 pub use point_base_chip::FixedPointChip;
