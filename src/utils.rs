@@ -21,6 +21,7 @@ use std::rc::Rc;
 
 #[cfg(feature = "g2chip")]
 use crate::ecc_chip::{Point2, SplitBase};
+use crate::hash_to_curve_evm::hash_to_curve_evm;
 
 pub(crate) const DEFAULT_SERDE_FORMAT: SerdeFormat = SerdeFormat::RawBytesUnchecked;
 pub(crate) const MAX_DEGREE: usize = 22;
@@ -108,11 +109,7 @@ pub fn point2_to_public<W: PrimeField, N: PrimeField, C: CurveAffine + SplitBase
 }
 
 pub fn hash_to_curve_bn<'a>(domain_prefix: &'a str) -> Box<dyn Fn(&[u8]) -> bn256::G1 + 'a> {
-    svdw_hash_to_curve::<bn256::G1>(
-        "bn256_g1",
-        domain_prefix,
-        <bn256::G1 as CurveExt>::Base::one(),
-    )
+    hash_to_curve_evm(domain_prefix)
 }
 
 pub fn hash_to_curve_grumpkin<'a>(
@@ -149,6 +146,7 @@ pub fn load_or_create_params(params_dir: &str, degree: usize) -> Result<ParamsKZ
     return Err(anyhow::format_err!("download params{MAX_DEGREE} first"));
 }
 
+// code from https://github.com/kroma-network/kroma-prover/blob/dev/zkevm/src/utils.rs#L57
 pub fn load_params(
     params_dir: &str,
     degree: usize,
@@ -333,7 +331,7 @@ mod tests {
         let degree = 18;
         let general_params =
             load_or_create_params(path, degree).expect("failed to load or create kzg params");
-        let verifier_params = general_params.verifier_params();
+        let _verifier_params = general_params.verifier_params();
 
         let vk = load_or_create_vk::<3, 5>("./kzg_params", &general_params, degree).unwrap();
         let pk = load_or_create_pk::<3, 5>("./kzg_params", &general_params, degree).unwrap();

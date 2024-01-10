@@ -1,17 +1,16 @@
-use blake2b_simd::{blake2b, State as Blake2bState};
+use crate::error::Error;
+use crate::hash_to_curve_evm::from_be_bytes;
+use crate::utils::hash_to_curve_bn;
 use halo2_ecc::halo2::halo2curves::bn256::G2Prepared;
 use halo2_maingate::halo2::halo2curves::bn256::multi_miller_loop;
 use halo2wrong::curves::bn256::{Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
-use halo2wrong::curves::ff::FromUniformBytes;
-use halo2wrong::curves::group::{Curve, Group, GroupEncoding};
+use halo2wrong::curves::group::{Curve, Group};
 use halo2wrong::curves::pairing::MillerLoopResult;
 use halo2wrong::halo2::arithmetic::Field;
 use rand_core::RngCore;
+use sha3::{Digest, Keccak256};
 
-use crate::error::Error;
-use crate::utils::hash_to_curve_bn;
-
-pub const EVAL_PREFIX: &str = "partial evaluation for creating randomness";
+pub const EVAL_PREFIX: &str = "DVRF pseudorandom generation 2023";
 
 // evaluate a polynomial at index i
 fn evaluate_poly(coeffs: &[BnScalar], i: usize) -> BnScalar {
@@ -62,11 +61,11 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         DkgShareKey { index, sk, vk }
     }
 
-    pub fn get_verification_key(&self) -> BnG1 {
+    pub fn verification_key(&self) -> BnG1 {
         self.vk
     }
 
-    pub fn get_index(&self) -> usize {
+    pub fn index(&self) -> usize {
         self.index
     }
 
@@ -98,36 +97,42 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         let cap_r_1 = (g * r).to_affine();
         let cap_r_2 = (h * r).to_affine();
 
-        let mut hash_state = Blake2bState::new();
-        hash_state
-            .update(g.to_bytes().as_ref())
-            .update(h.to_bytes().as_ref())
-            .update(cap_r_1.to_bytes().as_ref())
-            .update(cap_r_2.to_bytes().as_ref())
-            .update(self.vk.to_bytes().as_ref())
-            .update(v.to_bytes().as_ref());
-        let data: [u8; 64] = hash_state
-            .finalize()
-            .as_ref()
-            .try_into()
-            .expect("cannot convert hash result to array");
+        let mut bytes = v.y.to_bytes().to_vec();
+        bytes.extend(v.x.to_bytes());
+        bytes.extend(self.vk.y.to_bytes());
+        bytes.extend(self.vk.x.to_bytes());
+        bytes.extend(cap_r_2.y.to_bytes());
+        bytes.extend(cap_r_2.x.to_bytes());
+        bytes.extend(cap_r_1.y.to_bytes());
+        bytes.extend(cap_r_1.x.to_bytes());
+        bytes.extend(h.y.to_bytes());
+        bytes.extend(h.x.to_bytes());
+        bytes.extend(g.y.to_bytes());
+        bytes.extend(g.x.to_bytes());
+        bytes.reverse();
 
-        let c = BnScalar::from_uniform_bytes(&data);
+        let hash_state: [u8; 32] = Keccak256::new()
+            .chain_update(&bytes)
+            .finalize()
+            .to_vec()
+            .try_into()
+            .unwrap();
+        let c = BnScalar::from_raw(from_be_bytes(&hash_state));
         let z = c * self.sk + r;
         let proof = (z, c);
 
         PartialEval {
             index: self.index,
-            v,
+            value: v,
             proof,
         }
     }
 }
 
 pub struct PartialEval<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
-    index: usize,
-    v: BnG1,
-    proof: (BnScalar, BnScalar),
+    pub index: usize,
+    pub value: BnG1,
+    pub proof: (BnScalar, BnScalar),
 }
 
 impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
@@ -144,25 +149,33 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         let g = BnG1::generator();
         let z = self.proof.0;
         let c = self.proof.1;
-        let v = self.v;
+        let v = self.value;
 
         let cap_r_1 = ((g * z) - (vk * c)).to_affine();
         let cap_r_2 = ((h * z) - (v * c)).to_affine();
 
-        let mut hash_state = Blake2bState::new();
-        hash_state
-            .update(g.to_bytes().as_ref())
-            .update(h.to_bytes().as_ref())
-            .update(cap_r_1.to_bytes().as_ref())
-            .update(cap_r_2.to_bytes().as_ref())
-            .update(vk.to_bytes().as_ref())
-            .update(v.to_bytes().as_ref());
-        let data: [u8; 64] = hash_state
+        // reverse order to match solidity version
+        let mut bytes = v.y.to_bytes().to_vec();
+        bytes.extend(v.x.to_bytes());
+        bytes.extend(vk.y.to_bytes());
+        bytes.extend(vk.x.to_bytes());
+        bytes.extend(cap_r_2.y.to_bytes());
+        bytes.extend(cap_r_2.x.to_bytes());
+        bytes.extend(cap_r_1.y.to_bytes());
+        bytes.extend(cap_r_1.x.to_bytes());
+        bytes.extend(h.y.to_bytes());
+        bytes.extend(h.x.to_bytes());
+        bytes.extend(g.y.to_bytes());
+        bytes.extend(g.x.to_bytes());
+        bytes.reverse();
+
+        let hash_state: [u8; 32] = Keccak256::new()
+            .chain_update(&bytes)
             .finalize()
-            .as_ref()
+            .to_vec()
             .try_into()
-            .expect("cannot convert hash result to array");
-        let c_tilde = BnScalar::from_uniform_bytes(&data);
+            .unwrap();
+        let c_tilde = BnScalar::from_raw(from_be_bytes(&hash_state));
 
         if c != c_tilde {
             return Err(Error::VerifyFailed);
@@ -222,12 +235,16 @@ pub fn combine_partial_evaluations<const THRESHOLD: usize, const NUMBER_OF_MEMBE
     let pis: Vec<_> = sigmas
         .iter()
         .zip(lambdas.iter())
-        .map(|(sigma, lambda)| sigma.v * lambda)
+        .map(|(sigma, lambda)| sigma.value * lambda)
         .collect();
     let sum = pis.iter().skip(1).fold(pis[0], |sum, p| sum + p);
 
     let proof = sum.to_affine();
-    let value = blake2b(proof.to_bytes().as_ref()).as_bytes().to_vec();
+    let value = Keccak256::new()
+        .chain_update(proof.x.to_bytes())
+        .chain_update(proof.y.to_bytes())
+        .finalize()
+        .to_vec();
 
     Ok(PseudoRandom { proof, value })
 }
@@ -237,11 +254,11 @@ impl PseudoRandom {
         Self { proof, value }
     }
 
-    pub fn get_value(&self) -> &[u8] {
+    pub fn value(&self) -> &[u8] {
         &self.value
     }
 
-    pub fn get_proof(&self) -> &BnG1 {
+    pub fn proof(&self) -> &BnG1 {
         &self.proof
     }
 
@@ -261,11 +278,13 @@ impl PseudoRandom {
             return Err(Error::VerifyFailed);
         }
 
-        if !self
-            .value
-            .as_slice()
-            .eq(blake2b(self.proof.to_bytes().as_ref()).as_ref())
-        {
+        let value = Keccak256::new()
+            .chain_update(self.proof.x.to_bytes())
+            .chain_update(self.proof.y.to_bytes())
+            .finalize()
+            .to_vec();
+
+        if !self.value.as_slice().eq(&value) {
             return Err(Error::VerifyFailed);
         }
 
