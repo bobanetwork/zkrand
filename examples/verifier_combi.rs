@@ -8,25 +8,22 @@ use halo2wrong::curves::grumpkin::G1Affine as GkG1;
 use halo2wrong::halo2::plonk::{create_proof, verify_proof, Circuit, ProvingKey};
 use halo2wrong::halo2::poly::commitment::ParamsProver;
 use halo2wrong::halo2::poly::kzg::commitment::{ParamsKZG, ParamsVerifierKZG};
-use halo2wrong::halo2::poly::kzg::multiopen::{ProverSHPLONK, VerifierSHPLONK};
-use halo2wrong::halo2::poly::kzg::strategy::SingleStrategy;
-use halo2wrong::halo2::transcript::TranscriptWriterBuffer;
 use rand_chacha::ChaCha20Rng;
 use rand_core::{OsRng, RngCore, SeedableRng};
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 use zkdvrf::{load_or_create_params, load_or_create_pk, DkgMemberParams, MemberKey};
 
-const DIR_GENERATED: &str = "./demo/contracts_generated";
+const DIR_GENERATED: &str = "./contracts/dkg-verifier";
 
-fn simulate_members<const NUMBER_OF_MEMBERS: usize>(
+fn mock_members<const NUMBER_OF_MEMBERS: usize>(
     mut rng: impl RngCore,
 ) -> (Vec<GkG1>, Vec<MemberKey>) {
     let mut members = vec![];
     let mut pks = vec![];
     for _ in 0..NUMBER_OF_MEMBERS {
         let member = MemberKey::new(&mut rng);
-        pks.push(member.get_public_key());
+        pks.push(member.public_key());
         members.push(member);
     }
     (pks, members)
@@ -108,14 +105,15 @@ fn main() {
     const NUMBER_OF_MEMBERS: usize = 5;
     let degree = 18;
 
-    //let mut rng = ChaCha20Rng::seed_from_u64(42);
-    let mut rng = OsRng;
-    let (mpks, _) = simulate_members::<NUMBER_OF_MEMBERS>(&mut rng);
+    let mut rng = ChaCha20Rng::seed_from_u64(42);
+    //let mut rng = OsRng;
+    let (mpks, _) = mock_members::<NUMBER_OF_MEMBERS>(&mut rng);
     let dkg_params =
         DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &mpks, &mut rng).unwrap();
     let circuit = dkg_params.circuit(&mut rng);
     let instance = dkg_params.instance();
     let num_instances = instance[0].len();
+    println!("num instances {:?}", num_instances);
 
     let start = start_timer!(|| format!("kzg load or setup params with degree {}", degree));
     let params_dir = "./kzg_params";
@@ -132,7 +130,10 @@ fn main() {
     let start = start_timer!(|| format!("create solidity contracts"));
     let generator = SolidityGenerator::new(&general_params, vk, Bdfg21, num_instances);
     let verifier_solidity = generator.render().unwrap();
-    save_solidity("Halo2Verifier.sol", &verifier_solidity);
+    let contract_name = format!("Halo2Verifier-{}-{}.sol", THRESHOLD, NUMBER_OF_MEMBERS);
+    #[cfg(feature = "g2chip")]
+    let contract_name = format!("Halo2Verifier-{}-{}-g2.sol", THRESHOLD, NUMBER_OF_MEMBERS);
+    save_solidity(contract_name, &verifier_solidity);
     end_timer!(start);
 
     let start = start_timer!(|| format!("compile and deploy solidity contracts"));

@@ -5,35 +5,30 @@ use halo2_solidity_verifier::{
 };
 use halo2wrong::curves::bn256::{Bn256, Fr as BnScalar, G1Affine as BnG1};
 use halo2wrong::curves::grumpkin::G1Affine as GkG1;
-use halo2wrong::halo2::plonk::{
-    create_proof, keygen_pk, keygen_vk, verify_proof, Circuit, ProvingKey,
-};
+use halo2wrong::halo2::plonk::{create_proof, verify_proof, Circuit, ProvingKey};
 use halo2wrong::halo2::poly::commitment::ParamsProver;
 use halo2wrong::halo2::poly::kzg::commitment::{ParamsKZG, ParamsVerifierKZG};
-use halo2wrong::halo2::poly::kzg::multiopen::{ProverSHPLONK, VerifierSHPLONK};
-use halo2wrong::halo2::poly::kzg::strategy::SingleStrategy;
-use halo2wrong::halo2::transcript::TranscriptWriterBuffer;
 use rand_core::{OsRng, RngCore};
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 use zkdvrf::{load_or_create_params, load_or_create_pk, DkgMemberParams, MemberKey};
 
-fn simulate_members<const NUMBER_OF_MEMBERS: usize>(
+const DIR_GENERATED: &str = "./demo/contracts_generated/separate";
+
+fn mock_members<const NUMBER_OF_MEMBERS: usize>(
     mut rng: impl RngCore,
 ) -> (Vec<GkG1>, Vec<MemberKey>) {
     let mut members = vec![];
     let mut pks = vec![];
     for _ in 0..NUMBER_OF_MEMBERS {
         let member = MemberKey::new(&mut rng);
-        pks.push(member.get_public_key());
+        pks.push(member.public_key());
         members.push(member);
     }
     (pks, members)
 }
 
 fn save_solidity(name: impl AsRef<str>, solidity: &str) {
-    const DIR_GENERATED: &str = "./contracts_generated";
-
     create_dir_all(DIR_GENERATED).unwrap();
     File::create(format!("{DIR_GENERATED}/{}", name.as_ref()))
         .unwrap()
@@ -94,7 +89,7 @@ fn main() {
 
     // let mut rng = ChaCha20Rng::seed_from_u64(42);
     let mut rng = OsRng;
-    let (mpks, _) = simulate_members::<NUMBER_OF_MEMBERS>(&mut rng);
+    let (mpks, _) = mock_members::<NUMBER_OF_MEMBERS>(&mut rng);
     let dkg_params =
         DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &mpks, &mut rng).unwrap();
     let circuit = dkg_params.circuit(&mut rng);
