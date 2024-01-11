@@ -13,7 +13,7 @@ halo2wrong = { git = "https://github.com/kitounliu/halo2wrong.git", branch = "gr
 halo2_ecc ={ package = "ecc", git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin"}
 halo2_maingate =  { package = "maingate", git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin"}
 
-sha3 = "0.9.1"
+sha3 = "0.10"
 rand_core = { version = "0.6", default-features = false }
 static_assertions = "1.1.0"
 subtle = "2.4"
@@ -21,6 +21,7 @@ blake2b_simd = "1"
 log = "0.4"
 anyhow = "1.0"
 itertools = "0.10.3"
+serde = { version = "1.0.193", features = ["derive"] }
 
 [dev-dependencies]
 ark-std = { version = "0.3", features = ["print-trace"] }
