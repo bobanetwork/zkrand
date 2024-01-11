@@ -1,9 +1,10 @@
-mod dkg;
-mod dkg_circuit;
+pub mod dkg;
+pub mod dkg_circuit;
 mod ecc_chip;
 mod error;
 mod grumpkin_chip;
 mod hash_to_curve;
+mod hash_to_curve_evm;
 mod poseidon;
 mod utils;
 
@@ -56,7 +57,7 @@ impl MemberKey {
         MemberKey { sk, pk }
     }
 
-    pub fn get_public_key(&self) -> GkG1 {
+    pub fn public_key(&self) -> GkG1 {
         self.pk
     }
 
@@ -70,7 +71,7 @@ impl MemberKey {
     }
 
     // find the index of this member in a list of public keys; member_index is array_index + 1
-    pub fn get_index(&self, public_keys: &[GkG1]) -> Option<usize> {
+    pub fn index(&self, public_keys: &[GkG1]) -> Option<usize> {
         public_keys
             .iter()
             .position(|pk| pk.eq(&self.pk))
@@ -257,9 +258,9 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
 
 #[derive(Clone, Debug)]
 pub struct DkgGlobalPubParams<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
-    ga: BnG1,
-    g2a: BnG2,
-    verify_keys: [BnG1; NUMBER_OF_MEMBERS],
+    pub ga: BnG1,
+    pub g2a: BnG2,
+    pub verify_keys: [BnG1; NUMBER_OF_MEMBERS],
 }
 
 impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
@@ -325,14 +326,14 @@ mod tests {
     use rand_chacha::ChaCha20Rng;
     use rand_core::{OsRng, SeedableRng};
 
-    fn get_members<const NUMBER_OF_MEMBERS: usize>(
+    fn mock_members<const NUMBER_OF_MEMBERS: usize>(
         mut rng: impl RngCore,
     ) -> (Vec<GkG1>, Vec<MemberKey>) {
         let mut members = vec![];
         let mut pks = vec![];
         for _ in 0..NUMBER_OF_MEMBERS {
             let member = MemberKey::new(&mut rng);
-            pks.push(member.get_public_key());
+            pks.push(member.public_key());
             members.push(member);
         }
         (pks, members)
@@ -342,7 +343,7 @@ mod tests {
         //let mut rng = ChaCha20Rng::seed_from_u64(42);
         let mut rng = OsRng;
 
-        let (pks, _) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
+        let (pks, _) = mock_members::<NUMBER_OF_MEMBERS>(&mut rng);
         // simulate member 1
         let dkg_params =
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &pks, &mut rng).unwrap();
@@ -358,11 +359,11 @@ mod tests {
     fn test_dkg_circuit() {
         #[cfg(not(feature = "g2chip"))]
         {
-            //mock_dkg_circuit::<5, 9>();
+            mock_dkg_circuit::<5, 9>();
             //   mock_dkg_circuit::<11, 21>();
             //    mock_dkg_circuit::<22, 43>();
             //    mock_dkg_circuit::<45, 88>();
-            mock_dkg_circuit::<89, 176>();
+            // mock_dkg_circuit::<89, 176>();
         }
 
         #[cfg(feature = "g2chip")]
@@ -393,7 +394,7 @@ mod tests {
 
         let degree = 18;
 
-        let (pks, _) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
+        let (pks, _) = mock_members::<NUMBER_OF_MEMBERS>(&mut rng);
         // simulate member 1
         let dkg_params =
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &pks, &mut rng).unwrap();
@@ -430,7 +431,7 @@ mod tests {
         // let mut rng = ChaCha20Rng::seed_from_u64(42);
         let mut rng = OsRng;
 
-        let (mpks, _) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
+        let (mpks, _) = mock_members::<NUMBER_OF_MEMBERS>(&mut rng);
         let dkg_params =
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &mpks, &mut rng).unwrap();
         let circuit = dkg_params.circuit(&mut rng);
@@ -539,7 +540,7 @@ mod tests {
         const NUMBER_OF_MEMBERS: usize = 5;
         const DEGREE: usize = 18;
 
-        let (mpks, _) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
+        let (mpks, _) = mock_members::<NUMBER_OF_MEMBERS>(&mut rng);
         let dkg_params =
             DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &mpks, &mut rng).unwrap();
         let circuit = dkg_params.circuit(&mut rng);
@@ -613,7 +614,7 @@ mod tests {
     fn mock_dvrf<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
         let mut rng = ChaCha20Rng::seed_from_u64(42);
 
-        let (pks, members) = get_members::<NUMBER_OF_MEMBERS>(&mut rng);
+        let (pks, members) = mock_members::<NUMBER_OF_MEMBERS>(&mut rng);
         let dkgs: Vec<_> = (0..NUMBER_OF_MEMBERS)
             .map(|i| {
                 DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(i + 1, &pks, &mut rng).unwrap()

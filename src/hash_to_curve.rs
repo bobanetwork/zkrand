@@ -2,8 +2,6 @@
 
 use halo2wrong::curves::ff::{Field, FromUniformBytes, PrimeField};
 use halo2wrong::curves::CurveExt;
-//use ff::{Field, FromUniformBytes, PrimeField};
-//use pasta_curves::arithmetic::CurveExt;
 use static_assertions::const_assert;
 use subtle::{ConditionallySelectable, ConstantTimeEq};
 

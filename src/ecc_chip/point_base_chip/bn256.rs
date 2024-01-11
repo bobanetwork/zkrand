@@ -19,18 +19,21 @@ mod tests {
     use halo2wrong::curves::bn256::Fq;
     use halo2wrong::curves::CurveAffine;
 
+    // generator
+    // 0x1985b5324411a90c6204e1743b0b24d8a185890d7b3f47e198826ff8332addb2
+    // 0x193340b18eb589e2ca74aef63bb4b57647cf2ec80a7e8035310ffe2ba96ea335
     const AUX_GENERATOR: G1Affine = G1Affine {
         x: Fq::from_raw([
-            0xc552bb41dfa2ba0d,
-            0x691f7d5660b8fa62,
-            0xbee345f4407f92ee,
-            0x16097d51a463fa51,
+            0x98826ff8332addb2,
+            0xa185890d7b3f47e1,
+            0x6204e1743b0b24d8,
+            0x1985b5324411a90c,
         ]),
         y: Fq::from_raw([
-            0x5bed59dd2ef9fb53,
-            0xa0f30dda198abe8b,
-            0x82ba6900b8e98ee8,
-            0x1be3e56d90c3a2cb,
+            0x310ffe2ba96ea335,
+            0x47cf2ec80a7e8035,
+            0xca74aef63bb4b576,
+            0x193340b18eb589e2,
         ]),
     };
 
