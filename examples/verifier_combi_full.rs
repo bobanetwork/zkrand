@@ -20,6 +20,8 @@ use zkdvrf::{
     load_or_create_pk, DkgGlobalPubParams, DkgMemberParams, MemberKey, PseudoRandom, EVAL_PREFIX,
 };
 
+// cargo run --release --features="g2chip" --example verifier_combi_full
+
 const DIR_GENERATED: &str = "./contracts/data";
 
 fn mock_members<const NUMBER_OF_MEMBERS: usize>(
