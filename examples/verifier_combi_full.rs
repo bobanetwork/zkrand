@@ -214,7 +214,7 @@ fn main() {
         .collect();
     let dkgs_pub: Vec<_> = dkgs.iter().map(|dkg| dkg.member_public_params()).collect();
 
-    // compute public parameters
+    // compute global public parameters
     let pp = dkg_global_public_params(&dkgs_pub);
     save_params(&pp);
 

@@ -39,7 +39,7 @@ mod dvrf_benches {
                 DkgShareKey::<THRESHOLD, NUMBER_OF_MEMBERS>::new(i + 1, *s, (g * s).to_affine())
             })
             .collect();
-        let vks: Vec<_> = keys.iter().map(|key| key.get_verification_key()).collect();
+        let vks: Vec<_> = keys.iter().map(|key| key.verification_key()).collect();
 
         let input = b"test first random";
 
@@ -101,11 +101,11 @@ mod dvrf_benches {
         config = Criterion::default();
         targets =
             partial_evaluate,
-            combine::<5,9>,
-            combine::<11,21>,
-            combine::<22,43>,
-            combine::<45,89>,
-            combine::<89,177>,
+            combine::<3,5>,
+            combine::<9,16>,
+            combine::<20,38>,
+            combine::<42,83>,
+            combine::<86,171>,
             partial_verify,
             pseudo_random_verify,
     }

@@ -31,7 +31,7 @@ mod dkg_benches {
         let mut pks = vec![];
         for _ in 0..NUMBER_OF_MEMBERS {
             let member = MemberKey::new(&mut rng);
-            pks.push(member.get_public_key());
+            pks.push(member.public_key());
             members.push(member);
         }
 
