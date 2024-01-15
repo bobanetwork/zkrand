@@ -2,11 +2,11 @@ use criterion::{criterion_group, Criterion};
 
 mod dvrf_benches {
     use super::*;
-    use blake2b_simd::blake2b;
     use halo2wrong::curves::bn256::{Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
     use halo2wrong::curves::group::{Curve, GroupEncoding};
     use halo2wrong::halo2::arithmetic::Field;
     use rand_core::OsRng;
+    use sha3::{Digest, Keccak256};
     use zkdvrf::{
         combine_partial_evaluations, hash_to_curve_bn, keygen, shares, DkgShareKey, PseudoRandom,
         EVAL_PREFIX,
@@ -88,7 +88,11 @@ mod dvrf_benches {
         let h: BnG1 = hasher(input).to_affine();
 
         let proof = (h * a).to_affine();
-        let value = blake2b(proof.to_bytes().as_ref()).as_bytes().to_vec();
+        let value = Keccak256::new()
+            .chain_update(proof.x.to_bytes())
+            .chain_update(proof.y.to_bytes())
+            .finalize()
+            .to_vec();
         let pr = PseudoRandom::new(proof, value);
 
         c.bench_function("dvrf pseudorandom verification", move |b| {
