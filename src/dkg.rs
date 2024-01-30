@@ -28,35 +28,57 @@ fn evaluate_poly(coeffs: &[BnScalar], i: usize) -> BnScalar {
     eval
 }
 
-// compute secret shares for n parties
-pub fn shares<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
-    coeffs: &[BnScalar],
-) -> [BnScalar; NUMBER_OF_MEMBERS] {
-    assert_eq!(coeffs.len(), THRESHOLD);
+#[derive(Debug, Clone, Copy)]
+pub struct DkgConfig {
+    threshold: usize,
+    number_of_members: usize,
+}
 
+impl DkgConfig {
+    pub fn new(threshold: usize, number_of_members: usize) -> Result<DkgConfig, Error> {
+        if threshold > 0 && threshold <= number_of_members {
+            return Ok(DkgConfig {
+                threshold,
+                number_of_members,
+            });
+        };
+
+        return Err(Error::InvalidParams {
+            threshold,
+            number_of_members,
+        });
+    }
+
+    pub fn threshold(&self) -> usize {
+        return self.threshold;
+    }
+
+    pub fn number_of_members(&self) -> usize {
+        return self.number_of_members;
+    }
+}
+
+// compute secret shares for n parties
+pub fn shares(number_of_members: usize, coeffs: &[BnScalar]) -> Vec<BnScalar> {
     let mut shares = vec![];
     let s1 = coeffs.iter().sum();
     shares.push(s1);
 
-    for i in 2..=NUMBER_OF_MEMBERS {
+    for i in 2..=number_of_members {
         let s = evaluate_poly(coeffs, i);
         shares.push(s);
     }
 
     shares
-        .try_into()
-        .expect("cannot convert share vector to array")
 }
 
-pub struct DkgShareKey<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
+pub struct DkgShareKey {
     index: usize,
     sk: BnScalar,
     vk: BnG1,
 }
 
-impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
-    DkgShareKey<THRESHOLD, NUMBER_OF_MEMBERS>
-{
+impl DkgShareKey {
     pub fn new(index: usize, sk: BnScalar, vk: BnG1) -> Self {
         DkgShareKey { index, sk, vk }
     }
@@ -70,8 +92,8 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
     }
 
     // verify the index and verification key is correct w.r.t. a list of public verification keys
-    pub fn verify(&self, vks: &[BnG1]) -> Result<(), Error> {
-        if self.index < 1 || self.index > NUMBER_OF_MEMBERS {
+    pub fn verify(&self, dkg_config: &DkgConfig, vks: &[BnG1]) -> Result<(), Error> {
+        if self.index < 1 || self.index > dkg_config.number_of_members {
             return Err(Error::InvalidIndex { index: self.index });
         }
 
@@ -83,11 +105,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
     }
 
     // compute H(x)^sk to create partial evaluation and create a schnorr style proof
-    pub fn evaluate(
-        &self,
-        input: &[u8],
-        mut rng: impl RngCore,
-    ) -> PartialEval<THRESHOLD, NUMBER_OF_MEMBERS> {
+    pub fn evaluate(&self, input: &[u8], mut rng: impl RngCore) -> PartialEval {
         let hasher = hash_to_curve_bn(EVAL_PREFIX);
         let h: BnG1 = hasher(input).to_affine();
         let v = (h * self.sk).to_affine();
@@ -129,17 +147,15 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
     }
 }
 
-pub struct PartialEval<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
+pub struct PartialEval {
     pub index: usize,
     pub value: BnG1,
     pub proof: (BnScalar, BnScalar),
 }
 
-impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
-    PartialEval<THRESHOLD, NUMBER_OF_MEMBERS>
-{
-    pub fn verify(&self, input: &[u8], vk: &BnG1) -> Result<(), Error> {
-        if self.index > NUMBER_OF_MEMBERS || self.index < 1 {
+impl PartialEval {
+    pub fn verify(&self, dkg_config: &DkgConfig, input: &[u8], vk: &BnG1) -> Result<(), Error> {
+        if self.index > dkg_config.number_of_members || self.index < 1 {
             return Err(Error::InvalidIndex { index: self.index });
         };
 
@@ -191,14 +207,14 @@ pub struct PseudoRandom {
 }
 
 // check if the indices are in the range and sorted
-fn check_indices<const NUMBER_OF_MEMBERS: usize>(indices: &[usize]) -> Result<(), Error> {
+fn check_indices(number_of_members: usize, indices: &[usize]) -> Result<(), Error> {
     for i in 0..indices.len() {
         if i < indices.len() - 1 {
             if indices[i] >= indices[i + 1] {
                 return Err(Error::InvalidOrder { index: i });
             };
         }
-        if indices[i] > NUMBER_OF_MEMBERS || indices[i] < 1 {
+        if indices[i] > number_of_members || indices[i] < 1 {
             return Err(Error::InvalidIndex { index: indices[i] });
         };
     }
@@ -207,13 +223,14 @@ fn check_indices<const NUMBER_OF_MEMBERS: usize>(indices: &[usize]) -> Result<()
 }
 
 // obtain final random
-pub fn combine_partial_evaluations<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
-    sigmas: &[PartialEval<THRESHOLD, NUMBER_OF_MEMBERS>],
+pub fn combine_partial_evaluations(
+    dkg_config: &DkgConfig,
+    sigmas: &[PartialEval],
 ) -> Result<PseudoRandom, Error> {
-    assert_eq!(sigmas.len(), THRESHOLD);
+    assert_eq!(sigmas.len(), dkg_config.threshold);
 
     let indices: Vec<_> = sigmas.iter().map(|sigma| sigma.index).collect();
-    check_indices::<NUMBER_OF_MEMBERS>(&indices)?;
+    check_indices(dkg_config.number_of_members, &indices)?;
 
     // compute Lagrange coefficients
     let indices: Vec<_> = indices.iter().map(|i| BnScalar::from(*i as u64)).collect();
@@ -322,40 +339,41 @@ mod tests {
     use super::*;
     use ark_std::{end_timer, start_timer};
     use rand_chacha::ChaCha20Rng;
-    use rand_core::SeedableRng;
-
-    const THRESHOLD: usize = 9;
-    const NUMBER_OF_MEMBERS: usize = 16;
+    use rand_core::{OsRng, SeedableRng};
 
     #[test]
     fn test_partial_evaluation() {
-        let mut rng = ChaCha20Rng::seed_from_u64(42);
+        //let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let mut rng = OsRng;
+        let dkg_config = DkgConfig::new(9, 16).unwrap(); // can be any numbers here
         let index = 1;
         let (sk, vk) = keygen(&mut rng);
-        let key = DkgShareKey::<THRESHOLD, NUMBER_OF_MEMBERS> { index, sk, vk };
+        let key = DkgShareKey { index, sk, vk };
         let x = b"the first random 20230626";
 
-        let start =
-            start_timer!(|| format!("partial evaluations ({}, {})", THRESHOLD, NUMBER_OF_MEMBERS));
+        let start = start_timer!(|| format!("partial evaluations {:?}", dkg_config));
         let sigma = key.evaluate(x, &mut rng);
         end_timer!(start);
 
-        sigma.verify(x, &vk).unwrap();
+        sigma.verify(&dkg_config, x, &vk).unwrap();
     }
 
-    fn pseudo_random<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>() {
-        let mut rng = ChaCha20Rng::seed_from_u64(42);
-        //  let index = 1;
+    fn pseudo_random(threshold: usize, number_of_members: usize) {
+        //let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let mut rng = OsRng;
 
         let g = BnG1::generator();
         let g2 = BnG2::generator();
 
-        let coeffs: Vec<_> = (0..THRESHOLD).map(|_| BnScalar::random(&mut rng)).collect();
-        let shares = shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
+        let dkg_config = DkgConfig::new(threshold, number_of_members).unwrap();
+        let coeffs: Vec<_> = (0..dkg_config.threshold())
+            .map(|_| BnScalar::random(&mut rng))
+            .collect();
+        let shares = shares(dkg_config.number_of_members(), &coeffs);
         let keys: Vec<_> = shares
             .iter()
             .enumerate()
-            .map(|(i, s)| DkgShareKey::<THRESHOLD, NUMBER_OF_MEMBERS> {
+            .map(|(i, s)| DkgShareKey {
                 index: i + 1,
                 sk: *s,
                 vk: (g * s).to_affine(),
@@ -374,31 +392,26 @@ mod tests {
         let res = evals
             .iter()
             .zip(vks.iter())
-            .all(|(e, vk)| e.verify(input, vk).is_ok());
+            .all(|(e, vk)| e.verify(&dkg_config, input, vk).is_ok());
 
         assert!(res);
 
-        let start = start_timer!(|| format!(
-            "combine partial evaluations ({}, {})",
-            THRESHOLD, NUMBER_OF_MEMBERS
-        ));
-        let pseudo_random = combine_partial_evaluations(&evals[0..THRESHOLD]).unwrap();
+        let start = start_timer!(|| format!("combine partial evaluations {:?}", dkg_config));
+        let pseudo_random =
+            combine_partial_evaluations(&dkg_config, &evals[0..dkg_config.threshold()]).unwrap();
         end_timer!(start);
 
-        let start = start_timer!(|| format!(
-            "verify pseudo random value ({}, {})",
-            THRESHOLD, NUMBER_OF_MEMBERS
-        ));
+        let start = start_timer!(|| format!("verify pseudo random value {:?}", dkg_config));
         pseudo_random.verify(input, &gpk).unwrap();
         end_timer!(start);
     }
 
     #[test]
     fn test_pseudo_random() {
-        pseudo_random::<4, 6>();
-        pseudo_random::<7, 13>();
-        pseudo_random::<14, 27>();
-        pseudo_random::<28, 55>();
-        pseudo_random::<57, 112>();
+        pseudo_random(4, 6);
+        pseudo_random(7, 13);
+        pseudo_random(14, 27);
+        pseudo_random(28, 55);
+        pseudo_random(57, 112);
     }
 }

@@ -14,7 +14,7 @@ use rand_core::{OsRng, RngCore, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::fs::{create_dir_all, File};
 use std::io::Write;
-use zkdvrf::dkg::PartialEval;
+use zkdvrf::dkg::{DkgConfig, PartialEval};
 use zkdvrf::{
     combine_partial_evaluations, dkg_global_public_params, hash_to_curve_bn, load_or_create_params,
     load_or_create_pk, DkgGlobalPubParams, DkgMemberParams, MemberKey, PseudoRandom, EVAL_PREFIX,
@@ -24,13 +24,11 @@ use zkdvrf::{
 
 const DIR_GENERATED: &str = "./contracts/data";
 
-fn mock_members<const NUMBER_OF_MEMBERS: usize>(
-    mut rng: impl RngCore,
-) -> (Vec<GkG1>, Vec<MemberKey>) {
+fn mock_members(dkg_config: &DkgConfig, mut rng: impl RngCore) -> (Vec<GkG1>, Vec<MemberKey>) {
     let mut members = vec![];
     let mut pks = vec![];
-    for _ in 0..NUMBER_OF_MEMBERS {
-        let member = MemberKey::new(&mut rng);
+    for _ in 0..dkg_config.number_of_members() {
+        let member = MemberKey::random(&mut rng);
         pks.push(member.public_key());
         members.push(member);
     }
@@ -75,9 +73,7 @@ fn save_instances(instances: &[Vec<BnScalar>]) {
     file.write_all(serialized.as_bytes()).unwrap();
 }
 
-fn save_params<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
-    gpp: &DkgGlobalPubParams<THRESHOLD, NUMBER_OF_MEMBERS>,
-) {
+fn save_params(gpp: &DkgGlobalPubParams) {
     let path = format!("{DIR_GENERATED}/g2a.json");
     let mut file = File::create(path).unwrap();
     // only save g2a
@@ -118,11 +114,7 @@ struct Eval {
     hash: [Base; 2],
 }
 
-fn save_eval<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
-    sigma: &PartialEval<THRESHOLD, NUMBER_OF_MEMBERS>,
-    vk: &BnG1,
-    hash: &BnG1,
-) {
+fn save_eval(sigma: &PartialEval, vk: &BnG1, hash: &BnG1) {
     let value = [sigma.value.x.to_bytes(), sigma.value.y.to_bytes()];
     let proof = [sigma.proof.0.to_bytes(), sigma.proof.1.to_bytes()];
     let vk = [vk.x.to_bytes(), vk.y.to_bytes()];
@@ -198,19 +190,16 @@ fn create_proof_checked(
 }
 
 fn main() {
-    const THRESHOLD: usize = 3;
-    const NUMBER_OF_MEMBERS: usize = 5;
-    let degree = 18;
-    const PROVE: bool = false;
-
     let mut rng = ChaCha20Rng::seed_from_u64(42);
 
-    let (pks, members) = mock_members::<NUMBER_OF_MEMBERS>(&mut rng);
+    let (threshold, number_of_members, degree): (usize, usize, usize) = (3, 5, 18);
+    const PROVE: bool = false;
+
+    let dkg_config = DkgConfig::new(threshold, number_of_members).unwrap();
+    let (pks, members) = mock_members(&dkg_config, &mut rng);
     // member index from 1..n
-    let dkgs: Vec<_> = (0..NUMBER_OF_MEMBERS)
-        .map(|i| {
-            DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(i + 1, &pks, &mut rng).unwrap()
-        })
+    let dkgs: Vec<_> = (0..number_of_members)
+        .map(|i| DkgMemberParams::new(dkg_config, i + 1, pks.clone(), &mut rng).unwrap())
         .collect();
     let dkgs_pub: Vec<_> = dkgs.iter().map(|dkg| dkg.member_public_params()).collect();
 
@@ -236,18 +225,16 @@ fn main() {
 
         let start =
             start_timer!(|| format!("kzg load or setup proving keys with degree {}", degree));
-        let pk =
-            load_or_create_pk::<THRESHOLD, NUMBER_OF_MEMBERS>(params_dir, &general_params, degree)
-                .unwrap();
+        let pk = load_or_create_pk(dkg_config, params_dir, &general_params, degree).unwrap();
         let vk = pk.get_vk();
         end_timer!(start);
 
         let start = start_timer!(|| format!("create solidity contracts"));
         let generator = SolidityGenerator::new(&general_params, vk, Bdfg21, num_instances);
         let verifier_solidity = generator.render().unwrap();
-        let contract_name = format!("Halo2Verifier-{}-{}.sol", THRESHOLD, NUMBER_OF_MEMBERS);
+        let contract_name = format!("Halo2Verifier-{}-{}.sol", threshold, number_of_members);
         #[cfg(feature = "g2chip")]
-        let contract_name = format!("Halo2Verifier-{}-{}-g2.sol", THRESHOLD, NUMBER_OF_MEMBERS);
+        let contract_name = format!("Halo2Verifier-{}-{}-g2.sol", threshold, number_of_members);
         save_solidity(contract_name, &verifier_solidity);
         end_timer!(start);
 
@@ -282,10 +269,12 @@ fn main() {
 
     // each member decrypt to obtain their own shares
     let mut shares = vec![];
-    for i in 0..NUMBER_OF_MEMBERS {
+    for i in 0..number_of_members {
         assert_eq!(members[i].public_key(), pks[i]);
-        let share = members[i].dkg_share_key(i + 1, &dkgs_pub).unwrap();
-        share.verify(&pp.verify_keys).unwrap();
+        let share = members[i]
+            .dkg_share_key(&dkg_config, i + 1, &dkgs_pub)
+            .unwrap();
+        share.verify(&dkg_config, &pp.verify_keys).unwrap();
 
         shares.push(share);
     }
@@ -296,16 +285,18 @@ fn main() {
     let hash: BnG1 = hasher(input).to_affine();
 
     let mut sigmas = vec![];
-    for i in 0..NUMBER_OF_MEMBERS {
+    for i in 0..number_of_members {
         let sigma = shares[i].evaluate(input, &mut rng);
-        sigma.verify(input, &pp.verify_keys[i]).unwrap();
+        sigma
+            .verify(&dkg_config, input, &pp.verify_keys[i])
+            .unwrap();
         sigmas.push(sigma);
     }
 
-    save_eval::<THRESHOLD, NUMBER_OF_MEMBERS>(&sigmas[0], &pp.verify_keys[0], &hash);
+    save_eval(&sigmas[0], &pp.verify_keys[0], &hash);
 
     // combine partial evaluations to obtain final random
-    let v = combine_partial_evaluations(&sigmas[0..THRESHOLD]).unwrap();
+    let v = combine_partial_evaluations(&dkg_config, &sigmas[0..threshold]).unwrap();
     save_pseudo(&v);
     v.verify(input, &pp.g2a).unwrap();
 }

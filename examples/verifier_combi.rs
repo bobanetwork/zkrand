@@ -12,17 +12,16 @@ use rand_chacha::ChaCha20Rng;
 use rand_core::{OsRng, RngCore, SeedableRng};
 use std::fs::{create_dir_all, File};
 use std::io::Write;
+use zkdvrf::dkg::DkgConfig;
 use zkdvrf::{load_or_create_params, load_or_create_pk, DkgMemberParams, MemberKey};
 
 const DIR_GENERATED: &str = "./contracts/dkg-verifier";
 
-fn mock_members<const NUMBER_OF_MEMBERS: usize>(
-    mut rng: impl RngCore,
-) -> (Vec<GkG1>, Vec<MemberKey>) {
+fn mock_members(dkg_config: &DkgConfig, mut rng: impl RngCore) -> (Vec<GkG1>, Vec<MemberKey>) {
     let mut members = vec![];
     let mut pks = vec![];
-    for _ in 0..NUMBER_OF_MEMBERS {
-        let member = MemberKey::new(&mut rng);
+    for _ in 0..dkg_config.number_of_members() {
+        let member = MemberKey::random(&mut rng);
         pks.push(member.public_key());
         members.push(member);
     }
@@ -101,15 +100,13 @@ fn create_proof_checked(
 }
 
 fn main() {
-    const THRESHOLD: usize = 3;
-    const NUMBER_OF_MEMBERS: usize = 5;
-    let degree = 18;
-
     let mut rng = ChaCha20Rng::seed_from_u64(42);
     //let mut rng = OsRng;
-    let (mpks, _) = mock_members::<NUMBER_OF_MEMBERS>(&mut rng);
-    let dkg_params =
-        DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &mpks, &mut rng).unwrap();
+    let (threshold, number_of_members, degree): (usize, usize, usize) = (3, 5, 18);
+
+    let dkg_config = DkgConfig::new(threshold, number_of_members).unwrap();
+    let (mpks, _) = mock_members(&dkg_config, &mut rng);
+    let dkg_params = DkgMemberParams::new(dkg_config, 1, mpks, &mut rng).unwrap();
     let circuit = dkg_params.circuit(&mut rng);
     let instance = dkg_params.instance();
     let num_instances = instance[0].len();
@@ -122,17 +119,16 @@ fn main() {
     end_timer!(start);
 
     let start = start_timer!(|| format!("kzg load or setup proving keys with degree {}", degree));
-    let pk = load_or_create_pk::<THRESHOLD, NUMBER_OF_MEMBERS>(params_dir, &general_params, degree)
-        .unwrap();
+    let pk = load_or_create_pk(dkg_config, params_dir, &general_params, degree).unwrap();
     let vk = pk.get_vk();
     end_timer!(start);
 
     let start = start_timer!(|| format!("create solidity contracts"));
     let generator = SolidityGenerator::new(&general_params, vk, Bdfg21, num_instances);
     let verifier_solidity = generator.render().unwrap();
-    let contract_name = format!("Halo2Verifier-{}-{}.sol", THRESHOLD, NUMBER_OF_MEMBERS);
+    let contract_name = format!("Halo2Verifier-{}-{}.sol", threshold, number_of_members);
     #[cfg(feature = "g2chip")]
-    let contract_name = format!("Halo2Verifier-{}-{}-g2.sol", THRESHOLD, NUMBER_OF_MEMBERS);
+    let contract_name = format!("Halo2Verifier-{}-{}-g2.sol", threshold, number_of_members);
     save_solidity(contract_name, &verifier_solidity);
     end_timer!(start);
 

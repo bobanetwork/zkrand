@@ -1,7 +1,6 @@
+use crate::dkg::DkgConfig;
 use crate::hash_to_curve::svdw_hash_to_curve;
-use crate::{
-    DkgCircuit, BIT_LEN_LIMB, DEFAULT_WINDOW_SIZE, NUMBER_OF_LIMBS, NUMBER_OF_LOOKUP_LIMBS,
-};
+use crate::{DkgCircuit, BIT_LEN_LIMB, NUMBER_OF_LIMBS, NUMBER_OF_LOOKUP_LIMBS, WINDOW_SIZE};
 use anyhow::Result;
 use halo2_ecc::integer::rns::Rns;
 use halo2_ecc::Point;
@@ -185,59 +184,60 @@ pub fn load_params(
     Ok(p)
 }
 
-pub fn load_pk<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
+pub fn load_pk(
+    dkg_config: &DkgConfig,
     params_dir: &str,
     degree: usize,
     serde_format: SerdeFormat,
 ) -> Result<ProvingKey<bn256::G1Affine>> {
     log::info!("start loading pk with degree {}", degree);
     let pk_path = if metadata(params_dir)?.is_dir() {
+        let threshold = dkg_config.threshold();
+        let number_of_members = dkg_config.number_of_members();
         // auto load
         if cfg!(feature = "g2chip") {
-            format!("{params_dir}/pk-g2-{THRESHOLD}-{NUMBER_OF_MEMBERS}-{degree}")
+            format!("{params_dir}/pk-g2-{threshold}-{number_of_members}-{degree}")
         } else {
-            format!("{params_dir}/pk-{THRESHOLD}-{NUMBER_OF_MEMBERS}-{degree}")
+            format!("{params_dir}/pk-{threshold}-{number_of_members}-{degree}")
         }
     } else {
         params_dir.to_string()
     };
     let f = File::open(pk_path)?;
 
-    let pk = ProvingKey::read::<_, DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS>>(
-        &mut BufReader::new(f),
-        serde_format,
-    )?;
+    let pk = ProvingKey::read::<_, DkgCircuit>(&mut BufReader::new(f), serde_format)?;
     log::info!("load pk successfully!");
     Ok(pk)
 }
 
-pub fn load_vk<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
+pub fn load_vk(
+    dkg_config: &DkgConfig,
     params_dir: &str,
     degree: usize,
     serde_format: SerdeFormat,
 ) -> Result<VerifyingKey<bn256::G1Affine>> {
     log::info!("start loading vk with degree {}", degree);
     let vk_path = if metadata(params_dir)?.is_dir() {
+        let threshold = dkg_config.threshold();
+        let number_of_members = dkg_config.number_of_members();
         // auto load
         if cfg!(feature = "g2chip") {
-            format!("{params_dir}/vk-g2-{THRESHOLD}-{NUMBER_OF_MEMBERS}-{degree}")
+            format!("{params_dir}/vk-g2-{threshold}-{number_of_members}-{degree}")
         } else {
-            format!("{params_dir}/vk-{THRESHOLD}-{NUMBER_OF_MEMBERS}-{degree}")
+            format!("{params_dir}/vk-{threshold}-{number_of_members}-{degree}")
         }
     } else {
         params_dir.to_string()
     };
     let f = File::open(vk_path)?;
 
-    let vk = VerifyingKey::read::<_, DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS>>(
-        &mut BufReader::new(f),
-        serde_format,
-    )?;
+    let vk = VerifyingKey::read::<_, DkgCircuit>(&mut BufReader::new(f), serde_format)?;
     log::info!("load vk successfully!");
     Ok(vk)
 }
 
-pub fn load_or_create_vk<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
+pub fn load_or_create_vk(
+    dkg_config: DkgConfig,
     params_dir: &str,
     params: &ParamsKZG<Bn256>,
     degree: usize,
@@ -249,21 +249,21 @@ pub fn load_or_create_vk<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         ));
     }
 
-    if let Ok(vk) =
-        load_vk::<THRESHOLD, NUMBER_OF_MEMBERS>(params_dir, degree, DEFAULT_SERDE_FORMAT)
-    {
+    if let Ok(vk) = load_vk(&dkg_config, params_dir, degree, DEFAULT_SERDE_FORMAT) {
         return Ok(vk);
     }
 
     log::info!("load vk failed; create and store a new vk!");
-    let circuit_dummy = DkgCircuit::<THRESHOLD, NUMBER_OF_MEMBERS>::dummy(DEFAULT_WINDOW_SIZE);
+    let circuit_dummy = DkgCircuit::dummy(dkg_config);
     let vk = keygen_vk(params, &circuit_dummy).expect("keygen_vk should not fail");
     let vk_path = {
+        let threshold = dkg_config.threshold();
+        let number_of_members = dkg_config.number_of_members();
         // auto load
         if cfg!(feature = "g2chip") {
-            format!("{params_dir}/vk-g2-{THRESHOLD}-{NUMBER_OF_MEMBERS}-{degree}")
+            format!("{params_dir}/vk-g2-{threshold}-{number_of_members}-{degree}")
         } else {
-            format!("{params_dir}/vk-{THRESHOLD}-{NUMBER_OF_MEMBERS}-{degree}")
+            format!("{params_dir}/vk-{threshold}-{number_of_members}-{degree}")
         }
     };
     let mut f_vk = File::create(vk_path)?;
@@ -272,7 +272,8 @@ pub fn load_or_create_vk<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
     Ok(vk)
 }
 
-pub fn load_or_create_pk<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>(
+pub fn load_or_create_pk(
+    dkg_config: DkgConfig,
     params_dir: &str,
     params: &ParamsKZG<Bn256>,
     degree: usize,
@@ -284,22 +285,22 @@ pub fn load_or_create_pk<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
         ));
     }
 
-    if let Ok(pk) =
-        load_pk::<THRESHOLD, NUMBER_OF_MEMBERS>(params_dir, degree, DEFAULT_SERDE_FORMAT)
-    {
+    if let Ok(pk) = load_pk(&dkg_config, params_dir, degree, DEFAULT_SERDE_FORMAT) {
         return Ok(pk);
     }
 
     log::info!("load pk failed; create and store a new vk and pk!");
-    let vk = load_or_create_vk::<THRESHOLD, NUMBER_OF_MEMBERS>(params_dir, params, degree)?;
-    let circuit_dummy = DkgCircuit::<THRESHOLD, NUMBER_OF_MEMBERS>::dummy(DEFAULT_WINDOW_SIZE);
+    let vk = load_or_create_vk(dkg_config, params_dir, params, degree)?;
+    let circuit_dummy = DkgCircuit::dummy(dkg_config);
     let pk = keygen_pk(params, vk, &circuit_dummy).expect("keygen_pk should not fail");
     let pk_path = {
+        let threshold = dkg_config.threshold();
+        let number_of_members = dkg_config.number_of_members();
         // auto load
         if cfg!(feature = "g2chip") {
-            format!("{params_dir}/pk-g2-{THRESHOLD}-{NUMBER_OF_MEMBERS}-{degree}")
+            format!("{params_dir}/pk-g2-{threshold}-{number_of_members}-{degree}")
         } else {
-            format!("{params_dir}/pk-{THRESHOLD}-{NUMBER_OF_MEMBERS}-{degree}")
+            format!("{params_dir}/pk-{threshold}-{number_of_members}-{degree}")
         }
     };
     let mut f_pk = File::create(pk_path)?;
@@ -333,8 +334,9 @@ mod tests {
             load_or_create_params(path, degree).expect("failed to load or create kzg params");
         let _verifier_params = general_params.verifier_params();
 
-        let vk = load_or_create_vk::<3, 5>("./kzg_params", &general_params, degree).unwrap();
-        let pk = load_or_create_pk::<3, 5>("./kzg_params", &general_params, degree).unwrap();
+        let dkg_config = DkgConfig::new(3, 5).unwrap();
+        let vk = load_or_create_vk(dkg_config, "./kzg_params", &general_params, degree).unwrap();
+        let pk = load_or_create_pk(dkg_config, "./kzg_params", &general_params, degree).unwrap();
         assert_eq!(
             vk.to_bytes(DEFAULT_SERDE_FORMAT),
             pk.get_vk().to_bytes(DEFAULT_SERDE_FORMAT)
