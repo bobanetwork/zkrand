@@ -1,19 +1,16 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 import {Pairing} from "./libs/Pairing.sol";
 import {Hash} from "./libs/Hash.sol";
+import {IPseudoRand} from "./IPseudoRand.sol";
 
-contract PseudoRand {
+contract PseudoRand is IPseudoRand{
     using Pairing for *;
     using Hash for *;
 
     bytes public constant DOMAIN = bytes("DVRF pseudorandom generation 2023");
     uint public constant R = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
-
-    struct PartialEvalProof {
-        uint z;
-        uint c;
-    }
 
     // verify partial eval without computing hash to point
     function verifyPartialEvalFast(
