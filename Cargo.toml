@@ -23,17 +23,34 @@ anyhow = "1.0"
 itertools = "0.10.3"
 serde = { version = "1.0.193", features = ["derive"] }
 
-[dev-dependencies]
+# for client
+clap = { version = "4.4.18", features = ["derive"] }
+config = "0.13.4"
+toml = "0.5.11"
+serde_json = "1.0.108"
+rand_chacha = "0.3.1"
 ark-std = { version = "0.3", features = ["print-trace"] }
+halo2_solidity_verifier = { git = "https://github.com/kitounliu/halo2-solidity-verifier.git", branch = "grumpkin", features = ["evm"] }
+const_format = "0.2.32"
+pretty_env_logger = "0.5.0"
+
+[dev-dependencies]
 rand_chacha = "0.3.1"
 criterion = { version = "0.4", features = ["html_reports"] }
 env_logger = "0.9.0"
-halo2_solidity_verifier = { git = "https://github.com/kitounliu/halo2-solidity-verifier.git", branch = "grumpkin", features = ["evm"] }
-serde_json = "1.0.108"
+
 
 [features]
-default = []
+default = ["g2chip"]
 g2chip = []
+
+[lib]
+name = "zkdvrf"
+path = "src/lib.rs"
+
+[[bin]]
+name = "client"
+path = "bin/client.rs"
 
 [[bench]]
 name = "dvrf_benchmark"

@@ -43,6 +43,7 @@ const POSEIDON_RATE: usize = 2;
 const POSEIDON_LEN: usize = 2;
 pub const WINDOW_SIZE: usize = 3;
 
+#[derive(Debug, Clone)]
 pub struct MemberKey {
     sk: GkScalar,
     pk: GkG1,
@@ -114,12 +115,12 @@ impl MemberKey {
 #[derive(Clone, Debug)]
 pub struct DkgMemberPublicParams {
     // each member is indexed between 1...NUMBER_OF_MEMBERS
-    index: usize,
-    public_shares: Vec<BnG1>,
-    ciphers: Vec<BnScalar>,
-    gr: GkG1,
-    ga: BnG1,
-    g2a: BnG2,
+    pub index: usize,
+    pub public_shares: Vec<BnG1>,
+    pub ciphers: Vec<BnScalar>,
+    pub gr: GkG1,
+    pub ga: BnG1,
+    pub g2a: BnG2,
 }
 
 impl DkgMemberPublicParams {
@@ -160,12 +161,12 @@ impl DkgMemberPublicParams {
 
 #[derive(Clone, Debug)]
 pub struct DkgMemberParams {
-    dkg_config: DkgConfig,
-    coeffs: Vec<BnScalar>,
-    shares: Vec<BnScalar>,
-    r: BnScalar,
-    public_keys: Vec<GkG1>,
-    public_params: DkgMemberPublicParams,
+    pub dkg_config: DkgConfig,
+    pub coeffs: Vec<BnScalar>,
+    pub shares: Vec<BnScalar>,
+    pub r: BnScalar,
+    pub public_keys: Vec<GkG1>,
+    pub public_params: DkgMemberPublicParams,
 }
 
 impl DkgMemberParams {
@@ -348,6 +349,7 @@ mod tests {
         let dkg_params = DkgMemberParams::new(dkg_config, 1, pks, &mut rng).unwrap();
         let circuit = dkg_params.circuit(&mut rng);
         let instance = dkg_params.instance();
+        println!("total instance {:?}", instance[0].len());
 
         mock_prover_verify(&circuit, instance);
         let dimension = DimensionMeasurement::measure(&circuit).unwrap();

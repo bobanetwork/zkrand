@@ -8,6 +8,7 @@ use halo2wrong::curves::group::{Curve, Group};
 use halo2wrong::curves::pairing::MillerLoopResult;
 use halo2wrong::halo2::arithmetic::Field;
 use rand_core::RngCore;
+use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 
 pub const EVAL_PREFIX: &str = "DVRF pseudorandom generation 2023";
@@ -28,7 +29,7 @@ fn evaluate_poly(coeffs: &[BnScalar], i: usize) -> BnScalar {
     eval
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct DkgConfig {
     threshold: usize,
     number_of_members: usize,
@@ -56,6 +57,16 @@ impl DkgConfig {
     pub fn number_of_members(&self) -> usize {
         return self.number_of_members;
     }
+
+    pub fn circuit_instance_size(&self) -> usize {
+        let mut length = 7 * self.number_of_members() + 6;
+        #[cfg(feature = "g2chip")]
+        {
+            length += 8;
+        }
+
+        length
+    }
 }
 
 // compute secret shares for n parties
@@ -82,8 +93,10 @@ impl DkgShareKey {
     pub fn new(index: usize, sk: BnScalar, vk: BnG1) -> Self {
         DkgShareKey { index, sk, vk }
     }
-
-    pub fn verification_key(&self) -> BnG1 {
+    pub fn secret_key(&self) -> BnScalar {
+        self.sk
+    }
+    pub fn verify_key(&self) -> BnG1 {
         self.vk
     }
 
@@ -147,6 +160,7 @@ impl DkgShareKey {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct PartialEval {
     pub index: usize,
     pub value: BnG1,
@@ -202,8 +216,8 @@ impl PartialEval {
 }
 
 pub struct PseudoRandom {
-    proof: BnG1,
-    value: Vec<u8>,
+    pub proof: BnG1,
+    pub value: Vec<u8>,
 }
 
 // check if the indices are in the range and sorted
