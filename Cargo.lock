@@ -2883,5 +2883,6 @@ dependencies = [
  "sha3 0.10.8",
  "static_assertions",
  "subtle",
+ "thiserror",
  "toml",
 ]

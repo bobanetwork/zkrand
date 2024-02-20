@@ -24,9 +24,9 @@ use halo2wrong::halo2::arithmetic::Field;
 use halo2wrong::halo2::circuit::Value;
 
 pub use crate::dkg::{
-    combine_partial_evaluations, keygen, shares, DkgShareKey, PseudoRandom, EVAL_PREFIX,
+    combine_partial_evaluations, is_dl_equal, keygen, shares, DkgConfig, DkgShareKey, PseudoRandom,
+    EVAL_PREFIX,
 };
-use crate::dkg::{is_dl_equal, DkgConfig};
 pub use crate::dkg_circuit::DkgCircuit;
 pub use crate::error::Error;
 pub use crate::poseidon::P128Pow5T3Bn;

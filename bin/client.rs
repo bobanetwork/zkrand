@@ -153,12 +153,9 @@ struct ParamsConfig {
 
 impl ParamsConfig {
     pub fn dkg_config(&self) -> Result<DkgConfig> {
-        let config = DkgConfig::new(self.threshold as usize, self.number_of_members as usize);
+        let config = DkgConfig::new(self.threshold as usize, self.number_of_members as usize)?;
 
-        match config {
-            Ok(c) => Ok(c),
-            Err(_) => Err(anyhow!("invalid thrshold and number of members for dkg")),
-        }
+        Ok(config)
     }
 }
 
@@ -186,7 +183,7 @@ fn save_share(share: &DkgShareKey) -> Result<()> {
     let index = share.index();
     let path = &format!("{DKG_SHARES_DIR}/share_{index}.json");
     let share_bytes: DkgShareKeySerde = share.into();
-    let serialized = serde_json::to_string(&share_bytes).unwrap();
+    let serialized = serde_json::to_string(&share_bytes)?;
     write(path, serialized.as_bytes())?;
     info!("dkg secret share for member {index} saved in {path}");
     Ok(())
@@ -195,7 +192,7 @@ fn save_share(share: &DkgShareKey) -> Result<()> {
 fn save_gpp(gpp: &DkgGlobalPubParams) -> Result<()> {
     let path = &format!("{DKG_DIR}/gpp.json");
     let gpp_bytes: DkgGlobalPubParamsSerde = gpp.into();
-    let serialized = serde_json::to_string(&gpp_bytes).unwrap();
+    let serialized = serde_json::to_string(&gpp_bytes)?;
     write(path, serialized.as_bytes())?;
     info!("global public parameters saved in {path}");
     Ok(())
@@ -210,11 +207,11 @@ fn save_solidity(name: impl AsRef<str>, solidity: &str) -> Result<()> {
 
 fn save_proof(proof: &[u8], instance: &[BnScalar], index: usize) -> Result<()> {
     let path = &format!("{DKG_PROOFS_DIR}/proof_{index}.dat");
-    write(path, proof).unwrap();
+    write(path, proof)?;
 
     let path = &format!("{DKG_PROOFS_DIR}/instance_{index}.json");
     let instance_bytes: Vec<_> = instance.iter().map(|x| x.to_bytes()).collect();
-    let serialized = serde_json::to_string(&instance_bytes).unwrap();
+    let serialized = serde_json::to_string(&instance_bytes)?;
     write(path, serialized.as_bytes())?;
     info!("snark proof and instance for member {index} saved in {path}");
     Ok(())
@@ -222,7 +219,7 @@ fn save_proof(proof: &[u8], instance: &[BnScalar], index: usize) -> Result<()> {
 
 fn setup(params: &ParamsConfig) -> Result<()> {
     let start = start_timer!(|| format!("kzg load or setup params with degree {}", params.degree));
-    let general_params = load_or_create_params(KZG_PARAMS_DIR, params.degree as usize).unwrap();
+    let general_params = load_or_create_params(KZG_PARAMS_DIR, params.degree as usize)?;
     end_timer!(start);
 
     let dkg_config = params.dkg_config()?;
@@ -236,15 +233,14 @@ fn setup(params: &ParamsConfig) -> Result<()> {
         KZG_PARAMS_DIR,
         &general_params,
         params.degree as usize,
-    )
-    .unwrap();
+    )?;
     let vk = pk.get_vk();
     end_timer!(start);
 
     let num_instances = dkg_config.circuit_instance_size();
     let start = start_timer!(|| format!("create solidity contracts"));
     let generator = SolidityGenerator::new(&general_params, vk, Bdfg21, num_instances);
-    let verifier_solidity = generator.render().unwrap();
+    let verifier_solidity = generator.render()?;
 
     let contract_name = if cfg!(feature = "g2chip") {
         format!(
@@ -265,15 +261,13 @@ fn setup(params: &ParamsConfig) -> Result<()> {
     Ok(())
 }
 
-fn load_config() -> ParamsConfig {
+fn load_config() -> Result<ParamsConfig> {
     let settings = Config::builder()
         .add_source(config::File::with_name(CONFIG_PATH))
-        .build()
-        .unwrap();
-    let params: ParamsConfig = settings.try_deserialize().unwrap();
-    // todo: implement StdError for zkdvrf errors
+        .build()?;
+    let params: ParamsConfig = settings.try_deserialize()?;
     // todo: automatically generate or check degree
-    params
+    Ok(params)
 }
 
 fn main() -> Result<()> {
@@ -288,7 +282,7 @@ fn main() -> Result<()> {
     create_dir_all(CONTRACT_DIR)?;
     create_dir_all(RANDOM_DIR)?;
 
-    let params = load_config();
+    let params = load_config()?;
     let dkg_config = params.dkg_config()?;
 
     let cli = Cli::parse();
@@ -352,12 +346,12 @@ fn main() -> Result<()> {
                     let mpks_bytes: Vec<Point> = serde_json::from_str(&bytes)?;
                     let mpks: Vec<GkG1> = mpks_bytes.into_iter().map(|pk| pk.into()).collect();
 
-                    let dkg = DkgMemberParams::new(dkg_config, index + 1, mpks, &mut rng).unwrap();
+                    let dkg = DkgMemberParams::new(dkg_config, index + 1, mpks, &mut rng)?;
                     {
                         // save dkg secrets for member i
                         let path = &format!("{DKG_SECRETS_DIR}/secret_{index}.json");
                         let dkg_bytes: DkgMemberParamsSerde = (&dkg).into();
-                        let serialized = serde_json::to_string(&dkg_bytes).unwrap();
+                        let serialized = serde_json::to_string(&dkg_bytes)?;
                         write(path, serialized.as_bytes())?;
                         info!("dkg secrets for member {index} generated and saved in {path}");
                     }
@@ -370,8 +364,7 @@ fn main() -> Result<()> {
                         params.degree
                     ));
                     let params_dir = "./kzg_params";
-                    let general_params =
-                        load_or_create_params(params_dir, params.degree as usize).unwrap();
+                    let general_params = load_or_create_params(params_dir, params.degree as usize)?;
                     end_timer!(start);
 
                     let start = start_timer!(|| format!(
@@ -383,8 +376,7 @@ fn main() -> Result<()> {
                         params_dir,
                         &general_params,
                         params.degree as usize,
-                    )
-                    .unwrap();
+                    )?;
                     end_timer!(start);
 
                     let start = start_timer!(|| format!("create and verify proof"));
@@ -402,7 +394,7 @@ fn main() -> Result<()> {
                     }
 
                     let proof_path = &format!("{DKG_PROOFS_DIR}/proof_{index}.dat");
-                    let proof = read(proof_path).unwrap();
+                    let proof = read(proof_path)?;
 
                     // read instance
                     let instance_path = format!("{DKG_PROOFS_DIR}/instance_{index}.json");
@@ -420,8 +412,7 @@ fn main() -> Result<()> {
                         params.degree
                     ));
                     let params_dir = "./kzg_params";
-                    let general_params =
-                        load_or_create_params(params_dir, params.degree as usize).unwrap();
+                    let general_params = load_or_create_params(params_dir, params.degree as usize)?;
                     end_timer!(start);
 
                     let start = start_timer!(|| format!(
@@ -433,8 +424,7 @@ fn main() -> Result<()> {
                         params_dir,
                         &general_params,
                         params.degree as usize,
-                    )
-                    .unwrap();
+                    )?;
                     end_timer!(start);
 
                     verify_single(general_params.verifier_params(), &vk, &proof, &instance);
@@ -463,10 +453,8 @@ fn main() -> Result<()> {
                         let member_bytes: MemberKeySerde = serde_json::from_str(&bytes)?;
                         let member: MemberKey = member_bytes.into();
 
-                        let share = member
-                            .dkg_share_key(&dkg_config, index, &dkgs_pub_ref)
-                            .unwrap();
-                        share.verify(&dkg_config, &gpp.verify_keys).unwrap();
+                        let share = member.dkg_share_key(&dkg_config, index, &dkgs_pub_ref)?;
+                        share.verify(&dkg_config, &gpp.verify_keys)?;
 
                         save_share(&share)?;
                     }
@@ -506,9 +494,7 @@ fn main() -> Result<()> {
                     let gpp_bytes: DkgGlobalPubParamsSerde = serde_json::from_str(&bytes)?;
                     let gpp: DkgGlobalPubParams = gpp_bytes.into();
 
-                    sigma
-                        .verify(&dkg_config, input.as_bytes(), &gpp.verify_keys[index - 1])
-                        .unwrap();
+                    sigma.verify(&dkg_config, input.as_bytes(), &gpp.verify_keys[index - 1])?;
                     info!("partial eval for member {index} on input \"{input}\" verified successfully");
                 }
                 RandCommands::Combine { input, verify } => {
@@ -547,17 +533,15 @@ fn main() -> Result<()> {
                         return Err(anyhow!("not enough valid partial evaluations"));
                     }
 
-                    // todo: improve error handling
                     let pseudo = combine_partial_evaluations(
                         &dkg_config,
                         &verified[0..dkg_config.threshold()],
-                    )
-                    .unwrap();
+                    )?;
 
-                    pseudo.verify(input.as_bytes(), &gpp.g2a).unwrap();
+                    pseudo.verify(input.as_bytes(), &gpp.g2a)?;
 
                     let pseudo_bytes: PseudoRandomSerde = pseudo.into();
-                    let serialized = serde_json::to_string(&pseudo_bytes).unwrap();
+                    let serialized = serde_json::to_string(&pseudo_bytes)?;
                     let path = &format!("{RANDOM_DIR}/pseudo.json");
                     write(path, serialized.as_bytes())?;
                     info!(
@@ -578,7 +562,7 @@ fn main() -> Result<()> {
                     let gpp_bytes: DkgGlobalPubParamsSerde = serde_json::from_str(&bytes)?;
                     let gpp: DkgGlobalPubParams = gpp_bytes.into();
 
-                    pseudo.verify(input.as_bytes(), &gpp.g2a).unwrap();
+                    pseudo.verify(input.as_bytes(), &gpp.g2a)?;
                     info!("final pseudorandom on input \"{input}\" verified successfully");
                 }
             }

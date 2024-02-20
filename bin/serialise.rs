@@ -3,9 +3,11 @@ use halo2wrong::curves::bn256::{Fq, Fq2, Fr, G1Affine as BnG1, G2Affine as BnG2}
 use halo2wrong::curves::grumpkin::G1Affine as GkG1;
 use halo2wrong::curves::CurveAffine;
 use serde::{Deserialize, Serialize};
-use zkdvrf::{dkg::DkgConfig, dkg::PartialEval as PartialEvalCurve, DkgGlobalPubParams as DkgGlobalPubParamsCurve,
-    DkgMemberParams as DkgMemberParamsCurve, DkgMemberPublicParams as DkgMemberPublicParamsCurve,
-    DkgShareKey as DkgShareKeyCurve, MemberKey as MemberKeyCurve, PseudoRandom as PseudoRandomCurve,
+use zkdvrf::{
+    dkg::DkgConfig, dkg::PartialEval as PartialEvalCurve,
+    DkgGlobalPubParams as DkgGlobalPubParamsCurve, DkgMemberParams as DkgMemberParamsCurve,
+    DkgMemberPublicParams as DkgMemberPublicParamsCurve, DkgShareKey as DkgShareKeyCurve,
+    MemberKey as MemberKeyCurve, PseudoRandom as PseudoRandomCurve,
 };
 
 pub type Scalar = [u8; 32];

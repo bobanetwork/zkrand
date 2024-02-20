@@ -1,6 +1,6 @@
 use crate::dkg::DkgConfig;
 use crate::hash_to_curve::svdw_hash_to_curve;
-use crate::{DkgCircuit, BIT_LEN_LIMB, NUMBER_OF_LIMBS, NUMBER_OF_LOOKUP_LIMBS, WINDOW_SIZE};
+use crate::{DkgCircuit, BIT_LEN_LIMB, NUMBER_OF_LIMBS, NUMBER_OF_LOOKUP_LIMBS};
 use anyhow::Result;
 use halo2_ecc::integer::rns::Rns;
 use halo2_ecc::Point;
