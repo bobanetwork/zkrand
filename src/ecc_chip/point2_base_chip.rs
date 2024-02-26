@@ -17,6 +17,8 @@ mod fix_mul;
 
 pub trait SplitBase<B, W: PrimeField> {
     fn split_base(base: B) -> (W, W);
+
+    fn from(c0: W, c1: W) -> B;
 }
 
 pub trait AuxGen {

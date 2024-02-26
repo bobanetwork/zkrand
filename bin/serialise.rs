@@ -172,7 +172,6 @@ impl Into<MemberKeyCurve> for &MemberKey {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DkgMemberPublicParams {
     // each member is indexed between 1...NUMBER_OF_MEMBERS
-    index: usize,
     public_shares: Vec<Point>,
     ciphers: Vec<Scalar>,
     gr: Point,
@@ -186,7 +185,6 @@ impl From<DkgMemberPublicParamsCurve> for DkgMemberPublicParams {
         let ciphers: Vec<Scalar> = mp.ciphers.iter().map(|c| c.to_bytes()).collect();
 
         DkgMemberPublicParams {
-            index: mp.index,
             public_shares,
             ciphers,
             gr: mp.gr.into(),
@@ -202,7 +200,6 @@ impl From<&DkgMemberPublicParamsCurve> for DkgMemberPublicParams {
         let ciphers: Vec<Scalar> = mp.ciphers.iter().map(|c| c.to_bytes()).collect();
 
         DkgMemberPublicParams {
-            index: mp.index,
             public_shares,
             ciphers,
             gr: mp.gr.into(),
@@ -222,7 +219,6 @@ impl Into<DkgMemberPublicParamsCurve> for DkgMemberPublicParams {
             .collect();
 
         DkgMemberPublicParamsCurve {
-            index: self.index,
             public_shares,
             ciphers,
             gr: self.gr.into(),
@@ -242,7 +238,6 @@ impl Into<DkgMemberPublicParamsCurve> for &DkgMemberPublicParams {
             .collect();
 
         DkgMemberPublicParamsCurve {
-            index: self.index,
             public_shares,
             ciphers,
             gr: (&self.gr).into(),

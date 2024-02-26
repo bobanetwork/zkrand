@@ -58,7 +58,7 @@ impl DkgConfig {
         return self.number_of_members;
     }
 
-    pub fn circuit_instance_size(&self) -> usize {
+    pub fn instance_size(&self) -> usize {
         let mut length = 7 * self.number_of_members() + 6;
         #[cfg(feature = "g2chip")]
         {

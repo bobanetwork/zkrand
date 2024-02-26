@@ -20,6 +20,7 @@ use halo2wrong::curves::ff::PrimeField;
 use halo2wrong::curves::group::prime::PrimeCurveAffine;
 use halo2wrong::curves::group::Curve;
 use halo2wrong::curves::grumpkin::{Fr as GkScalar, G1Affine as GkG1};
+use halo2wrong::curves::CurveAffine;
 use halo2wrong::halo2::arithmetic::Field;
 use halo2wrong::halo2::circuit::Value;
 
@@ -32,12 +33,14 @@ pub use crate::error::Error;
 pub use crate::poseidon::P128Pow5T3Bn;
 #[cfg(feature = "g2chip")]
 use crate::utils::point2_to_public;
-use crate::utils::point_to_public;
 pub use crate::utils::{hash_to_curve_bn, hash_to_curve_grumpkin, mod_n, rns_setup};
+use crate::utils::{point_to_public, public_to_point, public_to_point2};
 
 const BIT_LEN_LIMB: usize = 68;
 const NUMBER_OF_LIMBS: usize = 4;
 const WRAP_LEN: usize = 2;
+const COORD_LEN: usize = NUMBER_OF_LIMBS / WRAP_LEN;
+const POINT_LEN: usize = COORD_LEN * 2;
 const POSEIDON_WIDTH: usize = 3;
 const POSEIDON_RATE: usize = 2;
 const POSEIDON_LEN: usize = 2;
@@ -115,7 +118,6 @@ impl MemberKey {
 #[derive(Clone, Debug)]
 pub struct DkgMemberPublicParams {
     // each member is indexed between 1...NUMBER_OF_MEMBERS
-    pub index: usize,
     pub public_shares: Vec<BnG1>,
     pub ciphers: Vec<BnScalar>,
     pub gr: GkG1,
@@ -128,10 +130,10 @@ impl DkgMemberPublicParams {
         let (rns_base, _) = rns_setup::<BnG1>(0);
         let rns_base = Rc::new(rns_base);
 
-        let mut public_data = point_to_public(Rc::clone(&rns_base), self.ga, WRAP_LEN);
+        let mut public_data = point_to_public(Rc::clone(&rns_base), self.ga);
 
         for i in 0..pks.len() {
-            let gs_public = point_to_public(Rc::clone(&rns_base), self.public_shares[i], WRAP_LEN);
+            let gs_public = point_to_public(Rc::clone(&rns_base), self.public_shares[i]);
             public_data.extend(gs_public);
         }
 
@@ -145,7 +147,7 @@ impl DkgMemberPublicParams {
         }
 
         #[cfg(feature = "g2chip")]
-        let g2a_public = point2_to_public(Rc::clone(&rns_base), self.g2a, WRAP_LEN);
+        let g2a_public = point2_to_public(Rc::clone(&rns_base), self.g2a);
         #[cfg(feature = "g2chip")]
         public_data.extend(g2a_public);
 
@@ -156,6 +158,54 @@ impl DkgMemberPublicParams {
     // check if ga and g2a have the same exponent
     pub fn check_public(&self) -> Result<(), Error> {
         is_dl_equal(&self.ga, &self.g2a)
+    }
+
+    #[cfg(feature = "g2chip")]
+    pub fn from(dkg_config: &DkgConfig, instance: &[BnScalar]) -> (Self, Vec<GkG1>) {
+        let len = dkg_config.instance_size();
+        assert_eq!(len, instance.len());
+
+        // read ga
+        let ga: BnG1 = public_to_point(&instance[0..POINT_LEN]);
+
+        // read gs1,..., gs_n
+        let mut public_shares: Vec<BnG1> = vec![];
+        let mut begin = POINT_LEN;
+        for _ in 0..dkg_config.number_of_members() {
+            let gs: BnG1 = public_to_point(&instance[begin..begin + POINT_LEN]);
+            public_shares.push(gs);
+            begin += POINT_LEN;
+        }
+
+        // read gr
+        let gr = GkG1::from_xy(instance[begin], instance[begin + 1]).unwrap();
+        begin += 2;
+
+        // read pk1, cipher1, ... pk_n, cipher_n
+        let mut pks = vec![];
+        let mut ciphers = vec![];
+        for _ in 0..dkg_config.number_of_members() {
+            let pk = GkG1::from_xy(instance[begin], instance[begin + 1]).unwrap();
+            let cipher = instance[begin + 2];
+
+            pks.push(pk);
+            ciphers.push(cipher);
+
+            begin += 3;
+        }
+
+        // todo: read g2a
+        let g2a: BnG2 = public_to_point2(&instance[begin..]);
+
+        let pp = Self {
+            public_shares,
+            ciphers,
+            gr,
+            ga,
+            g2a,
+        };
+
+        (pp, pks)
     }
 }
 
@@ -172,15 +222,10 @@ pub struct DkgMemberParams {
 impl DkgMemberParams {
     pub fn new(
         dkg_config: DkgConfig,
-        index: usize,
         public_keys: Vec<GkG1>,
         mut rng: impl RngCore,
     ) -> Result<Self, Error> {
         assert_eq!(public_keys.len(), dkg_config.number_of_members());
-
-        if index < 1 || index > dkg_config.number_of_members() {
-            return Err(Error::InvalidIndex { index });
-        }
 
         // generate random coefficients for polynomial
         let coeffs: Vec<_> = (0..dkg_config.threshold())
@@ -216,7 +261,6 @@ impl DkgMemberParams {
         }
 
         let public_params = DkgMemberPublicParams {
-            index,
             public_shares,
             ciphers,
             gr,
@@ -345,8 +389,7 @@ mod tests {
 
         let dkg_config = DkgConfig::new(threshold, number_of_members).unwrap();
         let (pks, _) = mock_members(&dkg_config, &mut rng);
-        // simulate member 1
-        let dkg_params = DkgMemberParams::new(dkg_config, 1, pks, &mut rng).unwrap();
+        let dkg_params = DkgMemberParams::new(dkg_config, pks, &mut rng).unwrap();
         let circuit = dkg_params.circuit(&mut rng);
         let instance = dkg_params.instance();
         println!("total instance {:?}", instance[0].len());
@@ -387,8 +430,7 @@ mod tests {
 
         let dkg_config = DkgConfig::new(threshold, number_of_members).unwrap();
         let (pks, _) = mock_members(&dkg_config, &mut rng);
-        // simulate member 1
-        let dkg_params = DkgMemberParams::new(dkg_config, 1, pks, &mut rng).unwrap();
+        let dkg_params = DkgMemberParams::new(dkg_config, pks, &mut rng).unwrap();
         let circuit1 = dkg_params.circuit(&mut rng);
         let instance1 = dkg_params.instance();
         mock_prover_verify(&circuit1, instance1);
@@ -424,7 +466,7 @@ mod tests {
 
         let dkg_config = DkgConfig::new(threshold, number_of_members).unwrap();
         let (mpks, _) = mock_members(&dkg_config, &mut rng);
-        let dkg_params = DkgMemberParams::new(dkg_config, 1, mpks, &mut rng).unwrap();
+        let dkg_params = DkgMemberParams::new(dkg_config, mpks, &mut rng).unwrap();
         let circuit = dkg_params.circuit(&mut rng);
         let instance = dkg_params.instance();
         let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
@@ -532,7 +574,7 @@ mod tests {
 
         let dkg_config = DkgConfig::new(threshold, number_of_members).unwrap();
         let (mpks, _) = mock_members(&dkg_config, &mut rng);
-        let dkg_params = DkgMemberParams::new(dkg_config, 1, mpks, &mut rng).unwrap();
+        let dkg_params = DkgMemberParams::new(dkg_config, mpks, &mut rng).unwrap();
         let circuit = dkg_params.circuit(&mut rng);
         let instance = dkg_params.instance();
         let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
@@ -604,7 +646,7 @@ mod tests {
         let dkg_config = DkgConfig::new(threshold, number_of_members).unwrap();
         let (pks, members) = mock_members(&dkg_config, &mut rng);
         let dkgs: Vec<_> = (0..number_of_members)
-            .map(|i| DkgMemberParams::new(dkg_config, i + 1, pks.clone(), &mut rng).unwrap())
+            .map(|i| DkgMemberParams::new(dkg_config, pks.clone(), &mut rng).unwrap())
             .collect();
 
         let dkgs_pub: Vec<_> = dkgs.iter().map(|dkg| dkg.member_public_params()).collect();

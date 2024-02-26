@@ -5,6 +5,7 @@ use crate::{
     DKG_DIR, DKG_SECRETS_DIR, DKG_SHARES_DIR, MEMBERS_DIR, MEM_PUBLIC_KEYS_PATH, RANDOM_DIR,
 };
 use anyhow::Result;
+use halo2wrong::curves::bn256::Fr as BnScalar;
 use rand_core::RngCore;
 use std::fs::{read_to_string, write};
 use zkdvrf::dkg::{DkgConfig, PartialEval};
@@ -34,10 +35,21 @@ fn save_params(
         write(path, serialized.as_bytes())?;
     }
 
+    // todo: split gpk and vks
     {
         let path = &format!("{DKG_DIR}/gpp.json");
         let gpp_bytes: crate::serialise::DkgGlobalPubParams = gpp.into();
         let serialized = serde_json::to_string(&gpp_bytes).unwrap();
+        write(path, serialized.as_bytes())?;
+
+        let path = &format!("{DKG_DIR}/gpk.json");
+        let gpk = gpp_bytes.g2a;
+        let serialized = serde_json::to_string(&gpk).unwrap();
+        write(path, serialized.as_bytes())?;
+
+        let path = &format!("{DKG_DIR}/vks.json");
+        let vks = gpp_bytes.verify_keys;
+        let serialized = serde_json::to_string(&vks).unwrap();
         write(path, serialized.as_bytes())?;
     }
 
@@ -63,9 +75,22 @@ fn save_evals(sigmas: &[PartialEval], pseudo: &PseudoRandom) -> Result<()> {
     write(path, &seralised)?;
 
     let bytes: crate::serialise::PseudoRandom = pseudo.into();
-    let seralised = serde_json::to_string(&bytes)?;
+    let serialised = serde_json::to_string(&bytes)?;
     let path = format!("{RANDOM_DIR}/pseudo.json");
-    write(path, &seralised)?;
+    write(path, &serialised)?;
+    Ok(())
+}
+
+fn save_instances(instances: &[Vec<BnScalar>]) -> Result<()> {
+    let path = format!("{DKG_DIR}/all_instances.json");
+    let mut instances_bytes = vec![];
+    for instance in instances.iter() {
+        let bytes: Vec<_> = instance.iter().map(|x| x.to_bytes()).collect();
+        instances_bytes.push(bytes);
+    }
+    // Write the bytes to the file
+    let serialized = serde_json::to_string(&instances_bytes).unwrap();
+    write(path, &serialized)?;
     Ok(())
 }
 
@@ -108,9 +133,12 @@ pub fn mock_dkg(dkg_config: &DkgConfig, mut rng: impl RngCore) -> Result<()> {
 
     // member index from 1..n
     let dkgs: Vec<_> = (0..dkg_config.number_of_members())
-        .map(|i| DkgMemberParams::new(*dkg_config, i + 1, mpks.clone(), &mut rng).unwrap())
+        .map(|_| DkgMemberParams::new(*dkg_config, mpks.clone(), &mut rng).unwrap())
         .collect();
     let dkgs_pub: Vec<_> = dkgs.iter().map(|dkg| dkg.member_public_params()).collect();
+
+    let instances: Vec<_> = dkgs.iter().map(|dkg| dkg.instance()[0].clone()).collect();
+    save_instances(&instances)?;
 
     // compute global public parameters
     let pp = dkg_global_public_params(&dkgs_pub);

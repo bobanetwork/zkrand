@@ -199,7 +199,7 @@ fn main() {
     let (pks, members) = mock_members(&dkg_config, &mut rng);
     // member index from 1..n
     let dkgs: Vec<_> = (0..number_of_members)
-        .map(|i| DkgMemberParams::new(dkg_config, i + 1, pks.clone(), &mut rng).unwrap())
+        .map(|_| DkgMemberParams::new(dkg_config, pks.clone(), &mut rng).unwrap())
         .collect();
     let dkgs_pub: Vec<_> = dkgs.iter().map(|dkg| dkg.member_public_params()).collect();
 
@@ -229,7 +229,7 @@ fn main() {
         let vk = pk.get_vk();
         end_timer!(start);
 
-        let start = start_timer!(|| format!("create solidity contracts"));
+        let start = start_timer!(|| "create solidity contracts");
         let generator = SolidityGenerator::new(&general_params, vk, Bdfg21, num_instances);
         let verifier_solidity = generator.render().unwrap();
         let contract_name = format!("Halo2Verifier-{}-{}.sol", threshold, number_of_members);
@@ -238,7 +238,7 @@ fn main() {
         save_solidity(contract_name, &verifier_solidity);
         end_timer!(start);
 
-        let start = start_timer!(|| format!("compile and deploy solidity contracts"));
+        let start = start_timer!(|| "compile and deploy solidity contracts");
         let verifier_creation_code = compile_solidity(&verifier_solidity);
         println!(
             "verifier creation code size: {:?}",
@@ -250,7 +250,7 @@ fn main() {
         end_timer!(start);
 
         let calldata = {
-            let start = start_timer!(|| format!("create and verify proof"));
+            let start = start_timer!(|| "create and verify proof");
             let proof = create_proof_checked(&general_params, &pk, circuit, &instance0, &mut rng);
             end_timer!(start);
             println!("size of proof {:?}", proof.len());
@@ -260,7 +260,7 @@ fn main() {
             encode_calldata(None, &proof, &instance0)
         };
         println!("calldata size {:?}", calldata.len());
-        let start = start_timer!(|| format!("evm call"));
+        let start = start_timer!(|| "evm call");
         let (gas_cost, output) = evm.call(verifier_address, calldata);
         end_timer!(start);
         assert_eq!(output, [vec![0; 31], vec![1]].concat());

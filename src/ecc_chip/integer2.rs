@@ -2,7 +2,6 @@ use halo2_ecc::integer::rns::{Integer, Rns};
 use halo2_ecc::integer::{AssignedInteger, IntegerChip, IntegerConfig, IntegerInstructions};
 use halo2_maingate::{AssignedCondition, MainGate};
 use halo2wrong::curves::ff::PrimeField;
-//use halo2wrong::halo2::circuit::Value;
 use halo2wrong::halo2::plonk::Error as PlonkError;
 use halo2wrong::RegionCtx;
 use std::rc::Rc;

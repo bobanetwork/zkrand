@@ -1,6 +1,9 @@
 use crate::dkg::DkgConfig;
 use crate::hash_to_curve::svdw_hash_to_curve;
-use crate::{DkgCircuit, BIT_LEN_LIMB, NUMBER_OF_LIMBS, NUMBER_OF_LOOKUP_LIMBS};
+use crate::{
+    DkgCircuit, BIT_LEN_LIMB, COORD_LEN, NUMBER_OF_LIMBS, NUMBER_OF_LOOKUP_LIMBS, POINT_LEN,
+    WRAP_LEN,
+};
 use anyhow::Result;
 use halo2_ecc::integer::rns::Rns;
 use halo2_ecc::Point;
@@ -49,14 +52,14 @@ pub fn rns_setup<C: CurveAffine>(
 pub fn point_to_public<W: PrimeField, N: PrimeField>(
     rns: Rc<Rns<W, N, NUMBER_OF_LIMBS, BIT_LEN_LIMB>>,
     point: impl CurveAffine<Base = W>,
-    wrap_len: usize,
 ) -> Vec<N> {
     assert!(BIT_LEN_LIMB < 128);
-    assert!(BIT_LEN_LIMB * wrap_len < N::NUM_BITS as usize);
+    assert!(BIT_LEN_LIMB * WRAP_LEN < N::NUM_BITS as usize);
     // for simplicity
-    assert_eq!(NUMBER_OF_LIMBS % wrap_len, 0);
+    assert_eq!(NUMBER_OF_LIMBS % WRAP_LEN, 0);
 
-    let num = NUMBER_OF_LIMBS / wrap_len;
+    // number of elements of each coordinate
+    let num = NUMBER_OF_LIMBS / WRAP_LEN;
     let base = N::from_u128(1 << BIT_LEN_LIMB);
 
     let point = Point::new(rns, point);
@@ -64,9 +67,9 @@ pub fn point_to_public<W: PrimeField, N: PrimeField>(
     let mut wrapped = vec![];
     for limbs in [point.x().limbs(), point.y().limbs()] {
         for i in 0..num {
-            let begin = i * wrap_len;
-            let mut s = limbs[begin + wrap_len - 1].clone().into();
-            for j in (0..wrap_len - 1).rev() {
+            let begin = i * WRAP_LEN;
+            let mut s = limbs[begin + WRAP_LEN - 1].clone().into();
+            for j in (0..WRAP_LEN - 1).rev() {
                 s = s * base + limbs[begin + j];
             }
             wrapped.push(s);
@@ -76,18 +79,41 @@ pub fn point_to_public<W: PrimeField, N: PrimeField>(
     wrapped
 }
 
-#[cfg(feature = "g2chip")]
+pub fn public_to_point<W: PrimeField, N: PrimeField<Repr = W::Repr>, C: CurveAffine<Base = W>>(
+    public: &[N],
+) -> C {
+    assert_eq!(public.len(), POINT_LEN);
+
+    let two = W::from(2);
+    let base = two.pow([(BIT_LEN_LIMB * WRAP_LEN) as u64]);
+
+    let mut x = W::from_repr(public[COORD_LEN - 1].to_repr()).unwrap();
+    for i in (0..COORD_LEN - 1).rev() {
+        let v = W::from_repr(public[i].to_repr()).unwrap();
+        x = x * base + v;
+    }
+
+    let mut y = W::from_repr(public[POINT_LEN - 1].to_repr()).unwrap();
+    for i in (COORD_LEN..POINT_LEN - 1).rev() {
+        let v = W::from_repr(public[i].to_repr()).unwrap();
+        y = y * base + v;
+    }
+
+    let point = C::from_xy(x, y).unwrap();
+    point
+}
+
 pub fn point2_to_public<W: PrimeField, N: PrimeField, C: CurveAffine + SplitBase<C::Base, W>>(
     rns: Rc<Rns<W, N, NUMBER_OF_LIMBS, BIT_LEN_LIMB>>,
     point: C,
-    wrap_len: usize,
 ) -> Vec<N> {
     assert!(BIT_LEN_LIMB < 128);
-    assert!(BIT_LEN_LIMB * wrap_len < N::NUM_BITS as usize);
+    assert!(BIT_LEN_LIMB * WRAP_LEN < N::NUM_BITS as usize);
     // for simplicity
-    assert_eq!(NUMBER_OF_LIMBS * 2 % wrap_len, 0);
+    assert_eq!(NUMBER_OF_LIMBS * 2 % WRAP_LEN, 0);
 
-    let num = NUMBER_OF_LIMBS * 2 / wrap_len;
+    // number of elements of each coordinate
+    let num = NUMBER_OF_LIMBS * 2 / WRAP_LEN;
     let base = N::from_u128(1 << BIT_LEN_LIMB);
 
     let point = Point2::new(rns, point);
@@ -95,9 +121,9 @@ pub fn point2_to_public<W: PrimeField, N: PrimeField, C: CurveAffine + SplitBase
     let mut wrapped = vec![];
     for limbs in [point.x().limbs(), point.y().limbs()] {
         for i in 0..num {
-            let begin = i * wrap_len;
-            let mut s = limbs[begin + wrap_len - 1].clone().into();
-            for j in (0..wrap_len - 1).rev() {
+            let begin = i * WRAP_LEN;
+            let mut s = limbs[begin + WRAP_LEN - 1].clone().into();
+            for j in (0..WRAP_LEN - 1).rev() {
                 s = s * base + limbs[begin + j];
             }
             wrapped.push(s);
@@ -105,6 +131,38 @@ pub fn point2_to_public<W: PrimeField, N: PrimeField, C: CurveAffine + SplitBase
     }
 
     wrapped
+}
+
+pub fn public_to_point2<
+    W: PrimeField,
+    N: PrimeField<Repr = W::Repr>,
+    C: CurveAffine + SplitBase<C::Base, W>,
+>(
+    public: &[N],
+) -> C {
+    assert_eq!(public.len(), POINT_LEN * 2);
+
+    let two = W::from(2);
+    let base = two.pow([(BIT_LEN_LIMB * WRAP_LEN) as u64]);
+
+    let mut coords = vec![];
+    for i in 0..4 {
+        let begin = i * COORD_LEN;
+        let end = begin + COORD_LEN - 1;
+
+        let mut c = W::from_repr(public[end].to_repr()).unwrap();
+        for i in (begin..end).rev() {
+            let v = W::from_repr(public[i].to_repr()).unwrap();
+            c = c * base + v;
+        }
+
+        coords.push(c);
+    }
+
+    let x = <C as SplitBase<C::Base, W>>::from(coords[0], coords[1]);
+    let y = <C as SplitBase<C::Base, W>>::from(coords[2], coords[3]);
+
+    C::from_xy(x, y).unwrap()
 }
 
 pub fn hash_to_curve_bn<'a>(domain_prefix: &'a str) -> Box<dyn Fn(&[u8]) -> bn256::G1 + 'a> {
@@ -312,7 +370,10 @@ pub fn load_or_create_pk(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use halo2wrong::curves::bn256::{Fq, Fr, G1Affine as BnG1, G2Affine as BnG2};
     use halo2wrong::halo2::poly::commitment::ParamsProver;
+    use rand_chacha::ChaCha20Rng;
+    use rand_core::{OsRng, SeedableRng};
 
     #[test]
     fn test_hash_to_curve() {
@@ -341,5 +402,24 @@ mod tests {
             vk.to_bytes(DEFAULT_SERDE_FORMAT),
             pk.get_vk().to_bytes(DEFAULT_SERDE_FORMAT)
         )
+    }
+
+    #[test]
+    fn test_conversion() {
+        //let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let mut rng = OsRng;
+
+        let (rns_base, _) = rns_setup::<BnG1>(0);
+        let rns_base = Rc::new(rns_base);
+
+        let g = BnG1::random(&mut rng);
+        let public = point_to_public(Rc::clone(&rns_base), g);
+        let point = public_to_point::<Fq, Fr, BnG1>(&public);
+        assert_eq!(g, point);
+
+        let g2 = BnG2::random(&mut rng);
+        let public2 = point2_to_public(Rc::clone(&rns_base), g2);
+        let point2 = public_to_point2::<Fq, Fr, BnG2>(&public2);
+        assert_eq!(g2, point2);
     }
 }

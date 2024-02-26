@@ -19,10 +19,12 @@ The configuration is saved at "data/config.toml"
 
 #### setup
 ```
-$ RUST_LOG=info ./target/release/client setup
+$ RUST_LOG=info ./target/release/client setup -s
 ```
 This generates KZG parameters, SNARK proving/verifying keys for DKG-circuit, and verification contract for SNARK proofs. 
 The parameters are stored in "kzg_params" and the generated contract in "contracts"
+The option `-s` splits the verifier contract and verification key contract so that the verifier contract stays the same for different (t,n) values.
+The verification key contract is different for different (t,n) values. 
 
 ### Mock
 Members can be simulated using

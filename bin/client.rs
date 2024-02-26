@@ -3,7 +3,7 @@ use ark_std::{end_timer, start_timer};
 use clap::{Args, Parser, Subcommand};
 use config::Config;
 use const_format::formatcp;
-use halo2_ecc::halo2::halo2curves::bn256::Fr as BnScalar;
+use halo2_ecc::halo2::halo2curves::bn256::{Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
 use halo2_solidity_verifier::BatchOpenScheme::Bdfg21;
 use halo2_solidity_verifier::SolidityGenerator;
 use halo2wrong::curves::grumpkin::G1Affine as GkG1;
@@ -21,7 +21,7 @@ use crate::proof::{create_proof_checked, verify_single};
 use crate::serialise::{
     DkgGlobalPubParams as DkgGlobalPubParamsSerde, DkgMemberParams as DkgMemberParamsSerde,
     DkgMemberPublicParams as DkgMemberPublicParamsSerde, DkgShareKey as DkgShareKeySerde,
-    MemberKey as MemberKeySerde, PartialEval as PartialEvalSerde, Point,
+    MemberKey as MemberKeySerde, PartialEval as PartialEvalSerde, Point, Point2,
     PseudoRandom as PseudoRandomSerde,
 };
 
@@ -67,7 +67,11 @@ enum Commands {
     /// Mock n members and dkg parameters
     Mock(MockArgs),
     /// Generate kzg parameters, proving key and verifying key for SNARKs and verifier contract
-    Setup,
+    Setup {
+        /// If split is selected, verifier contract and verifying key contract are generated separately
+        #[arg(short, long, default_value_t = false)]
+        split: bool,
+    },
     /// Generate member secret/public key pair
     Keygen,
     /// Dkg commands
@@ -120,11 +124,11 @@ enum RandCommands {
         input: String,
     },
     /// Combine partial evaluations into the final pseudorandom.
-    /// Default verify = true. If verify = false, it skips the verification of partial evaluations.
+    /// If skip is selected, it skips the verification of partial evaluations.
     Combine {
         input: String,
-        #[arg(short, long, default_value_t = true)]
-        verify: bool,
+        #[arg(short, long, default_value_t = false)]
+        skip: bool,
     },
     VerifyFinal {
         input: String,
@@ -162,7 +166,7 @@ impl ParamsConfig {
 fn update_config(threshold: u32, number_of_members: u32, degree: u32) -> Result<()> {
     let min_threshold = (number_of_members + 2) / 2;
     if threshold < min_threshold || threshold > number_of_members {
-        return Err(anyhow!("invalid threshold"));
+        return Err(anyhow!("Invalid threshold"));
     }
 
     let params = ParamsConfig {
@@ -217,7 +221,7 @@ fn save_proof(proof: &[u8], instance: &[BnScalar], index: usize) -> Result<()> {
     Ok(())
 }
 
-fn setup(params: &ParamsConfig) -> Result<()> {
+fn setup(params: &ParamsConfig, split: bool) -> Result<()> {
     let start = start_timer!(|| format!("kzg load or setup params with degree {}", params.degree));
     let general_params = load_or_create_params(KZG_PARAMS_DIR, params.degree as usize)?;
     end_timer!(start);
@@ -237,27 +241,54 @@ fn setup(params: &ParamsConfig) -> Result<()> {
     let vk = pk.get_vk();
     end_timer!(start);
 
-    let num_instances = dkg_config.circuit_instance_size();
-    let start = start_timer!(|| format!("create solidity contracts"));
-    let generator = SolidityGenerator::new(&general_params, vk, Bdfg21, num_instances);
-    let verifier_solidity = generator.render()?;
+    let num_instances = dkg_config.instance_size();
 
-    let contract_name = if cfg!(feature = "g2chip") {
-        format!(
-            "Halo2Verifier-{}-{}-g2.sol",
-            dkg_config.threshold(),
-            dkg_config.number_of_members()
-        )
+    if split {
+        let start = start_timer!(|| format!(
+            "create verifier contract and verifying key contract for ({}, {}, {})",
+            params.threshold, params.number_of_members, params.degree
+        ));
+        let generator = SolidityGenerator::new(&general_params, vk, Bdfg21, num_instances);
+        let (verifier_solidity, vk_solidity) = generator.render_separately().unwrap();
+        save_solidity("Halo2Verifier.sol", &verifier_solidity)?;
+
+        let contract_name = if cfg!(feature = "g2chip") {
+            format!(
+                "Halo2VerifyingKey-{}-{}-{}-g2.sol",
+                params.threshold, params.number_of_members, params.degree,
+            )
+        } else {
+            format!(
+                "Halo2VerifyingKey-{}-{}-{}.sol",
+                params.threshold, params.number_of_members, params.degree,
+            )
+        };
+
+        save_solidity(contract_name, &vk_solidity)?;
+        end_timer!(start);
     } else {
-        format!(
-            "Halo2Verifier-{}-{}.sol",
-            dkg_config.threshold(),
-            dkg_config.number_of_members()
-        )
-    };
+        let start = start_timer!(|| format!(
+            "create solidity contracts for ({},{},{})",
+            params.threshold, params.number_of_members, params.degree
+        ));
+        let generator = SolidityGenerator::new(&general_params, vk, Bdfg21, num_instances);
+        let verifier_solidity = generator.render()?;
+        let contract_name = if cfg!(feature = "g2chip") {
+            format!(
+                "Halo2Verifier-{}-{}-{}-g2.sol",
+                params.threshold, params.number_of_members, params.degree,
+            )
+        } else {
+            format!(
+                "Halo2Verifier-{}-{}-{}.sol",
+                params.threshold, params.number_of_members, params.degree,
+            )
+        };
 
-    save_solidity(contract_name, &verifier_solidity)?;
-    end_timer!(start);
+        save_solidity(contract_name, &verifier_solidity)?;
+        end_timer!(start);
+    }
+
     Ok(())
 }
 
@@ -317,8 +348,8 @@ fn main() -> Result<()> {
                 );
             }
         }
-        Commands::Setup => {
-            setup(&params)?;
+        Commands::Setup { split } => {
+            setup(&params, split)?;
         }
         Commands::Keygen => {
             let member = MemberKey::random(&mut rng);
@@ -346,7 +377,7 @@ fn main() -> Result<()> {
                     let mpks_bytes: Vec<Point> = serde_json::from_str(&bytes)?;
                     let mpks: Vec<GkG1> = mpks_bytes.into_iter().map(|pk| pk.into()).collect();
 
-                    let dkg = DkgMemberParams::new(dkg_config, index + 1, mpks, &mut rng)?;
+                    let dkg = DkgMemberParams::new(dkg_config, mpks, &mut rng)?;
                     {
                         // save dkg secrets for member i
                         let path = &format!("{DKG_SECRETS_DIR}/secret_{index}.json");
@@ -403,9 +434,24 @@ fn main() -> Result<()> {
                     let instance: Vec<BnScalar> = instance_bytes
                         .iter()
                         .map(|e| {
-                            BnScalar::from_bytes(e).expect("failed to deserialise Bn256 scalar")
+                            BnScalar::from_bytes(e).expect("Failed to deserialise Bn256 scalar")
                         })
                         .collect();
+
+                    {
+                        // check if public keys in instance are correct
+                        // read all member public keys
+                        let start = start_timer!(|| "verify member public keys in instance");
+                        let bytes = read_to_string(MEM_PUBLIC_KEYS_PATH)?;
+                        let mpks_bytes: Vec<Point> = serde_json::from_str(&bytes)?;
+                        let mpks: Vec<GkG1> = mpks_bytes.into_iter().map(|pk| pk.into()).collect();
+                        let (_, pks) = DkgMemberPublicParams::from(&dkg_config, &instance);
+
+                        if !pks.eq(&mpks) {
+                            return Err(anyhow!("Member public keys do not match"));
+                        }
+                        end_timer!(start);
+                    }
 
                     let start = start_timer!(|| format!(
                         "kzg load or setup params with degree {}",
@@ -430,14 +476,46 @@ fn main() -> Result<()> {
                     verify_single(general_params.verifier_params(), &vk, &proof, &instance);
                 }
                 DkgCommands::Derive { index, file } => {
-                    let path = &format!("{DKG_DIR}/dkgs_public.json");
-                    let bytes = read_to_string(path)?;
-                    let dkgs_pub_bytes: Vec<DkgMemberPublicParamsSerde> =
-                        serde_json::from_str(&bytes)?;
-                    let dkgs_pub: Vec<DkgMemberPublicParams> =
-                        dkgs_pub_bytes.into_iter().map(|d| d.into()).collect();
-                    let dkgs_pub_ref: Vec<_> = dkgs_pub.iter().map(|d| d).collect();
+                    let dkgs_pub = if cfg!(feature = "g2chip") {
+                        //decode public parameters from instances
+                        let path = &format!("{DKG_DIR}/all_instances.json");
+                        let bytes = read_to_string(path)?;
+                        let instances_bytes: Vec<Vec<[u8; 32]>> = serde_json::from_str(&bytes)?;
 
+                        let mut instances = vec![];
+                        for instance in instances_bytes.into_iter() {
+                            let s: Vec<_> = instance
+                                .iter()
+                                .map(|c| {
+                                    BnScalar::from_bytes(c)
+                                        .expect("Failed to deserialise Bn256 scalar")
+                                })
+                                .collect();
+                            instances.push(s);
+                        }
+
+                        let dkgs_pub: Vec<_> = instances
+                            .iter()
+                            .map(|s| {
+                                let (pp, _) = DkgMemberPublicParams::from(&dkg_config, s);
+                                pp
+                            })
+                            .collect();
+
+                        dkgs_pub
+                    } else {
+                        // todo: get public parameters from instances (g2 is not available in the instances in this case)
+                        let path = &format!("{DKG_DIR}/dkgs_public.json");
+                        let bytes = read_to_string(path)?;
+                        let dkgs_pub_bytes: Vec<DkgMemberPublicParamsSerde> =
+                            serde_json::from_str(&bytes)?;
+                        let dkgs_pub: Vec<DkgMemberPublicParams> =
+                            dkgs_pub_bytes.into_iter().map(|d| d.into()).collect();
+
+                        dkgs_pub
+                    };
+
+                    let dkgs_pub_ref: Vec<_> = dkgs_pub.iter().map(|d| d).collect();
                     let gpp = dkg_global_public_params(&dkgs_pub_ref);
                     save_gpp(&gpp)?;
 
@@ -448,7 +526,7 @@ fn main() -> Result<()> {
 
                         let path = file
                             .map(|f| format!("{MEMBERS_DIR}/{f}.json"))
-                            .ok_or_else(|| anyhow!("file path not available"))?;
+                            .ok_or_else(|| anyhow!("File path not available"))?;
                         let bytes = read_to_string(path)?;
                         let member_bytes: MemberKeySerde = serde_json::from_str(&bytes)?;
                         let member: MemberKey = member_bytes.into();
@@ -489,15 +567,15 @@ fn main() -> Result<()> {
                     let sigma_bytes: PartialEvalSerde = serde_json::from_str(&bytes)?;
                     let sigma: PartialEval = sigma_bytes.into();
 
-                    let path = &format!("{DKG_DIR}/gpp.json");
+                    let path = &format!("{DKG_DIR}/vks.json");
                     let bytes = read_to_string(path)?;
-                    let gpp_bytes: DkgGlobalPubParamsSerde = serde_json::from_str(&bytes)?;
-                    let gpp: DkgGlobalPubParams = gpp_bytes.into();
+                    let vks_bytes: Vec<Point> = serde_json::from_str(&bytes)?;
+                    let vks: Vec<BnG1> = vks_bytes.iter().map(|vk| vk.into()).collect();
 
-                    sigma.verify(&dkg_config, input.as_bytes(), &gpp.verify_keys[index - 1])?;
+                    sigma.verify(&dkg_config, input.as_bytes(), &vks[index - 1])?;
                     info!("partial eval for member {index} on input \"{input}\" verified successfully");
                 }
-                RandCommands::Combine { input, verify } => {
+                RandCommands::Combine { input, skip } => {
                     let path = format!("{RANDOM_DIR}/evals.json");
                     let bytes = read_to_string(path)?;
                     let evals_bytes: Vec<PartialEvalSerde> = serde_json::from_str(&bytes)?;
@@ -505,32 +583,35 @@ fn main() -> Result<()> {
                         evals_bytes.into_iter().map(|e| e.into()).collect();
 
                     // read dkg global public parameters
-                    let path = format!("{DKG_DIR}/gpp.json");
+                    let path = format!("{DKG_DIR}/gpk.json");
                     let bytes = read_to_string(path)?;
-                    let gpp_bytes: DkgGlobalPubParamsSerde = serde_json::from_str(&bytes)?;
-                    let gpp: DkgGlobalPubParams = gpp_bytes.into();
+                    let gpk_bytes: Point2 = serde_json::from_str(&bytes)?;
+                    let gpk: BnG2 = gpk_bytes.into();
 
                     let mut verified = vec![];
-                    if verify {
+                    if skip {
+                        // skip verification on partial evaluations
+                        verified = evals;
+                    } else {
+                        let path = format!("{DKG_DIR}/vks.json");
+                        let bytes = read_to_string(path)?;
+                        let vks_bytes: Vec<Point> = serde_json::from_str(&bytes)?;
+                        let vks: Vec<BnG1> = vks_bytes.iter().map(|vk| vk.into()).collect();
+
                         for e in evals.into_iter() {
                             if e.index < 1 || e.index > dkg_config.number_of_members() {
                                 return Err(anyhow!("Invalid member index {:?}", e.index));
                             }
 
                             let i = e.index - 1;
-                            if e.verify(&dkg_config, input.as_bytes(), &gpp.verify_keys[i])
-                                .is_ok()
-                            {
+                            if e.verify(&dkg_config, input.as_bytes(), &vks[i]).is_ok() {
                                 verified.push(e);
                             }
                         }
-                    } else {
-                        // skip verification on partial evaluations
-                        verified = evals;
                     }
 
                     if verified.len() < dkg_config.threshold() {
-                        return Err(anyhow!("not enough valid partial evaluations"));
+                        return Err(anyhow!("Not enough valid partial evaluations"));
                     }
 
                     let pseudo = combine_partial_evaluations(
@@ -538,7 +619,7 @@ fn main() -> Result<()> {
                         &verified[0..dkg_config.threshold()],
                     )?;
 
-                    pseudo.verify(input.as_bytes(), &gpp.g2a)?;
+                    pseudo.verify(input.as_bytes(), &gpk)?;
 
                     let pseudo_bytes: PseudoRandomSerde = pseudo.into();
                     let serialized = serde_json::to_string(&pseudo_bytes)?;
@@ -557,12 +638,12 @@ fn main() -> Result<()> {
                     let pseudo: PseudoRandom = pseudo_bytes.into();
 
                     // read dkg global public parameters
-                    let path = format!("{DKG_DIR}/gpp.json");
+                    let path = format!("{DKG_DIR}/gpk.json");
                     let bytes = read_to_string(path)?;
-                    let gpp_bytes: DkgGlobalPubParamsSerde = serde_json::from_str(&bytes)?;
-                    let gpp: DkgGlobalPubParams = gpp_bytes.into();
+                    let gpk_bytes: Point2 = serde_json::from_str(&bytes)?;
+                    let gpk: BnG2 = gpk_bytes.into();
 
-                    pseudo.verify(input.as_bytes(), &gpp.g2a)?;
+                    pseudo.verify(input.as_bytes(), &gpk)?;
                     info!("final pseudorandom on input \"{input}\" verified successfully");
                 }
             }
