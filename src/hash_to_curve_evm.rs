@@ -186,10 +186,14 @@ mod tests {
         println!("keccak hash rust {:?}", res);
 
         let mut res = [Fq::zero(); 2];
-        hash_to_field_evm("evm compatible version", b"hello world", &mut res);
+        hash_to_field_evm(
+            "DVRF pseudorandom generation 2023",
+            b"hello world",
+            &mut res,
+        );
         println!("hash to field = {:?}", res);
 
-        let hasher = hash_to_curve_evm("evm compatible version");
+        let hasher = hash_to_curve_evm("DVRF pseudorandom generation 2023");
         let h = hasher(b"hello world");
         println!("hash to point = {:?}", h.to_affine());
         assert!(bool::from(h.is_on_curve()))
