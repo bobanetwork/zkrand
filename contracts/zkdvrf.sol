@@ -56,7 +56,7 @@ contract zkdvrf is Ownable {
     mapping (uint256 => mapping (uint32 => Pairing.G1Point)) public roundToEval;
     mapping (uint256 => uint32) public roundSubmissionCount;
     // TODO: add timestamp to round for enhanced queries
-    mapping (uint256 => bytes) public roundToRandom;
+    mapping (uint256 => bytes32) public roundToRandom;
 
     constructor(address halo2VerifierAddress, address globalPublicParamsAddress, address pseudoRandAddress, uint256 minDeposit) Ownable(msg.sender) {
         require (halo2VerifierAddress != address(0) && globalPublicParamsAddress != address(0) && pseudoRandAddress != address(0), "Cannot be zero addresses");
@@ -136,7 +136,7 @@ contract zkdvrf is Ownable {
     // 2nd Phase
 
     // can take an optional input
-    function generateRandom() public onlyOwner {
+    function initiateRandom() public onlyOwner {
         require(contractPhase == Status.Ready, "Contract not ready");
 
         if (currentRoundNum != 0) {
@@ -149,7 +149,7 @@ contract zkdvrf is Ownable {
     }
 
     // // use Concat string utils to use xInput + block.timestamp
-    // function generateRandom(string memory xInput) public {
+    // function initiateRandom(string memory xInput) public {
     //     // check last round completed
     //     currentRoundNum++;
     //     roundInput[currentRoundNum] = xInput;
@@ -158,7 +158,7 @@ contract zkdvrf is Ownable {
     function submitPartialEval(Pairing.G1Point memory pEval, IPseudoRand.PartialEvalProof memory proof) public {
         // check valid round
         require(roundToRandom[currentRoundNum].length == 0, "Round already computed");
-        // this will help revert calls if the contract status is not Ready and the first generateRandom() is not called
+        // this will help revert calls if the contract status is not Ready and the first initiateRandom() is not called
         require (lastSubmittedRound[msg.sender] < currentRoundNum, "Already submitted for round");
         bytes memory currentX = bytes(roundInput[currentRoundNum]);
         uint32 ppIndex = addrToNode[msg.sender].ppIndex;
@@ -171,16 +171,15 @@ contract zkdvrf is Ownable {
 
     // accept a set of partial evals
     // take sigma as a param, basically a point that the operator submits (combination of subset of partial evals)
-    // take the pseudorandom result
     // take the gpk as stored in contract
-    function generateRandom(Pairing.G1Point memory sigma, bytes memory random) public onlyOwner{
+    function generateRandom(Pairing.G1Point memory sigma) public onlyOwner{
         require(roundToRandom[currentRoundNum].length == 0, "Answer for round already exists");
         require(roundSubmissionCount[currentRoundNum] >= threshold, "Partial evaluation threshold not reached");
-        require(IPseudoRand(pseudoRand).verifyPseudoRand(random, sigma, gpkVal), "Incorrect random submitted");
-        roundToRandom[currentRoundNum] = random;
+        require(IPseudoRand(pseudoRand).verifyPseudoRand(bytes(roundInput[currentRoundNum]), sigma, gpkVal), "Incorrect random submitted");
+        roundToRandom[currentRoundNum] = keccak256(abi.encodePacked(sigma.X, sigma.Y));
     }
 
-    function getLatestRandom() public view returns (bytes memory) {
+    function getLatestRandom() public view returns (bytes32) {
         if (roundToRandom[currentRoundNum].length != 0) {
             return roundToRandom[currentRoundNum];
         }
@@ -192,7 +191,7 @@ contract zkdvrf is Ownable {
         return roundToRandom[currentRoundNum - 1];
     }
 
-    function getRandomAtRound(uint256 roundNum) public view returns (bytes memory) {
+    function getRandomAtRound(uint256 roundNum) public view returns (bytes32) {
         if (roundToRandom[roundNum].length != 0) {
             return roundToRandom[roundNum];
         }
