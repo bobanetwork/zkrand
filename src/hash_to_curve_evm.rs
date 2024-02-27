@@ -1,7 +1,6 @@
 #![allow(clippy::op_ref)]
 
 use halo2_ecc::halo2::arithmetic::CurveExt;
-use halo2_ecc::halo2::halo2curves::ff::FromUniformBytes;
 use halo2wrong::curves::bn256::{Fq, G1};
 use halo2wrong::curves::ff::Field;
 use sha3::{Digest, Keccak256};
@@ -158,7 +157,6 @@ fn map_to_curve_evm(t: Fq) -> G1 {
     y = y * t_sign;
 
     G1::new_jacobian(x, y, Fq::ONE).unwrap()
-    //    G1Affine::from_xy(x, y).unwrap()
 }
 
 pub(crate) fn hash_to_curve_evm<'a>(domain_prefix: &'a str) -> Box<dyn Fn(&[u8]) -> G1 + 'a> {
@@ -188,10 +186,14 @@ mod tests {
         println!("keccak hash rust {:?}", res);
 
         let mut res = [Fq::zero(); 2];
-        hash_to_field_evm("evm compatible version", b"hello world", &mut res);
+        hash_to_field_evm(
+            "DVRF pseudorandom generation 2023",
+            b"hello world",
+            &mut res,
+        );
         println!("hash to field = {:?}", res);
 
-        let hasher = hash_to_curve_evm("evm compatible version");
+        let hasher = hash_to_curve_evm("DVRF pseudorandom generation 2023");
         let h = hasher(b"hello world");
         println!("hash to point = {:?}", h.to_affine());
         assert!(bool::from(h.is_on_curve()))

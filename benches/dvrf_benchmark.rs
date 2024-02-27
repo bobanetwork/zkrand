@@ -2,11 +2,12 @@ use criterion::{criterion_group, Criterion};
 
 mod dvrf_benches {
     use super::*;
-    use blake2b_simd::blake2b;
     use halo2wrong::curves::bn256::{Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
     use halo2wrong::curves::group::{Curve, GroupEncoding};
     use halo2wrong::halo2::arithmetic::Field;
     use rand_core::OsRng;
+    use sha3::{Digest, Keccak256};
+    use zkdvrf::dkg::DkgConfig;
     use zkdvrf::{
         combine_partial_evaluations, hash_to_curve_bn, keygen, shares, DkgShareKey, PseudoRandom,
         EVAL_PREFIX,
@@ -18,7 +19,7 @@ mod dvrf_benches {
 
         let index = 1;
         let (sk, vk) = keygen(&mut rng);
-        let key = DkgShareKey::<4, 6>::new(index, sk, vk);
+        let key = DkgShareKey::new(index, sk, vk);
         let x = b"the first random 20230703";
 
         c.bench_function("dvrf partial evaluation", move |b| {
@@ -31,15 +32,13 @@ mod dvrf_benches {
         // simplified setup only used for benchmark
         let g = BnG1::generator();
         let coeffs: Vec<_> = (0..THRESHOLD).map(|_| BnScalar::random(&mut rng)).collect();
-        let shares = shares::<THRESHOLD, NUMBER_OF_MEMBERS>(&coeffs);
+        let shares = shares(NUMBER_OF_MEMBERS, &coeffs);
         let keys: Vec<_> = shares
             .iter()
             .enumerate()
-            .map(|(i, s)| {
-                DkgShareKey::<THRESHOLD, NUMBER_OF_MEMBERS>::new(i + 1, *s, (g * s).to_affine())
-            })
+            .map(|(i, s)| DkgShareKey::new(i + 1, *s, (g * s).to_affine()))
             .collect();
-        let vks: Vec<_> = keys.iter().map(|key| key.get_verification_key()).collect();
+        let vks: Vec<_> = keys.iter().map(|key| key.verify_key()).collect();
 
         let input = b"test first random";
 
@@ -48,16 +47,17 @@ mod dvrf_benches {
             .map(|key| key.evaluate(input, &mut rng))
             .collect();
 
+        let dkg_config = DkgConfig::new(THRESHOLD, NUMBER_OF_MEMBERS).unwrap();
         let res = evals
             .iter()
             .zip(vks.iter())
-            .all(|(e, vk)| e.verify(input, vk).is_ok());
+            .all(|(e, vk)| e.verify(&dkg_config, input, vk).is_ok());
 
         assert!(res);
 
         let name = format!("dvrf combine partial evaluation ({THRESHOLD}, {NUMBER_OF_MEMBERS})");
         c.bench_function(name.as_str(), move |b| {
-            b.iter(|| combine_partial_evaluations(&evals[0..THRESHOLD]).unwrap());
+            b.iter(|| combine_partial_evaluations(&dkg_config, &evals[0..THRESHOLD]).unwrap());
         });
     }
 
@@ -67,12 +67,13 @@ mod dvrf_benches {
         let index = 1;
         let (sk, vk) = keygen(&mut rng);
         // verification time of partial evaluation independent of the values of threshold and number of members
-        let key = DkgShareKey::<4, 6>::new(index, sk, vk);
+        let key = DkgShareKey::new(index, sk, vk);
         let input = b"the first random 20230703";
         let sigma = key.evaluate(input, &mut rng);
 
+        let dkg_config = DkgConfig::new(4, 6).unwrap();
         c.bench_function("dvrf partial evaluation verify", move |b| {
-            b.iter(|| sigma.verify(input, &vk).unwrap())
+            b.iter(|| sigma.verify(&dkg_config, input, &vk).unwrap())
         });
     }
 
@@ -88,7 +89,11 @@ mod dvrf_benches {
         let h: BnG1 = hasher(input).to_affine();
 
         let proof = (h * a).to_affine();
-        let value = blake2b(proof.to_bytes().as_ref()).as_bytes().to_vec();
+        let value = Keccak256::new()
+            .chain_update(proof.x.to_bytes())
+            .chain_update(proof.y.to_bytes())
+            .finalize()
+            .to_vec();
         let pr = PseudoRandom::new(proof, value);
 
         c.bench_function("dvrf pseudorandom verification", move |b| {
@@ -101,11 +106,11 @@ mod dvrf_benches {
         config = Criterion::default();
         targets =
             partial_evaluate,
-            combine::<5,9>,
-            combine::<11,21>,
-            combine::<22,43>,
-            combine::<45,89>,
-            combine::<89,177>,
+            combine::<3,5>,
+            combine::<9,16>,
+            combine::<20,38>,
+            combine::<42,83>,
+            combine::<86,171>,
             partial_verify,
             pseudo_random_verify,
     }

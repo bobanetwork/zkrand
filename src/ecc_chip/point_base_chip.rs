@@ -1,9 +1,9 @@
 mod bn256;
 mod fix_mul;
 
-use halo2_ecc::integer::{IntegerInstructions, UnassignedInteger};
+use halo2_ecc::integer::IntegerInstructions;
 use halo2_ecc::{AssignedPoint, BaseFieldEccChip, EccConfig};
-use halo2_maingate::{AssignedValue, MainGate, MainGateInstructions, RangeChip};
+use halo2_maingate::{AssignedValue, MainGate, MainGateInstructions};
 use halo2wrong::curves::ff::PrimeField;
 use halo2wrong::curves::CurveAffine;
 use halo2wrong::halo2::circuit::Layouter;

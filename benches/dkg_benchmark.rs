@@ -16,6 +16,7 @@ mod dkg_benches {
     };
     use halo2wrong::utils::DimensionMeasurement;
     use rand_core::OsRng;
+    use zkdvrf::dkg::DkgConfig;
     use zkdvrf::{DkgCircuit, DkgMemberParams, MemberKey};
 
     fn dkg_proof_verify<
@@ -30,13 +31,13 @@ mod dkg_benches {
         let mut members = vec![];
         let mut pks = vec![];
         for _ in 0..NUMBER_OF_MEMBERS {
-            let member = MemberKey::new(&mut rng);
-            pks.push(member.get_public_key());
+            let member = MemberKey::random(&mut rng);
+            pks.push(member.public_key());
             members.push(member);
         }
 
-        let dkg_params =
-            DkgMemberParams::<THRESHOLD, NUMBER_OF_MEMBERS>::new(1, &pks, &mut rng).unwrap();
+        let dkg_config = DkgConfig::new(THRESHOLD, NUMBER_OF_MEMBERS).unwrap();
+        let dkg_params = DkgMemberParams::new(dkg_config, 1, pks, &mut rng).unwrap();
         let circuit = dkg_params.circuit(&mut rng);
         let instance = dkg_params.instance();
         let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
@@ -62,7 +63,7 @@ mod dkg_benches {
             Challenge255<BnG1>,
             OsRng,
             Blake2bWrite<Vec<u8>, BnG1, Challenge255<BnG1>>,
-            DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS>,
+            DkgCircuit,
         >(
             &general_params,
             &pk,

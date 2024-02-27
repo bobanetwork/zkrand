@@ -1,9 +1,13 @@
+use crate::dkg::DkgConfig;
 #[cfg(feature = "g2chip")]
 use crate::ecc_chip::FixedPoint2Chip;
 use crate::ecc_chip::FixedPointChip;
 use crate::grumpkin_chip::GrumpkinChip;
 use crate::poseidon::P128Pow5T3Bn;
-use crate::{BIT_LEN_LIMB, NUMBER_OF_LIMBS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH, WRAP_LEN};
+use crate::{
+    BIT_LEN_LIMB, NUMBER_OF_LIMBS, POSEIDON_LEN, POSEIDON_RATE, POSEIDON_WIDTH, WINDOW_SIZE,
+    WRAP_LEN,
+};
 use halo2_ecc::integer::rns::Rns;
 #[cfg(feature = "g2chip")]
 use halo2_ecc::integer::IntegerConfig;
@@ -97,63 +101,63 @@ impl DkgCircuitConfig {
 }
 
 #[derive(Clone)]
-pub struct DkgCircuit<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> {
-    coeffs: [Value<BnScalar>; THRESHOLD],
+pub struct DkgCircuit {
+    dkg_config: DkgConfig,
+    coeffs: Vec<Value<BnScalar>>,
     random: Value<BnScalar>,
-    public_keys: [Value<GkG1>; NUMBER_OF_MEMBERS],
-    window_size: usize,
+    public_keys: Vec<Value<GkG1>>,
     grumpkin_aux_generator: Value<GkG1>,
 }
 
-impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize>
-    DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS>
-{
+impl DkgCircuit {
     pub fn new(
+        dkg_config: DkgConfig,
         coeffs: Vec<Value<BnScalar>>,
         random: Value<BnScalar>,
         public_keys: Vec<Value<GkG1>>,
-        window_size: usize,
         grumpkin_aux_generator: Value<GkG1>,
     ) -> Self {
-        assert_eq!(coeffs.len(), THRESHOLD);
-        assert_eq!(public_keys.len(), NUMBER_OF_MEMBERS);
+        assert_eq!(coeffs.len(), dkg_config.threshold());
+        assert_eq!(public_keys.len(), dkg_config.number_of_members());
 
         DkgCircuit {
-            coeffs: coeffs
-                .try_into()
-                .expect("unable to convert coefficient vector"),
+            dkg_config,
+            coeffs,
             random,
-            public_keys: public_keys
-                .try_into()
-                .expect("unable to convert public key vector"),
-            window_size,
+            public_keys,
             grumpkin_aux_generator,
         }
     }
 
-    pub fn dummy(window_size: usize) -> Self {
-        let coeffs: Vec<_> = (0..THRESHOLD).map(|_| Value::unknown()).collect();
+    pub fn dummy(dkg_config: DkgConfig) -> Self {
+        let coeffs: Vec<_> = (0..dkg_config.threshold())
+            .map(|_| Value::unknown())
+            .collect();
         let random = Value::unknown();
-        let public_keys: Vec<_> = (0..NUMBER_OF_MEMBERS).map(|_| Value::unknown()).collect();
+        let public_keys: Vec<_> = (0..dkg_config.number_of_members())
+            .map(|_| Value::unknown())
+            .collect();
         let grumpkin_aux_generator = Value::unknown();
 
         DkgCircuit {
-            coeffs: coeffs
-                .try_into()
-                .expect("unable to convert coefficient vector"),
+            dkg_config,
+            coeffs,
             random,
-            public_keys: public_keys
-                .try_into()
-                .expect("unable to convert public key vector"),
-            window_size,
+            public_keys,
             grumpkin_aux_generator,
         }
     }
+
+    pub fn threshold(&self) -> usize {
+        self.dkg_config.threshold()
+    }
+
+    pub fn number_of_members(&self) -> usize {
+        self.dkg_config.number_of_members()
+    }
 }
 
-impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
-    for DkgCircuit<THRESHOLD, NUMBER_OF_MEMBERS>
-{
+impl Circuit<BnScalar> for DkgCircuit {
     type Config = DkgCircuitConfig;
     type FloorPlanner = SimpleFloorPlanner;
     #[cfg(feature = "circuit-params")]
@@ -203,16 +207,16 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
 
                 // compute s0
                 let mut s0 = coeffs[0].clone();
-                for j in 1..THRESHOLD {
+                for j in 1..self.threshold() {
                     s0 = main_gate.add(ctx, &s0, &coeffs[j])?;
                 }
                 shares.push(s0);
 
-                for i in 2..=NUMBER_OF_MEMBERS {
+                for i in 2..=self.number_of_members() {
                     let ii = BnScalar::from(i as u64);
                     let x = main_gate.assign_constant(ctx, ii)?;
-                    let mut s = coeffs[THRESHOLD - 1].clone();
-                    for j in (0..THRESHOLD - 1).rev() {
+                    let mut s = coeffs[self.threshold() - 1].clone();
+                    for j in (0..self.threshold() - 1).rev() {
                         s = main_gate.mul_add(ctx, &s, &x, &coeffs[j])?;
                     }
                     shares.push(s);
@@ -228,12 +232,12 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
                 let offset = 0;
                 let ctx = &mut RegionCtx::new(region, offset);
                 let g = BnG1::generator();
-                fixed_chip.assign_fixed_point(ctx, &g, self.window_size)?;
+                fixed_chip.assign_fixed_point(ctx, &g, WINDOW_SIZE)?;
 
                 #[cfg(feature = "g2chip")]
                 let g2 = BnG2::generator();
                 #[cfg(feature = "g2chip")]
-                fixed2_chip.assign_fixed_point(ctx, &g2, self.window_size)?;
+                fixed2_chip.assign_fixed_point(ctx, &g2, WINDOW_SIZE)?;
 
                 Ok(())
             },
@@ -273,7 +277,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
             &mut instance_offset,
         )?;
 
-        for i in 0..NUMBER_OF_MEMBERS {
+        for i in 0..self.number_of_members() {
             let gs = layouter.assign_region(
                 || "region ecc mul g^s",
                 |region| {
@@ -320,7 +324,7 @@ impl<const THRESHOLD: usize, const NUMBER_OF_MEMBERS: usize> Circuit<BnScalar>
             &mut instance_offset,
         )?;
 
-        for i in 0..NUMBER_OF_MEMBERS {
+        for i in 0..self.number_of_members() {
             let (pkr, pk) = layouter.assign_region(
                 || "region grumpkin ecc mul encryption",
                 |region| {

@@ -42,6 +42,10 @@ impl SplitBase<Fq2, Fq> for G2Affine {
         let c1 = base.c1;
         (c0, c1)
     }
+
+    fn from(c0: Fq, c1: Fq) -> Fq2 {
+        Fq2::new(c0, c1)
+    }
 }
 
 impl AuxGen for G2Affine {
@@ -69,7 +73,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_g2_random() {
-        //   let mut rng = ChaCha20Rng::seed_from_u64(42);
+        // let mut rng = ChaCha20Rng::seed_from_u64(42);
         let mut rng = OsRng;
         let h = G2Affine::random(&mut rng);
         let hh = h.to_curve();

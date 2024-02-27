@@ -69,7 +69,7 @@ impl<
         correction = correction + &aux_generator;
         correction = -correction;
 
-        let c = C::from(correction);
+        let c = <C as From<_>>::from(correction);
         assert!(bool::from(c.is_on_curve()));
         assert!(bool::from(
             CofactorCurveAffine::to_curve(&c).is_torsion_free()
