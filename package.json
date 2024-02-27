@@ -1,0 +1,29 @@
+{
+  "name": "zkdvrf",
+  "description": "A  distributed verifiable random function (DVRF) is a t-out-of-n threshold scheme that enables  a group of n participants to jointly compute a random output. The output should be unique, publicly verifiable,  unpredictable, and unbiased.",
+  "version": "1.0.0",
+  "main": "hardhat.config.js",
+  "directories": {
+    "example": "examples",
+    "test": "test"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.1",
+    "hardhat": "^2.19.5",
+    "hardhat-deploy": "^0.11.45"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bobanetwork/zkdvrf.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/bobanetwork/zkdvrf/issues"
+  },
+  "homepage": "https://github.com/bobanetwork/zkdvrf#readme"
+}

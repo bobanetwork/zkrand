@@ -1,0 +1,7 @@
+node_modules
+.DS_Store
+contracts/data
+build
+cache
+artifacts/
+target/
