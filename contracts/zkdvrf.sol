@@ -5,12 +5,14 @@ import {Halo2Verifier} from "./Halo2Verifier-3-5-g2.sol";
 import {GlobalPublicParams} from "./GlobalPublicParams.sol";
 import {Pairing} from "./libs/Pairing.sol";
 import {IPseudoRand} from "./IPseudoRand.sol";
+import {Grumpkin} from "./libs/Grumpkin.sol";
 
 import "@openzeppelin/contracts/utils/Strings.sol";
 import '@openzeppelin/contracts/access/Ownable.sol';
 
 contract zkdvrf is Ownable {
     using Strings for uint256;
+    using Grumpkin for *;
 
     struct dvrfNode {
         address nodeAddress;
@@ -33,6 +35,7 @@ contract zkdvrf is Ownable {
     uint32 internal currentIndex;
     // current count of nodes deposited and registered
     uint32 internal registeredCount;
+    uint32 internal ppSubmissionCount;
 
     uint256 public currentRoundNum;
     uint256 public minNodeDeposit;
@@ -81,14 +84,19 @@ contract zkdvrf is Ownable {
     }
 
     // each node registers with deposit and confirms
-    function registerNode() public payable {
+    function registerNode(Grumpkin.Point memory pubKey) public payable {
         require(msg.sender == addrToNode[msg.sender].nodeAddress, "Unauthorized call");
         require(!addrToNode[msg.sender].status, "Node Already registered");
         require(msg.value >= minNodeDeposit, "Must provide enough node deposit");
+        require(Grumpkin.isOnCurve(pubKey), "Invalid Public Key submitted");
 
         nodes[registeredCount] = msg.sender;
         addrToNode[msg.sender].deposit = msg.value;
         addrToNode[msg.sender].status = true;
+        addrToNode[msg.sender].ppIndex = ppListIndex;
+        // ppListOrder is unutilized but added for public visibility
+        ppListOrder.push(msg.sender);
+        ppListIndex++;
         registeredCount++;
     }
 
@@ -110,14 +118,11 @@ contract zkdvrf is Ownable {
 
         addrToNode[msg.sender].statusPP = true;
 
-        ppList.push(pp);
-        // ppListOrder is unutilized but added for public visibility
-        ppListOrder.push(msg.sender);
-        // index on the above list
-        addrToNode[msg.sender].ppIndex = ppListIndex;
-        ppListIndex++;
+        uint32 nodeIndex = addrToNode[msg.sender].ppIndex;
+        ppList[nodeIndex] = pp;
+        ppSubmissionCount++;
 
-        if (ppList.length == memberCount) {
+        if (ppSubmissionCount == memberCount) {
             contractPhase = Status.NidkgComplete;
         }
     }
