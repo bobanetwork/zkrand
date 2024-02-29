@@ -64,13 +64,14 @@ $ RUST_LOG=info ./target/release/client dkg verify <INDEX>
 ```
 The secret share for member i can be derived using
 ```
-$ RUST_LOG=info ./target/release/client dkg derive <INDEX> <FILE>
+$ RUST_LOG=info ./target/release/client dkg derive <INDEX> -f <FILE>
 ```
 It also computes the global public parameters for NI-DKG and stores it at "data/gpp.json". 
-This command requires member i's secret key in "data/members/<FILE>.json" and the public parameters from all the members which 
+This command requires member i's secret key in "data/members/FILE.json" and the public parameters from all the members which 
 is supposed to be available at "data/dkgs_public.json".
 Members can be mocked using `mock -m` and the NI-DKG public 
-parameters can be mocked using `mock -d`.
+parameters can be mocked using `mock -d`. The default FILE name is "member". 
+Set FILE to be "member_{INDEX}" to use mocked member key. 
 
 The public, i.e., non-members, can also compute the global public parameters using
 ```
@@ -79,7 +80,7 @@ $ RUST_LOG=info ./target/release/client dkg derive
 
 ### Random generation
 #### eval
-Partial evaluation on an input string from member i can be computed using
+Partial evaluation on an INPUT string from member i can be computed using
 ```
 $ RUST_LOG=info ./target/release/client rand eval <INDEX> <INPUT>
 ```
@@ -92,7 +93,7 @@ $ RUST_LOG=info ./target/release/client rand verify <INDEX> <INPUT>
 ```
 
 #### combine
-A set of partial evaluations on an input string can be combined into the final pseudorandom value: 
+A set of partial evaluations on an INPUT string can be combined into the final pseudorandom value: 
 ```
 $ RUST_LOG=info ./target/release/client rand combine <INPUT>
 ```
@@ -101,7 +102,7 @@ Partial evaluations can be simulated using `mock -r <INPUT>`.
 The final pseudorandom value is saved at "./data/random/pseudo.json".
 
 #### verify-final
-The final pseudorandom value on an input string can be verified using:
+The final pseudorandom value on an INPUT string can be verified using:
 ```
 $ RUST_LOG=info ./target/release/client rand verify-final <INPUT>
 ```

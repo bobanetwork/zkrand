@@ -7,6 +7,7 @@ use halo2_ecc::halo2::halo2curves::bn256::{Fr as BnScalar, G1Affine as BnG1, G2A
 use halo2_solidity_verifier::BatchOpenScheme::Bdfg21;
 use halo2_solidity_verifier::SolidityGenerator;
 use halo2wrong::curves::grumpkin::G1Affine as GkG1;
+use halo2wrong::curves::CurveAffine;
 use halo2wrong::halo2::poly::commitment::ParamsProver;
 use log::info;
 use pretty_env_logger;
@@ -20,10 +21,12 @@ use crate::mock::{mock_dkg, mock_members, mock_random};
 use crate::proof::{create_proof_checked, verify_single};
 use crate::serialise::{
     DkgGlobalPubParams as DkgGlobalPubParamsSerde, DkgMemberParams as DkgMemberParamsSerde,
-    DkgMemberPublicParams as DkgMemberPublicParamsSerde, DkgShareKey as DkgShareKeySerde,
-    MemberKey as MemberKeySerde, PartialEval as PartialEvalSerde, Point, Point2,
-    PseudoRandom as PseudoRandomSerde,
+    DkgShareKey as DkgShareKeySerde, MemberKey as MemberKeySerde, PartialEval as PartialEvalSerde,
+    Point, Point2, PseudoRandom as PseudoRandomSerde,
 };
+
+#[cfg(not(feature = "g2chip"))]
+use serialise::DkgMemberPublicParams as DkgMemberPublicParamsSerde;
 
 use zkdvrf::dkg::{DkgConfig, PartialEval};
 use zkdvrf::{
@@ -212,13 +215,32 @@ fn save_solidity(name: impl AsRef<str>, solidity: &str) -> Result<()> {
 fn save_proof(proof: &[u8], instance: &[BnScalar], index: usize) -> Result<()> {
     let path = &format!("{DKG_PROOFS_DIR}/proof_{index}.dat");
     write(path, proof)?;
+    info!("snark proof for member {index} saved in {path}");
 
     let path = &format!("{DKG_PROOFS_DIR}/instance_{index}.json");
     let instance_bytes: Vec<_> = instance.iter().map(|x| x.to_bytes()).collect();
     let serialized = serde_json::to_string(&instance_bytes)?;
     write(path, serialized.as_bytes())?;
-    info!("snark proof and instance for member {index} saved in {path}");
+    info!("snark instance for member {index} saved in {path}");
     Ok(())
+}
+
+fn public_keys(dkg_config: &DkgConfig, instance: &[BnScalar]) -> Vec<GkG1> {
+    let mut begin = if cfg!(feature = "g2chip") {
+        5 * dkg_config.number_of_members() + 14
+    } else {
+        5 * dkg_config.number_of_members() + 6
+    };
+
+    let mut pks = vec![];
+    for _ in 0..dkg_config.number_of_members() {
+        let pk = GkG1::from_xy(instance[begin], instance[begin + 1]).unwrap();
+        pks.push(pk);
+
+        begin += 2;
+    }
+
+    pks
 }
 
 fn setup(params: &ParamsConfig, split: bool) -> Result<()> {
@@ -303,7 +325,7 @@ fn load_config() -> Result<ParamsConfig> {
 
 fn main() -> Result<()> {
     pretty_env_logger::init();
-    //    let mut rng = ChaCha20Rng::seed_from_u64(42);
+    // let mut rng = ChaCha20Rng::seed_from_u64(42);
     let mut rng = OsRng;
 
     create_dir_all(MEMBERS_DIR)?;
@@ -445,7 +467,7 @@ fn main() -> Result<()> {
                         let bytes = read_to_string(MEM_PUBLIC_KEYS_PATH)?;
                         let mpks_bytes: Vec<Point> = serde_json::from_str(&bytes)?;
                         let mpks: Vec<GkG1> = mpks_bytes.into_iter().map(|pk| pk.into()).collect();
-                        let (_, pks) = DkgMemberPublicParams::from(&dkg_config, &instance);
+                        let pks = public_keys(&dkg_config, &instance);
 
                         if !pks.eq(&mpks) {
                             return Err(anyhow!("Member public keys do not match"));
@@ -476,7 +498,8 @@ fn main() -> Result<()> {
                     verify_single(general_params.verifier_params(), &vk, &proof, &instance);
                 }
                 DkgCommands::Derive { index, file } => {
-                    let dkgs_pub = if cfg!(feature = "g2chip") {
+                    #[cfg(feature = "g2chip")]
+                    let dkgs_pub = {
                         //decode public parameters from instances
                         let path = &format!("{DKG_DIR}/all_instances.json");
                         let bytes = read_to_string(path)?;
@@ -497,14 +520,17 @@ fn main() -> Result<()> {
                         let dkgs_pub: Vec<_> = instances
                             .iter()
                             .map(|s| {
-                                let (pp, _) = DkgMemberPublicParams::from(&dkg_config, s);
+                                let (pp, _) = DkgMemberPublicParams::from_instance(&dkg_config, s);
                                 pp
                             })
                             .collect();
 
                         dkgs_pub
-                    } else {
-                        // todo: get public parameters from instances (g2 is not available in the instances in this case)
+                    };
+
+                    #[cfg(not(feature = "g2chip"))]
+                    let dkgs_pub = {
+                        // todo: get public parameters from instances (g2a is not available in this case)
                         let path = &format!("{DKG_DIR}/dkgs_public.json");
                         let bytes = read_to_string(path)?;
                         let dkgs_pub_bytes: Vec<DkgMemberPublicParamsSerde> =

@@ -270,7 +270,7 @@ impl Circuit<BnScalar> for DkgCircuit {
 
         let mut instance_offset = 0usize;
         let assigned_base = fixed_chip.expose_public_optimal(
-            layouter.namespace(|| "cipher g^a"),
+            layouter.namespace(|| "bn256 G1 point g^a"),
             ga,
             WRAP_LEN,
             None,
@@ -293,13 +293,37 @@ impl Circuit<BnScalar> for DkgCircuit {
             )?;
 
             fixed_chip.expose_public_optimal(
-                layouter.namespace(|| "cipher g^s"),
+                layouter.namespace(|| "bn256 G1 point g^s"),
                 gs,
                 WRAP_LEN,
                 Some(assigned_base.clone()),
                 &mut instance_offset,
             )?;
         }
+
+        // compute g2^a
+        #[cfg(feature = "g2chip")]
+        let g2a = layouter.assign_region(
+            || "region mul",
+            |region| {
+                let offset = 0;
+                let ctx = &mut RegionCtx::new(region, offset);
+
+                let g2a = fixed2_chip.mul(ctx, &a)?;
+                let g2a = fixed2_chip.normalize(ctx, &g2a)?;
+
+                Ok(g2a)
+            },
+        )?;
+
+        #[cfg(feature = "g2chip")]
+        fixed2_chip.expose_public_optimal(
+            layouter.namespace(|| "bn256 G2 point g2^a"),
+            g2a,
+            WRAP_LEN,
+            Some(assigned_base),
+            &mut instance_offset,
+        )?;
 
         let (bits, gr) = layouter.assign_region(
             || "region grumpkin ecc mul g^r",
@@ -324,6 +348,7 @@ impl Circuit<BnScalar> for DkgCircuit {
             &mut instance_offset,
         )?;
 
+        let mut assigned_pks = vec![];
         for i in 0..self.number_of_members() {
             let (pkr, pk) = layouter.assign_region(
                 || "region grumpkin ecc mul encryption",
@@ -339,7 +364,7 @@ impl Circuit<BnScalar> for DkgCircuit {
                 },
             )?;
 
-            grumpkin_chip.expose_public(layouter.namespace(|| "pk"), pk, &mut instance_offset)?;
+            assigned_pks.push(pk);
 
             let message = [pkr.x, pkr.y];
 
@@ -371,29 +396,9 @@ impl Circuit<BnScalar> for DkgCircuit {
             instance_offset += 1;
         }
 
-        // compute g2^a
-        #[cfg(feature = "g2chip")]
-        let g2a = layouter.assign_region(
-            || "region mul",
-            |region| {
-                let offset = 0;
-                let ctx = &mut RegionCtx::new(region, offset);
-
-                let g2a = fixed2_chip.mul(ctx, &a)?;
-                let g2a = fixed2_chip.normalize(ctx, &g2a)?;
-
-                Ok(g2a)
-            },
-        )?;
-
-        #[cfg(feature = "g2chip")]
-        fixed2_chip.expose_public_optimal(
-            layouter.namespace(|| "g2^a"),
-            g2a,
-            WRAP_LEN,
-            Some(assigned_base),
-            &mut instance_offset,
-        )?;
+        for pk in assigned_pks.into_iter() {
+            grumpkin_chip.expose_public(layouter.namespace(|| "pk"), pk, &mut instance_offset)?;
+        }
 
         Ok(())
     }

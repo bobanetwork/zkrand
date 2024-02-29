@@ -103,6 +103,7 @@ pub fn public_to_point<W: PrimeField, N: PrimeField<Repr = W::Repr>, C: CurveAff
     point
 }
 
+#[cfg(feature = "g2chip")]
 pub fn point2_to_public<W: PrimeField, N: PrimeField, C: CurveAffine + SplitBase<C::Base, W>>(
     rns: Rc<Rns<W, N, NUMBER_OF_LIMBS, BIT_LEN_LIMB>>,
     point: C,
@@ -133,6 +134,7 @@ pub fn point2_to_public<W: PrimeField, N: PrimeField, C: CurveAffine + SplitBase
     wrapped
 }
 
+#[cfg(feature = "g2chip")]
 pub fn public_to_point2<
     W: PrimeField,
     N: PrimeField<Repr = W::Repr>,
@@ -417,9 +419,12 @@ mod tests {
         let point = public_to_point::<Fq, Fr, BnG1>(&public);
         assert_eq!(g, point);
 
-        let g2 = BnG2::random(&mut rng);
-        let public2 = point2_to_public(Rc::clone(&rns_base), g2);
-        let point2 = public_to_point2::<Fq, Fr, BnG2>(&public2);
-        assert_eq!(g2, point2);
+        #[cfg(feature = "g2chip")]
+        {
+            let g2 = BnG2::random(&mut rng);
+            let public2 = point2_to_public(Rc::clone(&rns_base), g2);
+            let point2 = public_to_point2::<Fq, Fr, BnG2>(&public2);
+            assert_eq!(g2, point2);
+        }
     }
 }

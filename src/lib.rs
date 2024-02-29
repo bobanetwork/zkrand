@@ -1,7 +1,9 @@
 pub mod dkg;
 pub mod dkg_circuit;
+#[allow(dead_code)]
 mod ecc_chip;
 mod error;
+#[allow(dead_code)]
 mod grumpkin_chip;
 mod hash_to_curve;
 mod hash_to_curve_evm;
@@ -31,16 +33,18 @@ pub use crate::dkg::{
 pub use crate::dkg_circuit::DkgCircuit;
 pub use crate::error::Error;
 pub use crate::poseidon::P128Pow5T3Bn;
-#[cfg(feature = "g2chip")]
-use crate::utils::point2_to_public;
 pub use crate::utils::{hash_to_curve_bn, hash_to_curve_grumpkin, mod_n, rns_setup};
-use crate::utils::{point_to_public, public_to_point, public_to_point2};
+#[cfg(feature = "g2chip")]
+use crate::utils::{point2_to_public, public_to_point2};
+use crate::utils::{point_to_public, public_to_point};
 
 const BIT_LEN_LIMB: usize = 68;
 const NUMBER_OF_LIMBS: usize = 4;
 const WRAP_LEN: usize = 2;
 const COORD_LEN: usize = NUMBER_OF_LIMBS / WRAP_LEN;
 const POINT_LEN: usize = COORD_LEN * 2;
+#[cfg(feature = "g2chip")]
+const POINT2_LEN: usize = POINT_LEN * 2;
 const POSEIDON_WIDTH: usize = 3;
 const POSEIDON_RATE: usize = 2;
 const POSEIDON_LEN: usize = 2;
@@ -137,19 +141,22 @@ impl DkgMemberPublicParams {
             public_data.extend(gs_public);
         }
 
-        public_data.push(self.gr.x);
-        public_data.push(self.gr.y);
-
-        for i in 0..pks.len() {
-            public_data.push(pks[i].x);
-            public_data.push(pks[i].y);
-            public_data.push(self.ciphers[i]);
-        }
-
         #[cfg(feature = "g2chip")]
         let g2a_public = point2_to_public(Rc::clone(&rns_base), self.g2a);
         #[cfg(feature = "g2chip")]
         public_data.extend(g2a_public);
+
+        public_data.push(self.gr.x);
+        public_data.push(self.gr.y);
+
+        for c in self.ciphers.iter() {
+            public_data.push(*c);
+        }
+
+        for i in 0..pks.len() {
+            public_data.push(pks[i].x);
+            public_data.push(pks[i].y);
+        }
 
         let instance = vec![public_data];
         instance
@@ -161,7 +168,7 @@ impl DkgMemberPublicParams {
     }
 
     #[cfg(feature = "g2chip")]
-    pub fn from(dkg_config: &DkgConfig, instance: &[BnScalar]) -> (Self, Vec<GkG1>) {
+    pub fn from_instance(dkg_config: &DkgConfig, instance: &[BnScalar]) -> (Self, Vec<GkG1>) {
         let len = dkg_config.instance_size();
         assert_eq!(len, instance.len());
 
@@ -177,25 +184,31 @@ impl DkgMemberPublicParams {
             begin += POINT_LEN;
         }
 
+        // read g2a
+        let g2a: BnG2 = public_to_point2(&instance[begin..begin + POINT2_LEN]);
+        begin += POINT2_LEN;
+
         // read gr
         let gr = GkG1::from_xy(instance[begin], instance[begin + 1]).unwrap();
         begin += 2;
 
-        // read pk1, cipher1, ... pk_n, cipher_n
-        let mut pks = vec![];
+        // read cipher_1, ..., cipher_n
         let mut ciphers = vec![];
         for _ in 0..dkg_config.number_of_members() {
-            let pk = GkG1::from_xy(instance[begin], instance[begin + 1]).unwrap();
-            let cipher = instance[begin + 2];
-
-            pks.push(pk);
+            let cipher = instance[begin];
             ciphers.push(cipher);
 
-            begin += 3;
+            begin += 1;
         }
 
-        // todo: read g2a
-        let g2a: BnG2 = public_to_point2(&instance[begin..]);
+        // read pk_1, ..., pk_n
+        let mut pks = vec![];
+        for _ in 0..dkg_config.number_of_members() {
+            let pk = GkG1::from_xy(instance[begin], instance[begin + 1]).unwrap();
+            pks.push(pk);
+
+            begin += 2;
+        }
 
         let pp = Self {
             public_shares,
@@ -403,11 +416,11 @@ mod tests {
     fn test_dkg_circuit() {
         #[cfg(not(feature = "g2chip"))]
         {
-            // mock_dkg_circuit(5, 9);
+            mock_dkg_circuit(5, 9);
             //   mock_dkg_circuit(11, 21);
             //    mock_dkg_circuit(22, 43);
             //    mock_dkg_circuit(45, 88);
-            mock_dkg_circuit(89, 176);
+            //  mock_dkg_circuit(89, 176);
         }
 
         #[cfg(feature = "g2chip")]
@@ -646,7 +659,7 @@ mod tests {
         let dkg_config = DkgConfig::new(threshold, number_of_members).unwrap();
         let (pks, members) = mock_members(&dkg_config, &mut rng);
         let dkgs: Vec<_> = (0..number_of_members)
-            .map(|i| DkgMemberParams::new(dkg_config, pks.clone(), &mut rng).unwrap())
+            .map(|_| DkgMemberParams::new(dkg_config, pks.clone(), &mut rng).unwrap())
             .collect();
 
         let dkgs_pub: Vec<_> = dkgs.iter().map(|dkg| dkg.member_public_params()).collect();
