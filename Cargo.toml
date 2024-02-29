@@ -42,7 +42,7 @@ env_logger = "0.9.0"
 
 
 [features]
-default = ["g2chip"]
+default = ['g2chip']
 g2chip = []
 
 [lib]

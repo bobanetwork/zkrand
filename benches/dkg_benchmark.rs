@@ -37,7 +37,7 @@ mod dkg_benches {
         }
 
         let dkg_config = DkgConfig::new(THRESHOLD, NUMBER_OF_MEMBERS).unwrap();
-        let dkg_params = DkgMemberParams::new(dkg_config, 1, pks, &mut rng).unwrap();
+        let dkg_params = DkgMemberParams::new(dkg_config, pks, &mut rng).unwrap();
         let circuit = dkg_params.circuit(&mut rng);
         let instance = dkg_params.instance();
         let instance_ref = instance.iter().map(|i| i.as_slice()).collect::<Vec<_>>();
