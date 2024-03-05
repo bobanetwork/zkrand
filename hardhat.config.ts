@@ -16,6 +16,19 @@ const altCompilerSettings = {
 }
 
 module.exports = {
+  networks: {
+    boba_local: {
+      url: 'http://localhost:9545',
+    },
+    boba_sepolia: {
+      url: 'https://sepolia.boba.network',
+      accounts: process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+    } as any,
+    boba_mainnet: {
+      url: 'https://mainnet.boba.network',
+      accounts: process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+    },
+  },
   solidity: {
     compilers: [{
       version: '0.8.24',
