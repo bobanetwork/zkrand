@@ -1,5 +1,6 @@
 use crate::serialise::{
-    DkgGlobalPubParams as DkgGlobalPubParamsSerde, DkgShareKey as DkgShareKeySerde, Point,
+    le_bytes_to_hex, DkgGlobalPubParams as DkgGlobalPubParamsSerde,
+    DkgShareKey as DkgShareKeySerde, Point,
 };
 use crate::{
     DKG_DIR, DKG_SECRETS_DIR, DKG_SHARES_DIR, MEMBERS_DIR, MEM_PUBLIC_KEYS_PATH, RANDOM_DIR,
@@ -35,7 +36,6 @@ fn save_params(
         write(path, serialized.as_bytes())?;
     }
 
-    // todo: split gpk and vks
     {
         let path = &format!("{DKG_DIR}/gpp.json");
         let gpp_bytes: crate::serialise::DkgGlobalPubParams = gpp.into();
@@ -85,7 +85,10 @@ fn save_instances(instances: &[Vec<BnScalar>]) -> Result<()> {
     let path = format!("{DKG_DIR}/all_instances.json");
     let mut instances_bytes = vec![];
     for instance in instances.iter() {
-        let bytes: Vec<_> = instance.iter().map(|x| x.to_bytes()).collect();
+        let bytes: Vec<_> = instance
+            .iter()
+            .map(|x| le_bytes_to_hex(x.to_bytes()))
+            .collect();
         instances_bytes.push(bytes);
     }
     // Write the bytes to the file

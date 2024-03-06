@@ -116,7 +116,7 @@ struct Eval {
 
 fn save_eval(sigma: &PartialEval, vk: &BnG1, hash: &BnG1) {
     let value = [sigma.value.x.to_bytes(), sigma.value.y.to_bytes()];
-    let proof = [sigma.proof.0.to_bytes(), sigma.proof.1.to_bytes()];
+    let proof = [sigma.proof.z.to_bytes(), sigma.proof.c.to_bytes()];
     let vk = [vk.x.to_bytes(), vk.y.to_bytes()];
     let hash = [hash.x.to_bytes(), hash.y.to_bytes()];
 

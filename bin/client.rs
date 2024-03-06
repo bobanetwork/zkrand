@@ -20,9 +20,10 @@ use toml::to_string_pretty;
 use crate::mock::{mock_dkg, mock_members, mock_random};
 use crate::proof::{create_proof_checked, verify_single};
 use crate::serialise::{
-    DkgGlobalPubParams as DkgGlobalPubParamsSerde, DkgMemberParams as DkgMemberParamsSerde,
-    DkgShareKey as DkgShareKeySerde, MemberKey as MemberKeySerde, PartialEval as PartialEvalSerde,
-    Point, Point2, PseudoRandom as PseudoRandomSerde,
+    hex_to_le_bytes, le_bytes_to_hex, DkgGlobalPubParams as DkgGlobalPubParamsSerde,
+    DkgMemberParams as DkgMemberParamsSerde, DkgShareKey as DkgShareKeySerde,
+    MemberKey as MemberKeySerde, PartialEval as PartialEvalSerde, Point, Point2,
+    PseudoRandom as PseudoRandomSerde,
 };
 
 #[cfg(not(feature = "g2chip"))]
@@ -197,11 +198,20 @@ fn save_share(share: &DkgShareKey) -> Result<()> {
 }
 
 fn save_gpp(gpp: &DkgGlobalPubParams) -> Result<()> {
-    let path = &format!("{DKG_DIR}/gpp.json");
     let gpp_bytes: DkgGlobalPubParamsSerde = gpp.into();
-    let serialized = serde_json::to_string(&gpp_bytes)?;
+
+    let path = &format!("{DKG_DIR}/gpk.json");
+    let gpk = gpp_bytes.g2a;
+    let serialized = serde_json::to_string(&gpk).unwrap();
     write(path, serialized.as_bytes())?;
-    info!("global public parameters saved in {path}");
+    info!("gpk saved in {path}");
+
+    let path = &format!("{DKG_DIR}/vks.json");
+    let vks = gpp_bytes.verify_keys;
+    let serialized = serde_json::to_string(&vks).unwrap();
+    write(path, serialized.as_bytes())?;
+    info!("verification keys saved in {path}");
+
     Ok(())
 }
 
@@ -218,7 +228,10 @@ fn save_proof(proof: &[u8], instance: &[BnScalar], index: usize) -> Result<()> {
     info!("snark proof for member {index} saved in {path}");
 
     let path = &format!("{DKG_PROOFS_DIR}/instance_{index}.json");
-    let instance_bytes: Vec<_> = instance.iter().map(|x| x.to_bytes()).collect();
+    let instance_bytes: Vec<_> = instance
+        .iter()
+        .map(|x| le_bytes_to_hex(x.to_bytes()))
+        .collect();
     let serialized = serde_json::to_string(&instance_bytes)?;
     write(path, serialized.as_bytes())?;
     info!("snark instance for member {index} saved in {path}");
@@ -452,11 +465,12 @@ fn main() -> Result<()> {
                     // read instance
                     let instance_path = format!("{DKG_PROOFS_DIR}/instance_{index}.json");
                     let bytes = read_to_string(instance_path)?;
-                    let instance_bytes: Vec<[u8; 32]> = serde_json::from_str(&bytes)?;
+                    let instance_bytes: Vec<String> = serde_json::from_str(&bytes)?;
                     let instance: Vec<BnScalar> = instance_bytes
-                        .iter()
+                        .into_iter()
                         .map(|e| {
-                            BnScalar::from_bytes(e).expect("Failed to deserialise Bn256 scalar")
+                            BnScalar::from_bytes(&hex_to_le_bytes(e))
+                                .expect("Failed to deserialise Bn256 scalar")
                         })
                         .collect();
 
@@ -503,14 +517,14 @@ fn main() -> Result<()> {
                         //decode public parameters from instances
                         let path = &format!("{DKG_DIR}/all_instances.json");
                         let bytes = read_to_string(path)?;
-                        let instances_bytes: Vec<Vec<[u8; 32]>> = serde_json::from_str(&bytes)?;
+                        let instances_bytes: Vec<Vec<String>> = serde_json::from_str(&bytes)?;
 
                         let mut instances = vec![];
                         for instance in instances_bytes.into_iter() {
                             let s: Vec<_> = instance
-                                .iter()
+                                .into_iter()
                                 .map(|c| {
-                                    BnScalar::from_bytes(c)
+                                    BnScalar::from_bytes(&hex_to_le_bytes(c))
                                         .expect("Failed to deserialise Bn256 scalar")
                                 })
                                 .collect();
