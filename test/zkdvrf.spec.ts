@@ -133,7 +133,7 @@ describe('ZKDVRF on-chain tests', async () => {
     })
 
     describe('NIDKG Phase 1 - Confirming Registration', async () => {
-        it('should not be able to register through a permissioned node', async () => {
+        it('should not be able to register through a non-permissioned node', async () => {
             await expect(Zkdvrf.connect((await ethers.getSigners())[5]).registerNode(pubKeyAcc1, {value: minDeposit})).to.be.revertedWith('Unauthorized call')
         })
 
@@ -150,6 +150,8 @@ describe('ZKDVRF on-chain tests', async () => {
             await Zkdvrf.registerNode(pubKeyAcc1, {value: minDeposit})
             expect(await Zkdvrf.nodes(0)).to.be.eq(account1Address)
             expect((await Zkdvrf.addrToNode(account1Address))[2]).to.be.eq(minDeposit)
+            expect((await Zkdvrf.pubKeys(account1Address))[0]).to.eq(pubKeyAcc1.X)
+            expect((await Zkdvrf.pubKeys(account1Address))[1]).to.eq(pubKeyAcc1.Y)
         })
 
         it('should not be able to register the same node again', async () => {
@@ -173,6 +175,14 @@ describe('ZKDVRF on-chain tests', async () => {
             expect((await Zkdvrf.addrToNode(account3Address))[2]).to.be.eq(minDeposit)
             expect((await Zkdvrf.addrToNode(account4Address))[2]).to.be.eq(minDeposit)
             expect((await Zkdvrf.addrToNode(account5Address))[2]).to.be.eq(minDeposit)
+            expect((await Zkdvrf.pubKeys(account2Address))[0]).to.eq(pubKeyAcc2.X)
+            expect((await Zkdvrf.pubKeys(account2Address))[1]).to.eq(pubKeyAcc2.Y)
+            expect((await Zkdvrf.pubKeys(account3Address))[0]).to.eq(pubKeyAcc3.X)
+            expect((await Zkdvrf.pubKeys(account3Address))[1]).to.eq(pubKeyAcc3.Y)
+            expect((await Zkdvrf.pubKeys(account4Address))[0]).to.eq(pubKeyAcc4.X)
+            expect((await Zkdvrf.pubKeys(account4Address))[1]).to.eq(pubKeyAcc4.Y)
+            expect((await Zkdvrf.pubKeys(account5Address))[0]).to.eq(pubKeyAcc5.X)
+            expect((await Zkdvrf.pubKeys(account5Address))[1]).to.eq(pubKeyAcc5.Y)
         })
     })
 
@@ -194,6 +204,10 @@ describe('ZKDVRF on-chain tests', async () => {
     describe('NIDKG Phase 1 - Submit PP', async () => {
         it('should not be able to submit public params with invalid proof', async () => {
             await expect(Zkdvrf.submitPublicParams(ppAcc1, ppZkAcc2)).to.be.reverted
+        })
+
+        it('non-registered nodes should not be able to submit public params', async () => {
+            await expect(Zkdvrf.connect((await ethers.getSigners())[5]).submitPublicParams(ppAcc2, ppZkAcc2)).to.be.revertedWith('Unauthorized call')
         })
 
         it('should be able to submit public params', async () => {
@@ -256,6 +270,10 @@ describe('ZKDVRF on-chain tests', async () => {
     describe('NIDKG Phase 2 - Submit Partial Evaluation', async () => {
         it('should not be able to submit partial eval with invalid proof', async () => {
             await expect(Zkdvrf.submitPartialEval(pEvalAcc1, proofAcc2)).to.be.revertedWith('Verification of partial eval failed')
+        })
+
+        it('non-registered nodes should not be able to submit partial eval', async () => {
+            await expect(Zkdvrf.connect((await ethers.getSigners())[5]).submitPartialEval(pEvalAcc1, proofAcc2)).to.be.revertedWith('Unauthorized call')
         })
 
         it('should be able to submit partial eval', async () => {

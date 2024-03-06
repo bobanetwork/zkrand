@@ -40,7 +40,6 @@ contract zkdvrf is Ownable {
     uint256 public currentRoundNum;
     uint256 public minNodeDeposit;
 
-    // store pubkey on contract
     uint256[][] public ppList;
     // vk list order is also same as the ppList
     uint32 public ppListIndex;
@@ -55,11 +54,11 @@ contract zkdvrf is Ownable {
 
     mapping (uint32 => address) public nodes;
     mapping (address => dvrfNode) public addrToNode;
+    mapping (address => Grumpkin.Point) public pubKeys;
     mapping (uint256 => string) public roundInput;
     mapping (address => uint256) public lastSubmittedRound;
     mapping (uint256 => mapping (uint32 => Pairing.G1Point)) public roundToEval;
     mapping (uint256 => uint32) public roundSubmissionCount;
-    // TODO: add timestamp to round for enhanced queries
     mapping (uint256 => bytes32) public roundToRandom;
 
     constructor(address halo2VerifierAddress, address globalPublicParamsAddress, address pseudoRandAddress, uint256 minDeposit) Ownable(msg.sender) {
@@ -96,6 +95,7 @@ contract zkdvrf is Ownable {
         addrToNode[msg.sender].deposit = msg.value;
         addrToNode[msg.sender].status = true;
         addrToNode[msg.sender].ppIndex = ppListIndex;
+        pubKeys[msg.sender] = pubKey;
         // ppListOrder is unutilized but added for public visibility
         ppListOrder.push(msg.sender);
         ppListIndex++;
@@ -114,6 +114,7 @@ contract zkdvrf is Ownable {
     // each node can submit pp_i, zk_i
     // contract validates zk_i here for each submission and then accepts it
     function submitPublicParams(uint256[] calldata pp, bytes calldata zkProof) public {
+        require(msg.sender == addrToNode[msg.sender].nodeAddress, "Unauthorized call");
         require(contractPhase == Status.Nidkg, "Contract not in NIDKG phase");
         require(!addrToNode[msg.sender].statusPP, "Node already submitted");
         require(Halo2Verifier(halo2Verifier).verifyProof(zkProof, pp));
@@ -141,8 +142,6 @@ contract zkdvrf is Ownable {
     }
 
     // 2nd Phase
-
-    // can take an optional input
     function initiateRandom() public onlyOwner {
         require(contractPhase == Status.Ready, "Contract not ready");
 
@@ -155,14 +154,8 @@ contract zkdvrf is Ownable {
         roundInput[currentRoundNum] = currentTimestamp.toString();
     }
 
-    // // use Concat string utils to use xInput + block.timestamp
-    // function initiateRandom(string memory xInput) public {
-    //     // check last round completed
-    //     currentRoundNum++;
-    //     roundInput[currentRoundNum] = xInput;
-    // }
-
     function submitPartialEval(Pairing.G1Point memory pEval, IPseudoRand.PartialEvalProof memory proof) public {
+        require(msg.sender == addrToNode[msg.sender].nodeAddress, "Unauthorized call");
         // check valid round
         require(roundToRandom[currentRoundNum] == bytes32(0), "Round already computed");
         // this will help revert calls if the contract status is not Ready and the first initiateRandom() is not called
