@@ -150,7 +150,7 @@ impl DkgShareKey {
             .unwrap();
         let c = BnScalar::from_raw(from_be_bytes(&hash_state));
         let z = c * self.sk + r;
-        let proof = (z, c);
+        let proof = PartialEvalProof{ z, c };
 
         PartialEval {
             index: self.index,
@@ -161,10 +161,16 @@ impl DkgShareKey {
 }
 
 #[derive(Debug, Clone)]
+pub struct PartialEvalProof {
+    pub z: BnScalar,
+    pub c: BnScalar,
+}
+
+#[derive(Debug, Clone)]
 pub struct PartialEval {
     pub index: usize,
     pub value: BnG1,
-    pub proof: (BnScalar, BnScalar),
+    pub proof: PartialEvalProof,
 }
 
 impl PartialEval {
@@ -177,8 +183,8 @@ impl PartialEval {
         let h: BnG1 = hasher(input).to_affine();
 
         let g = BnG1::generator();
-        let z = self.proof.0;
-        let c = self.proof.1;
+        let z = self.proof.z;
+        let c = self.proof.c;
         let v = self.value;
 
         let cap_r_1 = ((g * z) - (vk * c)).to_affine();

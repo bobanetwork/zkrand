@@ -2871,6 +2871,7 @@ dependencies = [
  "halo2_gadgets",
  "halo2_solidity_verifier",
  "halo2wrong",
+ "hex",
  "itertools 0.10.5",
  "lazy_static",
  "log",
