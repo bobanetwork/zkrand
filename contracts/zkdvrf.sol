@@ -54,11 +54,11 @@ contract zkdvrf is Ownable {
 
     mapping (uint32 => address) public nodes;
     mapping (address => dvrfNode) public addrToNode;
+    mapping (address => Grumpkin.Point) public pubKeys;
     mapping (uint256 => string) public roundInput;
     mapping (address => uint256) public lastSubmittedRound;
     mapping (uint256 => mapping (uint32 => Pairing.G1Point)) public roundToEval;
     mapping (uint256 => uint32) public roundSubmissionCount;
-    // TODO: add timestamp to round for enhanced queries
     mapping (uint256 => bytes32) public roundToRandom;
 
     constructor(address halo2VerifierAddress, address globalPublicParamsAddress, address pseudoRandAddress, uint256 minDeposit) Ownable(msg.sender) {
@@ -69,6 +69,7 @@ contract zkdvrf is Ownable {
         globalPublicParams = globalPublicParamsAddress;
         pseudoRand = pseudoRandAddress;
         minNodeDeposit = minDeposit;
+        ppList = new uint256[][](memberCount);
     }
 
 
@@ -94,6 +95,7 @@ contract zkdvrf is Ownable {
         addrToNode[msg.sender].deposit = msg.value;
         addrToNode[msg.sender].status = true;
         addrToNode[msg.sender].ppIndex = ppListIndex;
+        pubKeys[msg.sender] = pubKey;
         // ppListOrder is unutilized but added for public visibility
         ppListOrder.push(msg.sender);
         ppListIndex++;
@@ -112,6 +114,7 @@ contract zkdvrf is Ownable {
     // each node can submit pp_i, zk_i
     // contract validates zk_i here for each submission and then accepts it
     function submitPublicParams(uint256[] calldata pp, bytes calldata zkProof) public {
+        require(msg.sender == addrToNode[msg.sender].nodeAddress, "Unauthorized call");
         require(contractPhase == Status.Nidkg, "Contract not in NIDKG phase");
         require(!addrToNode[msg.sender].statusPP, "Node already submitted");
         require(Halo2Verifier(halo2Verifier).verifyProof(zkProof, pp));
@@ -139,13 +142,11 @@ contract zkdvrf is Ownable {
     }
 
     // 2nd Phase
-
-    // can take an optional input
     function initiateRandom() public onlyOwner {
         require(contractPhase == Status.Ready, "Contract not ready");
 
         if (currentRoundNum != 0) {
-            require(roundToRandom[currentRoundNum].length != 0, "Earlier round not completed");
+            require(roundToRandom[currentRoundNum] != bytes32(0), "Earlier round not completed");
         }
 
         currentRoundNum++;
@@ -153,16 +154,10 @@ contract zkdvrf is Ownable {
         roundInput[currentRoundNum] = currentTimestamp.toString();
     }
 
-    // // use Concat string utils to use xInput + block.timestamp
-    // function initiateRandom(string memory xInput) public {
-    //     // check last round completed
-    //     currentRoundNum++;
-    //     roundInput[currentRoundNum] = xInput;
-    // }
-
     function submitPartialEval(Pairing.G1Point memory pEval, IPseudoRand.PartialEvalProof memory proof) public {
+        require(msg.sender == addrToNode[msg.sender].nodeAddress, "Unauthorized call");
         // check valid round
-        require(roundToRandom[currentRoundNum].length == 0, "Round already computed");
+        require(roundToRandom[currentRoundNum] == bytes32(0), "Round already computed");
         // this will help revert calls if the contract status is not Ready and the first initiateRandom() is not called
         require (lastSubmittedRound[msg.sender] < currentRoundNum, "Already submitted for round");
         bytes memory currentX = bytes(roundInput[currentRoundNum]);
@@ -178,14 +173,14 @@ contract zkdvrf is Ownable {
     // take sigma as a param, basically a point that the operator submits (combination of subset of partial evals)
     // take the gpk as stored in contract
     function generateRandom(Pairing.G1Point memory sigma) public onlyOwner{
-        require(roundToRandom[currentRoundNum].length == 0, "Answer for round already exists");
+        require(roundToRandom[currentRoundNum] == bytes32(0), "Answer for round already exists");
         require(roundSubmissionCount[currentRoundNum] >= threshold, "Partial evaluation threshold not reached");
         require(IPseudoRand(pseudoRand).verifyPseudoRand(bytes(roundInput[currentRoundNum]), sigma, gpkVal), "Incorrect random submitted");
         roundToRandom[currentRoundNum] = keccak256(abi.encodePacked(sigma.X, sigma.Y));
     }
 
     function getLatestRandom() public view returns (bytes32) {
-        if (roundToRandom[currentRoundNum].length != 0) {
+        if (roundToRandom[currentRoundNum] != bytes32(0)) {
             return roundToRandom[currentRoundNum];
         }
 
@@ -197,7 +192,7 @@ contract zkdvrf is Ownable {
     }
 
     function getRandomAtRound(uint256 roundNum) public view returns (bytes32) {
-        if (roundToRandom[roundNum].length != 0) {
+        if (roundToRandom[roundNum] != bytes32(0)) {
             return roundToRandom[roundNum];
         }
 
