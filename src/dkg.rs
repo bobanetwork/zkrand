@@ -150,7 +150,7 @@ impl DkgShareKey {
             .unwrap();
         let c = BnScalar::from_raw(from_be_bytes(&hash_state));
         let z = c * self.sk + r;
-        let proof = PartialEvalProof{ z, c };
+        let proof = PartialEvalProof { z, c };
 
         PartialEval {
             index: self.index,

@@ -1,52 +1,187 @@
 # zkDVRF
 
-A  distributed verifiable random function (DVRF) is a t-out-of-n threshold scheme that enables 
-a group of n participants to jointly compute a random output. The output should be unique, publicly verifiable, 
-unpredictable, and unbiased. 
+zkDVRF is a t-out-of-n threshold scheme that runs among a group of n distributed members. The protocol consists of two components:
+a snark-based non-interactive distributed key generation (NI-DKG) and randomness generation based on threshold bls-signatures.
 
-This repository implements a DVRF using threshold cryptography, zksnarks, and bls-signatures. 
-The main components of this DVRF are:
-* A snark-based non-interactive distributed key generation (NI-DKG):  We use Halo2 with KZG commitment on the Bn256 curve to generate the SNARK proof. Our DKG circuit proves the following computation is performed correctly:
-    - Secret shares are computed consistently from coefficents
-    - Public shares are generated from secret shares: public shares are computed on Bn256 curve. In the circuit, we use non-native encoding of Bn256 from halo2wrong to create gates. As our protocol only requires a fixed generator $g_1$ for creating public shares, we have developed a windowed scalar multiplication chip for fixed point generator which reduced 70% of gates.
-    - Encryption of secret shares: encryptions are performed on Grumpkin curve instead of Bn256. We developed ecc chip for generating gates in the circuit where scalar multiplication currently uses a double-and-add method with optimisations customised for halo2wrong's maingate. Since the base field of Grumpkin is the same as the scalar field of Bn256, the size of the scalar multiplication circuit for Grumpkin is about 25 times smaller than the non-native encoding of Bn256.   
-* Randomness generation based on threshold bls-signatures: After completing the NI-DKG process, participants can use their DKG secret keys to create pseudo-random values. 
-
-### Benchmarks
-Benchmarks can be run using:
+### To build:
 
 ```
-$ cargo bench
+$ cargo build --release
 ```
 
-NI-DKG benchmark can be switched on by uncommenting it in Cargo.toml.
-Below are the evaluation results running on AWS instance r6i.8xlarge, which has 32 CPUs and 256GB of memory. 
+For help information
+```
+$ ./target/release/client -h
+```
 
-| (t, n) | degree | snark_prove (s) | snark_verify (ms) | snark proof size (Bytes) | memory usage (GB) |
-|:------:|:------:|:---------------:|:-----------------:|:------------------------:|:-----------------:|
-| (5,9)  |  18    |   20.889       |	5.761           |	3840	           |       5          | 
-| (11,21) |  19	  |   40.043        |	6.375	        |       3840	           |       10          | 
-| (22, 43) |  20  |   80.996        |   7.362	        |       3840	           |       19          |
-| (45, 88) |  21  |   161.630       |	9.544           |	3840	           |       37          | 
-| (89, 177) | 22  |   322.693       |	13.837	        |       3840               |	   73         |
+### Protocol steps
+1. Download KZG parameters using: 
+```
+sh download_params.sh
+```
+This downloads KZG parameters with degree = 22 from Ethereum Powers of Tau.
+The parameters are saved in "./kzg_params/params22". This is the KZG ceremony. 
 
-The proof size remains constant and the verification time can be further reduced by hashing the public inputs which is not yet implemented. 
+2. Config. This step initialises the protocol configuration. 
+The default config is set to be (threshold, number_of_memnbers, degree) = (3, 5, 18). 
+This can be changed by:
+```
+$ RUST_LOG=info ./target/release/client config <THRESHOLD> <NUMBER_OF_MEMBERS> <DEGREE>
+```
+The configuration is saved at "data/config.toml". The degree determines maximum number of gates allowed in a DNI-KG circuit.
+Higher degree is required for supporting more members in the NI-DKG protocol. 
+The maximun (threshold, number_of_members) that can be supported for a given degree is: 
 
-DVRF benchmark evaluates the performance of the DVRF functions excluding NI-DKG. 
+| degree |   18   | 19 | 20 | 21 | 22 |
+|:------:|:------:| :----: | :----: |  :----: |  :----: |
+| (t, n) | (3, 5) | (9, 16) | (20, 38) | (42, 83) | (86, 171)
 
-| (t,n)  |  partial_eval (ms) |	verify_partial_eval (ms) |	combine (ms) |	verify_pseudo_random (ms) |
-|:------:|:------------------:|:------------------------:|:-----------------:|:--------------------------:|
-| (5,9)    |	0.891         |	   1.064                 |	1.071	     |         1.655              |   
-| (11,21) |		      |                          |	2.336	     |                            |
-|(22, 43)|		      |                          |      4.667	     |                            | 
-|(45, 88)|		      |                          |      9.604        |                            |   	
-|(89, 177)|		      |                          |      19.171       |                            | 	
+The threshold is set as the majority of number_of_members. 
 
-The performance of a single partial evaluation, its verification, and the verification of the final pseudorandom 
-value are independent of the values of (t,n). Therefore, we only put the timing results for the first row.
+3. Setup. This generates SNARK proving key and verifying key for NI-DKG circuits,
+    and the verification contracts for checking SNARK proofs onchain.
+The SNARK parameters are generated using: 
+```
+$ RUST_LOG=info ./target/release/client setup -s
+```
+The parameters are computed using Ethereum power-of-tau, 
+therefore, the proving/verifying keys are deterministic given a configuration. 
+The parameters are stored in "./kzg_params" and the generated contracts in "./contracts".
+The option `-s` splits the verifier contract and verifying key contract so that the verifier contract 
+stays the same for different (t,n) values. The verifying key contract needs to be changed when (t,n) changes.
+
+4. KeyGen. Before the NI-DKG protocol starts, each member $i$ pre-generates its member public key $mpk_i$ and 
+secret key $msk_i$ for encryption and decryption in NI-DKG protocol:
+```
+$ RUST_LOG=info ./target/release/client keygen
+```
+The secret key is saved at "./data/members/member.json". The public key is printed in the format:
+```
+  {
+    "x":"0x0779273a75396c1c8c874a1b08c8beacf56f0a576142c7251c0be0408554b717",
+    "y":"0x2c3c22206625d7c76d319245dcaa5cadfad9d197933966b73def60f67eccbd36"
+  }
+```
+A public key is a point on Grumpkin curve. (x,y) are the point's coordinates 
+which are 256-bit integers and are encoded as hex string.
+Each member submits its member public key to contract "zkdvrf.sol" through 
+function `registerNode`. The hex string may need to be converted to big integers before submitting to the contract.
+In the contract, all the submitted public keys are stored in `pubKeys` and their order is stored in `ppListOrder`. 
+To use these public keys in the following NI-DKG steps, `pubKeys` should be converted to a list that is compatible 
+with the Rust backend:
+
+```
+[
+{"x1": "...", "y1": "..."}, 
+{"x2": "...", "y2": "..."}, 
+... 
+{"x5": "...", "y5": "..."},
+]
+```
+
+The order follows the order in `ppListOrder` and every member must use the same order.
+Otherwise the SNARK proof verification won't pass. The converted public keys should be saved at "./data/mpks.json"
+for the next steps.
 
 
-### TODO
-- [x] Fixed point scalar multiplication optimisations for non-native ecc chip 
-- [ ] Windowed scalar multiplication for grumpkin chip
-- [ ] Integration with recursive snarks for NI-DKG
+5. NI-DKG. 
+   1. Create public parameters. Each member $i$ selects a random polynomial to create its public parameters $pp_i$
+   and a SNARK proof $zkp_i$ to ensure the parameters are generated correctly. 
+        ```
+        $ RUST_LOG=info ./target/release/client dkg prove <INDEX>
+        ```
+        Index is the member's position in the list of member public keys. The index ranges 1, 2, ..., number_of_members.
+        This command reads "./data/mpks.json" to obtain all members public keys. 
+        The public keys are used for encrypting the secret shares each member created for other members.
+        This command outputs $(pp_i, zkp_i)$ where $pp_i$ is encoded as instance and saved at "./data/dkg/proofs/instance_{INDEX}.json" and
+        $zkp_i$ is saved at "./data/dkg/proofs/proof_{INDEX}.dat".
+        $(pp_i, zpk_i)$ can be submitted to the contract `zkdvrf.sol` through function `submitPublicParams` for onchain verification.
+        $pp_i$ is a list of hex string and needs to be converted to be a list of big integers before sending to the contract.
+        $zkp_i$ is bytes and can be directly sent to the contract.
+
+        $(pp_i, zpk_i)$ can also be verified locally using
+        ```
+        $ RUST_LOG=info ./target/release/client dkg verify <INDEX>
+        ```
+      This command reads $pp_i$ from "./data/dkg/proofs/instance_{INDEX}.json" 
+   and $zkp_i$ from  "./data/dkg/proofs/proof_{INDEX}.dat". 
+
+        Note that it is not necessary to require each member to generate and submit $pp_i$.
+        Instead, a lower bound $m$ with threshold < m <= number_of_members can be set to accept the NI-DKG process.
+        For example, m = (2/3) * number_of_members. If at least m members submit valid $(pp_i, zkp_i)$, then the NI-DKG can be considered successfully.
+        The members that do not submit will still be able to obtain a secret/verification key pair (in the following steps) as long as their member public keys are included. 
+        These members can be allowed or banned from participating in the randomness generation process.
+   2. Derive secret shares and global public parameters.  `ppList` in the contract contains 
+   all the submitted public parameters from which each member can derive their secret shares and global public parameters. 
+    Member i can derive its secret share $sk_i$ and the global public parameters using:
+
+      ```
+      $ RUST_LOG=info ./target/release/client dkg derive <INDEX> -f <FILE>
+      ```
+      This command requires member i's secret key $msk_i$ in "./data/members/FILE.json" and all the
+      public parameters in "./data/all_instances.json". The default value of FILE is "member". `ppList` in the contract is of type `uint256[][]`.
+   `all_instances.json` is obtained from  `ppList` by converting all the uint256 into hex string. From this command, member i 
+   obtains its secret share saved at "./data/dkg/shares/share_{INDEX}.json", a global public key $gpk$ saved at "./data/gpk.json" 
+   and all the verification keys saved at "./data/vks.json". Every member can obtain a verification key regardless of whether the 
+   member participates in the NI-DKG or not. The verification keys are listed in the same order as the member public keys. 
+   The verification key $vk_i$ will be used to verify the partial evaluation generation by member i using its secret share $sk_i$. 
+
+6. Randomness generation: given an unique public string $x$, members jointly generate a pseudorandom value. 
+This pseudorandom is deterministic which means only one value can pass the pseudorandom verification `verifyPseudoRand` given $gpk$ and $x$.
+   1. Each member $i$ computes a partial evaluation $eval_i$ using:
+    ```
+    $ RUST_LOG=info ./target/release/client rand eval <INDEX> <INPUT>
+    ```
+   The output of $eval_i$ is saved at "./data/random/eval_{INDEX}.json".
+   The validity of $eval_i$ can be checked against member $i$'s verification key $vk_i$.
+   $eval_i$ can be submitted to the contract `zkdvrf.sol` through function `submitPartialEval`.
+   An example of $eval_i$ is 
+   ```
+   {
+   "index":1,
+   "value":{"x":"0x14144dd3868a1a33384c8f5a4fd5ed0a71723780ad7244f12a2753f013484e6d","y":"0x1e78a56363dc84687bf354f03f000bc1ac1e65d9fca322e275e2d8bcc38d6e9b"},
+   "proof":{"z":"0x2effa96d25c37a73ea8a329a9bb366f962ea5ef3fa694520342aa6d0c41a61dd","c":"0x03f4e7780a47099ce6541da29bc1d5e03370a5fdc6075e451cbbef923a7b896a"}
+   }
+   ```
+   All the hex string may need to be converted to big integers before submitting to the contract.
+   $eval_i$ can also be verified locally using
+   ```
+    $ RUST_LOG=info ./target/release/client rand verify <INDEX> <INPUT>
+   ```
+   This command reads $eval_i$ from "./data/random/eval_{INDEX}.json" and verification keys from "./data/vks.json".
+
+    2. Once there are at least $t$ valid partial evaluations, a combiner can combine these partial evaluations into the final pseudorandom value and generates a proof to show the value is correct.
+      The combination process can be performed by any party and it doesn't involve any secret information. To save the onchain verification cost, the combination can be done offchain and
+      only the final pseudorandom value and its proof needs to be verified onchain.
+    ```
+    $ RUST_LOG=info ./target/release/client rand combine <INPUT>
+    ```
+   This command reads all partial evaluations from "./data/evals.json" 
+   and outputs a pseudorandom value saved at "./data/random/pseudo.json". 
+   In the contract, all the submitted partial evaluations are stored in `roundToEval` 
+which can be used to obtain "evals.json" by converting all the big integers into hex string and changing the map 'roundToEval' to a list of mapped values such as 
+   ```
+   [
+   {"index":1,"value":{"x":"...","y":"..."},"proof":{"z":"...","c":"..."}},
+   {"index":2,"value":{"x":"...","y":"..."},"proof":{"z":"...","c":"..."}},
+   {"index":3,"value":{"x":"...","y":"..."},"proof":{"z":"...","c":"..."}},
+   {"index":4,"value":{"x":"...","y":"..."},"proof":{"z":"...","c":"..."}},
+   {"index":5,"value":{"x":"...","y":"..."},"proof":{"z":"...","c":"..."}}
+   ]
+   ```
+    Partial evaluations contain indices, so they do not need to be sorted. The indices are used in the combination algorithm.
+    The final pseudorandom value has the format: 
+    ```
+    {
+    "proof":{"x":"0x2028e15050ef4550f0530afad37dfc8928566dbbd31edbe7f244afe3cb0d1c3f","y":"0x0e7b0ecb46b03fb589eedf8136b451f6171b01ce903156768be9e511878df08f"},
+    "value":[51,167,113,177,40,238,25,153,158,212,223,21,117,190,95,162,86,65,154,24,164,217,242,200,239,74,162,60,122,208,48,0]
+    }
+    ```
+    It can be submitted to the contract through `submitRandom` for onchain verification and storage. The pseudorandom value is "value" which is the 32-bytes keccak hash of "proof".
+    The hex string in "proof" may need to be converted to big integers before submitting. 
+   
+    The pseudorandom value can also be verified locally:
+    ```
+    $ RUST_LOG=info ./target/release/client rand verify-final <INPUT>
+    ```
+    This command reads pseudorandom from "./data/random/pseudo.json".
