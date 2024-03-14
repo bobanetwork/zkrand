@@ -10,6 +10,17 @@ interface IPseudoRand {
         uint c;
     }
 
+    struct PartialEval {
+        uint32 index;
+        Pairing.G1Point value;
+        IPseudoRand.PartialEvalProof proof;
+    }
+
+    struct PseudoRandom {
+        Pairing.G1Point proof;
+        bytes32 value;
+    }
+
     function verifyPartialEvalFast(
         Pairing.G1Point memory h,
         Pairing.G1Point memory sigma,

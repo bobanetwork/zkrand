@@ -29,8 +29,8 @@ contract PseudoRand is IPseudoRand{
         Pairing.G1Point memory sc = Pairing.scalar_mul(sigma, proof.c);
         Pairing.G1Point memory r2 = Pairing.addition(hz, sc.negate());
 
-        bytes memory input = abi.encodePacked(g.X, g.Y, h.X, h.Y, r1.X, r1.Y,
-            r2.X, r2.Y,vk.X, vk.Y, sigma.X, sigma.Y);
+        bytes memory input = abi.encodePacked(g.x, g.y, h.x, h.y, r1.x, r1.y,
+            r2.x, r2.y,vk.x, vk.y, sigma.x, sigma.y);
         bytes32 hash = keccak256(input);
 
         uint cc = uint(hash) % R;
@@ -54,8 +54,8 @@ contract PseudoRand is IPseudoRand{
         Pairing.G1Point memory sc = Pairing.scalar_mul(sigma, proof.c);
         Pairing.G1Point memory r2 = Pairing.addition(hz, sc.negate());
 
-        bytes memory input = abi.encodePacked(g.X, g.Y, h.X, h.Y, r1.X, r1.Y,
-            r2.X, r2.Y,vk.X, vk.Y, sigma.X, sigma.Y);
+        bytes memory input = abi.encodePacked(g.x, g.y, h.x, h.y, r1.x, r1.y,
+            r2.x, r2.y,vk.x, vk.y, sigma.x, sigma.y);
         bytes32 hash = keccak256(input);
 
         uint cc = uint(hash) % R;
