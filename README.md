@@ -49,6 +49,7 @@ therefore, the proving/verifying keys are deterministic given a configuration.
 The parameters are stored in "./kzg_params" and the generated contracts in "./contracts".
 The option `-s` splits the verifier contract and verifying key contract so that the verifier contract 
 stays the same for different (t,n) values. The verifying key contract needs to be changed when (t,n) changes.
+The current implementation of contracts set (t,n) to be (3, 5).
 
 4. KeyGen. Before the NI-DKG protocol starts, each member $i$ pre-generates its member public key $mpk_i$ and 
 secret key $msk_i$ for encryption and decryption in NI-DKG protocol:
@@ -106,25 +107,26 @@ for the next steps.
       This command reads $pp_i$ from "./data/dkg/proofs/instance_{INDEX}.json" 
    and $zkp_i$ from  "./data/dkg/proofs/proof_{INDEX}.dat". 
 
-        Note that it is not necessary to require each member to generate and submit $pp_i$.
+      The current implementation of contracts expect submission from each member. However, 
+      it is in fact not necessary to require each member to generate and submit $pp_i$.
         Instead, a lower bound $m$ with threshold < m <= number_of_members can be set to accept the NI-DKG process.
         For example, m = (2/3) * number_of_members. If at least m members submit valid $(pp_i, zkp_i)$, then the NI-DKG can be considered successfully.
         The members that do not submit will still be able to obtain a secret/verification key pair (in the following steps) as long as their member public keys are included. 
         These members can be allowed or banned from participating in the randomness generation process.
-   2. Derive secret shares and global public parameters.  `ppList` in the contract contains 
+   3. Derive secret shares and global public parameters.  `ppList` in the contract contains 
    all the submitted public parameters from which each member can derive their secret shares and global public parameters. 
-    Member i can derive its secret share $sk_i$ and the global public parameters using:
+    Member $i$ can derive its secret share $sk_i$ and the global public parameters using:
 
       ```
       $ RUST_LOG=info ./target/release/client dkg derive <INDEX> -f <FILE>
       ```
-      This command requires member i's secret key $msk_i$ in "./data/members/FILE.json" and all the
+      This command requires member $i$'s secret key $msk_i$ in "./data/members/FILE.json" and all the
       public parameters in "./data/all_instances.json". The default value of FILE is "member". `ppList` in the contract is of type `uint256[][]`.
-   `all_instances.json` is obtained from  `ppList` by converting all the uint256 into hex string. From this command, member i 
+   `all_instances.json` is obtained from  `ppList` by converting all the uint256 into hex string. From this command, member $i$ 
    obtains its secret share saved at "./data/dkg/shares/share_{INDEX}.json", a global public key $gpk$ saved at "./data/gpk.json" 
    and all the verification keys saved at "./data/vks.json". Every member can obtain a verification key regardless of whether the 
    member participates in the NI-DKG or not. The verification keys are listed in the same order as the member public keys. 
-   The verification key $vk_i$ will be used to verify the partial evaluation generation by member i using its secret share $sk_i$. 
+   The verification key $vk_i$ will be used to verify the partial evaluation generation by member $i$ using its secret share $sk_i$. 
 
 6. Randomness generation: given an unique public string $x$, members jointly generate a pseudorandom value. 
 This pseudorandom is deterministic which means only one value can pass the pseudorandom verification `verifyPseudoRand` given $gpk$ and $x$.
@@ -132,6 +134,7 @@ This pseudorandom is deterministic which means only one value can pass the pseud
     ```
     $ RUST_LOG=info ./target/release/client rand eval <INDEX> <INPUT>
     ```
+   This command reads member $i$'s secret share $sk_i$ from "./data/dkg/shares/share_{INDEX}.json". 
    The output of $eval_i$ is saved at "./data/random/eval_{INDEX}.json".
    The validity of $eval_i$ can be checked against member $i$'s verification key $vk_i$.
    $eval_i$ can be submitted to the contract `zkdvrf.sol` through function `submitPartialEval`.
