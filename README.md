@@ -188,3 +188,34 @@ which can be used to obtain "evals.json" by converting all the big integers into
     $ RUST_LOG=info ./target/release/client rand verify-final <INPUT>
     ```
     This command reads pseudorandom from "./data/random/pseudo.json".
+
+## Deploy
+
+To deploy the Zkdvrf contracts on-chain-
+
+1. Set up your .env (use .env.example for reference)
+
+```
+RPC_URL = <rpc of network to deploy on>
+PRIVATE_KEY = <deployer pk>
+DEPLOY_NO_HELPERS = <true/false> # optional
+HALO2V = <Halo2VerifyingKey-3-5-18-g2 address> # optional
+GPP = <GlobalPublicParam address> # optional
+PSRAND = <PseudoRand address> # optional
+```
+
+deploying the helpers are optional, and to proceed with using prior-deployed helpers, set `DEPLOY_NO_HELPERS` to true and supply the `HALO2V`, `GPP`, `PSRAND` contract addresses.
+
+If you are unsure, do not set the optional params.
+
+2. Run the deploy script with
+```
+$ yarn deploy
+```
+
+## Running Tests
+
+Run contract tests using-
+```
+$ yarn test
+```
