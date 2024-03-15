@@ -16,72 +16,72 @@ $ ./target/release/client -h
 
 ### Protocol steps
 1. Download KZG parameters using: 
-```
-sh download_params.sh
-```
-This downloads KZG parameters with degree = 22 from Ethereum Powers of Tau.
-The parameters are saved in "./kzg_params/params22". This is the KZG ceremony. 
+    ```
+    sh download_params.sh
+    ```
+    This downloads KZG parameters with degree = 22 from Ethereum Powers of Tau.
+    The parameters are saved in "./kzg_params/params22". This is the KZG ceremony. 
 
 2. Config. This step initialises the protocol configuration. 
 The default config is set to be (threshold, number_of_memnbers, degree) = (3, 5, 18). 
 This can be changed by:
-```
-$ RUST_LOG=info ./target/release/client config <THRESHOLD> <NUMBER_OF_MEMBERS> <DEGREE>
-```
-The configuration is saved at "data/config.toml". The degree determines maximum number of gates allowed in a DNI-KG circuit.
-Higher degree is required for supporting more members in the NI-DKG protocol. 
-The maximun (threshold, number_of_members) that can be supported for a given degree is: 
-
-| degree |   18   | 19 | 20 | 21 | 22 |
-|:------:|:------:| :----: | :----: |  :----: |  :----: |
-| (t, n) | (3, 5) | (9, 16) | (20, 38) | (42, 83) | (86, 171)
-
-The threshold is set as the majority of number_of_members. 
+    ```
+    $ RUST_LOG=info ./target/release/client config <THRESHOLD> <NUMBER_OF_MEMBERS> <DEGREE>
+    ```
+    The configuration is saved at "data/config.toml". The degree determines maximum number of gates allowed in a DNI-KG circuit.
+    Higher degree is required for supporting more members in the NI-DKG protocol. 
+    The maximun (threshold, number_of_members) that can be supported for a given degree is: 
+    
+    | degree |   18   | 19 | 20 | 21 | 22 |
+    |:------:|:------:| :----: | :----: |  :----: |  :----: |
+    | (t, n) | (3, 5) | (9, 16) | (20, 38) | (42, 83) | (86, 171)
+    
+    The threshold is set as the majority of number_of_members. 
 
 3. Setup. This generates SNARK proving key and verifying key for NI-DKG circuits,
     and the verification contracts for checking SNARK proofs onchain.
-The SNARK parameters are generated using: 
-```
-$ RUST_LOG=info ./target/release/client setup -s
-```
-The parameters are computed using Ethereum power-of-tau, 
-therefore, the proving/verifying keys are deterministic given a configuration. 
-The parameters are stored in "./kzg_params" and the generated contracts in "./contracts".
-The option `-s` splits the verifier contract and verifying key contract so that the verifier contract 
-stays the same for different (t,n) values. The verifying key contract needs to be changed when (t,n) changes.
+    The SNARK parameters are generated using: 
+    ```
+    $ RUST_LOG=info ./target/release/client setup -s
+    ```
+    The parameters are computed using Ethereum power-of-tau, 
+    therefore, the proving/verifying keys are deterministic given a configuration. 
+    The parameters are stored in "./kzg_params" and the generated contracts in "./contracts".
+    The option `-s` splits the verifier contract and verifying key contract so that the verifier contract 
+    stays the same for different (t,n) values. The verifying key contract needs to be changed when (t,n) changes.
 
 4. KeyGen. Before the NI-DKG protocol starts, each member $i$ pre-generates its member public key $mpk_i$ and 
 secret key $msk_i$ for encryption and decryption in NI-DKG protocol:
-```
-$ RUST_LOG=info ./target/release/client keygen
-```
-The secret key is saved at "./data/members/member.json". The public key is printed in the format:
-```
-  {
-    "x":"0x0779273a75396c1c8c874a1b08c8beacf56f0a576142c7251c0be0408554b717",
-    "y":"0x2c3c22206625d7c76d319245dcaa5cadfad9d197933966b73def60f67eccbd36"
-  }
-```
-A public key is a point on Grumpkin curve. (x,y) are the point's coordinates 
-which are 256-bit integers and are encoded as hex string.
-Each member submits its member public key to contract "zkdvrf.sol" through 
-function `registerNode`. The hex string may need to be converted to big integers before submitting to the contract.
-In the contract, all the submitted public keys are stored in `pubKeys` and their order is stored in `ppListOrder`. 
-To use these public keys in the following NI-DKG steps, `pubKeys` should be converted to a list that is compatible 
-with the Rust backend:
-
-```
-[
-{"x1": "...", "y1": "..."}, 
-{"x2": "...", "y2": "..."}, 
-... 
-{"x5": "...", "y5": "..."},
-]
-```
-
-The order follows the order in `ppListOrder` and every member must use the same order.
-Otherwise the SNARK proof verification won't pass. The converted public keys should be saved at "./data/mpks.json"
-for the next steps.
+    ```
+    $ RUST_LOG=info ./target/release/client keygen
+    ```
+    The secret key is saved at "./data/members/member.json". The public key is printed in the format:
+    ```
+      {
+        "x":"0x0779273a75396c1c8c874a1b08c8beacf56f0a576142c7251c0be0408554b717",
+        "y":"0x2c3c22206625d7c76d319245dcaa5cadfad9d197933966b73def60f67eccbd36"
+      }
+    ```
+    A public key is a point on Grumpkin curve. (x,y) are the point's coordinates 
+    which are 256-bit integers and are encoded as hex string.
+    Each member submits its member public key to contract "zkdvrf.sol" through 
+    function `registerNode`. The hex string may need to be converted to big integers before submitting to the contract.
+    In the contract, all the submitted public keys are stored in `pubKeys` and their order is stored in `ppListOrder`. 
+    To use these public keys in the following NI-DKG steps, `pubKeys` should be converted to a list that is compatible 
+    with the Rust backend:
+    
+    ```
+    [
+    {"x1": "...", "y1": "..."}, 
+    {"x2": "...", "y2": "..."}, 
+    ... 
+    {"x5": "...", "y5": "..."},
+    ]
+    ```
+    
+    The order follows the order in `ppListOrder` and every member must use the same order.
+    Otherwise the SNARK proof verification won't pass. The converted public keys should be saved at "./data/mpks.json"
+    for the next steps.
 
 
 5. NI-DKG. 
@@ -113,18 +113,18 @@ for the next steps.
         These members can be allowed or banned from participating in the randomness generation process.
    2. Derive secret shares and global public parameters.  `ppList` in the contract contains 
    all the submitted public parameters from which each member can derive their secret shares and global public parameters. 
-    Member i can derive its secret share $sk_i$ and the global public parameters using:
+    Member $i$ can derive its secret share $sk_i$ and the global public parameters using:
 
       ```
       $ RUST_LOG=info ./target/release/client dkg derive <INDEX> -f <FILE>
       ```
-      This command requires member i's secret key $msk_i$ in "./data/members/FILE.json" and all the
+      This command requires member $i$'s secret key $msk_i$ in "./data/members/FILE.json" and all the
       public parameters in "./data/all_instances.json". The default value of FILE is "member". `ppList` in the contract is of type `uint256[][]`.
-   `all_instances.json` is obtained from  `ppList` by converting all the uint256 into hex string. From this command, member i 
+   `all_instances.json` is obtained from  `ppList` by converting all the uint256 into hex string. From this command, member $i$ 
    obtains its secret share saved at "./data/dkg/shares/share_{INDEX}.json", a global public key $gpk$ saved at "./data/gpk.json" 
    and all the verification keys saved at "./data/vks.json". Every member can obtain a verification key regardless of whether the 
    member participates in the NI-DKG or not. The verification keys are listed in the same order as the member public keys. 
-   The verification key $vk_i$ will be used to verify the partial evaluation generation by member i using its secret share $sk_i$. 
+   The verification key $vk_i$ will be used to verify the partial evaluation generation by member $i$ using its secret share $sk_i$. 
 
 6. Randomness generation: given an unique public string $x$, members jointly generate a pseudorandom value. 
 This pseudorandom is deterministic which means only one value can pass the pseudorandom verification `verifyPseudoRand` given $gpk$ and $x$.
@@ -132,6 +132,7 @@ This pseudorandom is deterministic which means only one value can pass the pseud
     ```
     $ RUST_LOG=info ./target/release/client rand eval <INDEX> <INPUT>
     ```
+   This command reads member $i$'s secret share $sk_i$ from "./data/dkg/shares/share_{INDEX}.json".
    The output of $eval_i$ is saved at "./data/random/eval_{INDEX}.json".
    The validity of $eval_i$ can be checked against member $i$'s verification key $vk_i$.
    $eval_i$ can be submitted to the contract `zkdvrf.sol` through function `submitPartialEval`.

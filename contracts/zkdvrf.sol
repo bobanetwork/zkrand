@@ -31,6 +31,7 @@ contract zkdvrf is Ownable {
 
     uint32 public memberCount;
     uint32 public threshold;
+    uint32 public ppLength;
     // current count of nodes added
     uint32 internal currentIndex;
     // current count of nodes deposited and registered
@@ -40,6 +41,7 @@ contract zkdvrf is Ownable {
     uint256 public currentRoundNum;
     uint256 public minNodeDeposit;
 
+    Grumpkin.Point[] public pkList;
     uint256[][] public ppList;
     // vk list order is also same as the ppList
     uint32 public ppListIndex;
@@ -54,7 +56,6 @@ contract zkdvrf is Ownable {
 
     mapping (uint32 => address) public nodes;
     mapping (address => dvrfNode) public addrToNode;
-    mapping (address => Grumpkin.Point) public pubKeys;
     mapping (uint256 => string) public roundInput;
     mapping (address => uint256) public lastSubmittedRound;
     mapping (uint256 => mapping (uint32 => IPseudoRand.PartialEval)) public roundToEval;
@@ -65,6 +66,7 @@ contract zkdvrf is Ownable {
         require (halo2VerifierAddress != address(0) && globalPublicParamsAddress != address(0) && pseudoRandAddress != address(0), "Cannot be zero addresses");
         memberCount = 5;
         threshold = 3;
+        ppLength = 7 * memberCount + 14;
         halo2Verifier = halo2VerifierAddress;
         globalPublicParams = globalPublicParamsAddress;
         pseudoRand = pseudoRandAddress;
@@ -86,6 +88,7 @@ contract zkdvrf is Ownable {
 
     // each node registers with deposit and confirms
     function registerNode(Grumpkin.Point memory pubKey) public payable {
+        require(contractPhase == Status.Unregistered, "Registration has already been completed");
         require(msg.sender == addrToNode[msg.sender].nodeAddress, "Unauthorized call");
         require(!addrToNode[msg.sender].status, "Node Already registered");
         require(msg.value >= minNodeDeposit, "Must provide enough node deposit");
@@ -95,7 +98,7 @@ contract zkdvrf is Ownable {
         addrToNode[msg.sender].deposit = msg.value;
         addrToNode[msg.sender].status = true;
         addrToNode[msg.sender].ppIndex = ppListIndex;
-        pubKeys[msg.sender] = pubKey;
+        pkList.push(pubKey);
         // ppListOrder is unutilized but added for public visibility
         ppListOrder.push(msg.sender);
         ppListIndex++;
@@ -117,7 +120,8 @@ contract zkdvrf is Ownable {
         require(msg.sender == addrToNode[msg.sender].nodeAddress, "Unauthorized call");
         require(contractPhase == Status.Nidkg, "Contract not in NIDKG phase");
         require(!addrToNode[msg.sender].statusPP, "Node already submitted");
-        require(Halo2Verifier(halo2Verifier).verifyProof(zkProof, pp));
+        require(checkPublicParams(pp), "Invalid public parameters");
+        require(Halo2Verifier(halo2Verifier).verifyProof(zkProof, pp), "SNARK proof verification failed");
 
         addrToNode[msg.sender].statusPP = true;
 
@@ -173,7 +177,7 @@ contract zkdvrf is Ownable {
     // accept a set of partial evals
     // take sigma as a param, basically a point that the operator submits (combination of subset of partial evals)
     // take the gpk as stored in contract
-    function submitRandom(IPseudoRand.PseudoRandom memory pseudo) public onlyOwner{
+    function submitRandom(IPseudoRand.PseudoRandom memory pseudo) public onlyOwner {
         require(roundToRandom[currentRoundNum].value == bytes32(0), "Answer for round already exists");
         require(roundSubmissionCount[currentRoundNum] >= threshold, "Partial evaluation threshold not reached");
         require(IPseudoRand(pseudoRand).verifyPseudoRand(bytes(roundInput[currentRoundNum]), pseudo.proof, gpkVal), "Incorrect random submitted");
@@ -200,5 +204,43 @@ contract zkdvrf is Ownable {
         }
 
         revert("Answer does not exist for the round yet");
+    }
+
+    function checkPublicParams(uint256[] calldata pp) public view returns (bool) {
+        require(pkList.length == memberCount, "Not enough member public keys");
+
+        require(pp.length == ppLength, "Wrong size of public parameters");
+        if (pp.length != ppLength) {
+            return false;
+        }
+
+        // The last 2n elements in pp are public keys
+        uint j = pp.length - 2 * memberCount;
+        for (uint i = 0; i < memberCount; i++) {
+            require(pp[j] == pkList[i].x, "Wrong public key x");
+            require(pp[j+1] == pkList[i].y, "Wrong public key y");
+            if (pp[j] != pkList[i].x || pp[j+1] != pkList[i].y) {
+                return false;
+            }
+            j = j+2;
+        }
+
+        return true;
+    }
+
+    function getPkList() public view returns (Grumpkin.Point[] memory) {
+        return pkList;
+    }
+
+    function getPpList() public view returns (uint256[][] memory) {
+        return ppList;
+    }
+
+    function getGpk() public view returns (Pairing.G2Point memory) {
+        return gpkVal;
+    }
+
+    function getVkList() public view returns (Pairing.G1Point[] memory) {
+        return vkList;
     }
 }

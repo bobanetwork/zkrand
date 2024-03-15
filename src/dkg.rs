@@ -277,11 +277,13 @@ pub fn combine_partial_evaluations(
     let sum = pis.iter().skip(1).fold(pis[0], |sum, p| sum + p);
 
     let proof = sum.to_affine();
-    let value = Keccak256::new()
-        .chain_update(proof.x.to_bytes())
-        .chain_update(proof.y.to_bytes())
-        .finalize()
-        .to_vec();
+
+    // reverse order to match solidity version
+    let mut bytes = proof.y.to_bytes().to_vec();
+    bytes.extend(proof.x.to_bytes());
+    bytes.reverse();
+
+    let value = Keccak256::new().chain_update(bytes).finalize().to_vec();
 
     Ok(PseudoRandom { proof, value })
 }
@@ -315,11 +317,12 @@ impl PseudoRandom {
             return Err(Error::VerifyFailed);
         }
 
-        let value = Keccak256::new()
-            .chain_update(self.proof.x.to_bytes())
-            .chain_update(self.proof.y.to_bytes())
-            .finalize()
-            .to_vec();
+        // reverse order to match solidity version
+        let mut bytes = self.proof.y.to_bytes().to_vec();
+        bytes.extend(self.proof.x.to_bytes());
+        bytes.reverse();
+
+        let value = Keccak256::new().chain_update(bytes).finalize().to_vec();
 
         if !self.value.as_slice().eq(&value) {
             return Err(Error::VerifyFailed);
