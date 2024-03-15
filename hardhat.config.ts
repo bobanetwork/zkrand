@@ -3,6 +3,7 @@
  */
 import { HardhatUserConfig } from 'hardhat/types'
 import '@nomiclabs/hardhat-ethers'
+import 'hardhat-gas-reporter'; // Import gas reporter plugin
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -38,6 +39,11 @@ module.exports = {
     }],
     overrides: {
       'contracts/PseudoRand.sol': altCompilerSettings,
-    }
+    },
+    gasReporter: {
+      enabled: process.env.REPORT_GAS === 'true', // Use environment variable to enable/disable gas reporting
+      currency: 'USD',
+      gasPrice: 21,
+    },
   }
 };

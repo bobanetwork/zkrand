@@ -19,7 +19,7 @@ pub fn le_bytes_to_hex(bytes: [u8; 32]) -> String {
     format!("0x{}", hex_string)
 }
 
-pub fn hex_to_le_bytes(s: String) -> [u8; 32] {
+pub fn hex_to_le_bytes(s: &str) -> [u8; 32] {
     let trimmed = if s.starts_with("0x") { &s[2..] } else { &s };
 
     let bytes = decode(trimmed).expect("failed to decode hex to bytes");
@@ -41,9 +41,7 @@ pub struct Point {
 
 impl From<GkG1> for Point {
     fn from(pk: GkG1) -> Self {
-        let x = le_bytes_to_hex(pk.x.to_bytes());
-        let y = le_bytes_to_hex(pk.y.to_bytes());
-        Point { x, y }
+        (&pk).into()
     }
 }
 
@@ -57,9 +55,7 @@ impl From<&GkG1> for Point {
 
 impl From<BnG1> for Point {
     fn from(pk: BnG1) -> Self {
-        let x = le_bytes_to_hex(pk.x.to_bytes());
-        let y = le_bytes_to_hex(pk.y.to_bytes());
-        Point { x, y }
+        (&pk).into()
     }
 }
 
@@ -73,19 +69,15 @@ impl From<&BnG1> for Point {
 
 impl Into<GkG1> for Point {
     fn into(self) -> GkG1 {
-        let x_bytes = hex_to_le_bytes(self.x);
-        let x = Fr::from_bytes(&x_bytes).expect("failed to deserialise x coord for Grumpkin point");
-        let y_bytes = hex_to_le_bytes(self.y);
-        let y = Fr::from_bytes(&y_bytes).expect("failed to deserialise y coord for Grumpkin point");
-        GkG1::from_xy(x, y).expect("invalid Grumpkin point")
+        (&self).into()
     }
 }
 
 impl Into<GkG1> for &Point {
     fn into(self) -> GkG1 {
-        let x_bytes = hex_to_le_bytes(self.x.clone());
+        let x_bytes = hex_to_le_bytes(&self.x);
         let x = Fr::from_bytes(&x_bytes).expect("failed to deserialise x coord for Grumpkin point");
-        let y_bytes = hex_to_le_bytes(self.y.clone());
+        let y_bytes = hex_to_le_bytes(&self.y);
         let y = Fr::from_bytes(&y_bytes).expect("failed to deserialise y coord for Grumpkin point");
         GkG1::from_xy(x, y).expect("invalid Grumpkin point")
     }
@@ -93,19 +85,15 @@ impl Into<GkG1> for &Point {
 
 impl Into<BnG1> for Point {
     fn into(self) -> BnG1 {
-        let x_bytes = hex_to_le_bytes(self.x);
-        let x = Fq::from_bytes(&x_bytes).expect("failed to deserialise x coord for Bn256 G1 point");
-        let y_bytes = hex_to_le_bytes(self.y);
-        let y = Fq::from_bytes(&y_bytes).expect("failed to deserialise y coord for Bn256 G1 point");
-        BnG1::from_xy(x, y).expect("invalid Bn256 G1 point")
+        (&self).into()
     }
 }
 
 impl Into<BnG1> for &Point {
     fn into(self) -> BnG1 {
-        let x_bytes = hex_to_le_bytes(self.x.clone());
+        let x_bytes = hex_to_le_bytes(&self.x);
         let x = Fq::from_bytes(&x_bytes).expect("failed to deserialise x coord for Bn256 G1 point");
-        let y_bytes = hex_to_le_bytes(self.y.clone());
+        let y_bytes = hex_to_le_bytes(&self.y);
         let y = Fq::from_bytes(&y_bytes).expect("failed to deserialise y coord for Bn256 G1 point");
         BnG1::from_xy(x, y).expect("invalid Bn256 G1 point")
     }
@@ -113,58 +101,50 @@ impl Into<BnG1> for &Point {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Point2 {
-    x0: String,
-    x1: String,
-    y0: String,
-    y1: String,
+    x: [String; 2],
+    y: [String; 2],
 }
 
 impl From<BnG2> for Point2 {
     fn from(pk: BnG2) -> Self {
+        (&pk).into()
+    }
+}
+
+impl From<&BnG2> for Point2 {
+    fn from(pk: &BnG2) -> Self {
         let x0 = le_bytes_to_hex(pk.x.c0.to_bytes());
         let x1 = le_bytes_to_hex(pk.x.c1.to_bytes());
         let y0 = le_bytes_to_hex(pk.y.c0.to_bytes());
         let y1 = le_bytes_to_hex(pk.y.c1.to_bytes());
-        Point2 { x0, x1, y0, y1 }
+        let x = [x0, x1];
+        let y = [y0, y1];
+        Point2 { x, y }
     }
 }
 
 impl Into<BnG2> for Point2 {
     fn into(self) -> BnG2 {
-        let x0_bytes = hex_to_le_bytes(self.x0);
-        let x0 =
-            Fq::from_bytes(&x0_bytes).expect("failed to deserialise x coord_0 for Bn256 G2 point");
-        let x1_bytes = hex_to_le_bytes(self.x1);
-        let x1 =
-            Fq::from_bytes(&x1_bytes).expect("failed to deserialise x coord_1 for Bn256 G2 point");
-        let y0_bytes = hex_to_le_bytes(self.y0);
-        let y0 =
-            Fq::from_bytes(&y0_bytes).expect("failed to deserialise y coord 0 for Bn256 G2 point");
-        let y1_bytes = hex_to_le_bytes(self.y1);
-        let y1 =
-            Fq::from_bytes(&y1_bytes).expect("failed to deserialise y coord 1 for Bn256 G2 point");
-        let x = Fq2::new(x0, x1);
-        let y = Fq2::new(y0, y1);
-        BnG2::from_xy(x, y).expect("invalid Bn256 G2 point")
+        (&self).into()
     }
 }
 
 impl Into<BnG2> for &Point2 {
     fn into(self) -> BnG2 {
-        let x0_bytes = hex_to_le_bytes(self.x0.clone());
-        let x0 =
-            Fq::from_bytes(&x0_bytes).expect("failed to deserialise x coord_0 for Bn256 G2 point");
-        let x1_bytes = hex_to_le_bytes(self.x1.clone());
-        let x1 =
-            Fq::from_bytes(&x1_bytes).expect("failed to deserialise x coord_1 for Bn256 G2 point");
-        let y0_bytes = hex_to_le_bytes(self.y0.clone());
-        let y0 =
-            Fq::from_bytes(&y0_bytes).expect("failed to deserialise y coord 0 for Bn256 G2 point");
-        let y1_bytes = hex_to_le_bytes(self.y1.clone());
-        let y1 =
-            Fq::from_bytes(&y1_bytes).expect("failed to deserialise y coord 1 for Bn256 G2 point");
-        let x = Fq2::new(x0, x1);
-        let y = Fq2::new(y0, y1);
+        let coords: Vec<_> = self
+            .x
+            .iter()
+            .chain(self.y.iter())
+            .map(|v| {
+                let bytes = hex_to_le_bytes(v);
+                let coord = Fq::from_bytes(&bytes)
+                    .expect("failed to deserialise coordinate for Bn256 G2 point");
+                coord
+            })
+            .collect();
+
+        let x = Fq2::new(coords[0], coords[1]);
+        let y = Fq2::new(coords[2], coords[3]);
         BnG2::from_xy(x, y).expect("invalid Bn256 G2 point")
     }
 }
@@ -177,9 +157,7 @@ pub struct MemberKey {
 
 impl From<MemberKeyCurve> for MemberKey {
     fn from(mk: MemberKeyCurve) -> Self {
-        let sk = le_bytes_to_hex(mk.secret_key().to_bytes());
-        let pk: Point = mk.public_key().into();
-        MemberKey { sk, pk }
+        (&mk).into()
     }
 }
 
@@ -193,20 +171,13 @@ impl From<&MemberKeyCurve> for MemberKey {
 
 impl Into<MemberKeyCurve> for MemberKey {
     fn into(self) -> MemberKeyCurve {
-        let sk_bytes = hex_to_le_bytes(self.sk);
-        let sk = Fq::from_bytes(&sk_bytes).expect("failed to deserialise Grumpkin scalar");
-        let pk: GkG1 = self.pk.into();
-        let g = GkG1::generator();
-        let p = (g * sk).to_affine();
-        assert_eq!(pk, p);
-
-        MemberKeyCurve::new(sk, pk)
+        (&self).into()
     }
 }
 
 impl Into<MemberKeyCurve> for &MemberKey {
     fn into(self) -> MemberKeyCurve {
-        let sk_bytes = hex_to_le_bytes(self.sk.clone());
+        let sk_bytes = hex_to_le_bytes(&self.sk);
         let sk = Fq::from_bytes(&sk_bytes).expect("failed to deserialise Grumpkin scalar");
         let pk: GkG1 = (&self.pk).into();
         let g = GkG1::generator();
@@ -229,20 +200,7 @@ pub struct DkgMemberPublicParams {
 
 impl From<DkgMemberPublicParamsCurve> for DkgMemberPublicParams {
     fn from(mp: DkgMemberPublicParamsCurve) -> Self {
-        let public_shares: Vec<Point> = mp.public_shares.iter().map(|s| s.into()).collect();
-        let ciphers: Vec<_> = mp
-            .ciphers
-            .iter()
-            .map(|c| le_bytes_to_hex(c.to_bytes()))
-            .collect();
-
-        DkgMemberPublicParams {
-            public_shares,
-            ciphers,
-            gr: mp.gr.into(),
-            ga: mp.ga.into(),
-            g2a: mp.g2a.into(),
-        }
+        (&mp).into()
     }
 }
 
@@ -267,23 +225,7 @@ impl From<&DkgMemberPublicParamsCurve> for DkgMemberPublicParams {
 
 impl Into<DkgMemberPublicParamsCurve> for DkgMemberPublicParams {
     fn into(self) -> DkgMemberPublicParamsCurve {
-        let public_shares: Vec<BnG1> = self.public_shares.iter().map(|s| s.into()).collect();
-        let ciphers: Vec<Fr> = self
-            .ciphers
-            .into_iter()
-            .map(|c| {
-                let c_bytes = hex_to_le_bytes(c);
-                Fr::from_bytes(&c_bytes).expect("failed to deserialise Bn256 scalar")
-            })
-            .collect();
-
-        DkgMemberPublicParamsCurve {
-            public_shares,
-            ciphers,
-            gr: self.gr.into(),
-            ga: self.ga.into(),
-            g2a: self.g2a.into(),
-        }
+        (&self).into()
     }
 }
 
@@ -293,7 +235,6 @@ impl Into<DkgMemberPublicParamsCurve> for &DkgMemberPublicParams {
         let ciphers: Vec<Fr> = self
             .ciphers
             .iter()
-            .cloned()
             .map(|c| {
                 let c_bytes = hex_to_le_bytes(c);
                 Fr::from_bytes(&c_bytes).expect("failed to deserialise Bn256 scalar")
@@ -322,27 +263,7 @@ pub struct DkgMemberParams {
 
 impl From<DkgMemberParamsCurve> for DkgMemberParams {
     fn from(mp: DkgMemberParamsCurve) -> Self {
-        let coeffs: Vec<_> = mp
-            .coeffs
-            .iter()
-            .map(|c| le_bytes_to_hex(c.to_bytes()))
-            .collect();
-        let shares: Vec<_> = mp
-            .shares
-            .iter()
-            .map(|s| le_bytes_to_hex(s.to_bytes()))
-            .collect();
-        let public_keys: Vec<Point> = mp.public_keys.iter().map(|p| p.into()).collect();
-        let r = le_bytes_to_hex(mp.r.to_bytes());
-
-        DkgMemberParams {
-            dkg_config: mp.dkg_config,
-            coeffs,
-            shares,
-            r,
-            public_keys,
-            public_params: mp.public_params.into(),
-        }
+        (&mp).into()
     }
 }
 
@@ -374,37 +295,7 @@ impl From<&DkgMemberParamsCurve> for DkgMemberParams {
 
 impl Into<DkgMemberParamsCurve> for DkgMemberParams {
     fn into(self) -> DkgMemberParamsCurve {
-        let coeffs: Vec<Fr> = self
-            .coeffs
-            .into_iter()
-            .map(|c| {
-                let c_bytes = hex_to_le_bytes(c);
-                Fr::from_bytes(&c_bytes).expect("failed to deserialise Bn256 scalar")
-            })
-            .collect();
-
-        let shares: Vec<Fr> = self
-            .shares
-            .into_iter()
-            .map(|s| {
-                let s_bytes = hex_to_le_bytes(s);
-                Fr::from_bytes(&s_bytes).expect("failed to deserialise Bn256 scalar")
-            })
-            .collect();
-
-        let r_bytes = hex_to_le_bytes(self.r);
-        let r = Fr::from_bytes(&r_bytes).expect("failed to deserialise Bn256 scalar");
-
-        let public_keys: Vec<GkG1> = self.public_keys.iter().map(|p| p.into()).collect();
-
-        DkgMemberParamsCurve {
-            dkg_config: self.dkg_config,
-            coeffs,
-            shares,
-            r,
-            public_keys,
-            public_params: self.public_params.into(),
-        }
+        (&self).into()
     }
 }
 
@@ -413,7 +304,6 @@ impl Into<DkgMemberParamsCurve> for &DkgMemberParams {
         let coeffs: Vec<Fr> = self
             .coeffs
             .iter()
-            .cloned()
             .map(|c| {
                 let c_bytes = hex_to_le_bytes(c);
                 Fr::from_bytes(&c_bytes).expect("failed to deserialise Bn256 scalar")
@@ -423,14 +313,13 @@ impl Into<DkgMemberParamsCurve> for &DkgMemberParams {
         let shares: Vec<Fr> = self
             .shares
             .iter()
-            .cloned()
             .map(|s| {
                 let s_bytes = hex_to_le_bytes(s);
                 Fr::from_bytes(&s_bytes).expect("failed to deserialise Bn256 scalar")
             })
             .collect();
 
-        let r_bytes = hex_to_le_bytes(self.r.clone());
+        let r_bytes = hex_to_le_bytes(&self.r);
         let r = Fr::from_bytes(&r_bytes).expect("failed to deserialise Bn256 scalar");
 
         let public_keys: Vec<GkG1> = self.public_keys.iter().map(|p| p.into()).collect();
@@ -455,13 +344,7 @@ pub struct DkgGlobalPubParams {
 
 impl From<DkgGlobalPubParamsCurve> for DkgGlobalPubParams {
     fn from(gpp: DkgGlobalPubParamsCurve) -> Self {
-        let verify_keys: Vec<Point> = gpp.verify_keys.iter().map(|vk| vk.into()).collect();
-
-        DkgGlobalPubParams {
-            ga: gpp.ga.into(),
-            g2a: gpp.g2a.into(),
-            verify_keys,
-        }
+        (&gpp).into()
     }
 }
 
@@ -479,13 +362,7 @@ impl From<&DkgGlobalPubParamsCurve> for DkgGlobalPubParams {
 
 impl Into<DkgGlobalPubParamsCurve> for DkgGlobalPubParams {
     fn into(self) -> DkgGlobalPubParamsCurve {
-        let verify_keys: Vec<BnG1> = self.verify_keys.iter().map(|vk| vk.into()).collect();
-
-        DkgGlobalPubParamsCurve {
-            ga: self.ga.into(),
-            g2a: self.g2a.into(),
-            verify_keys,
-        }
+        (&self).into()
     }
 }
 
@@ -510,13 +387,7 @@ pub struct DkgShareKey {
 
 impl From<DkgShareKeyCurve> for DkgShareKey {
     fn from(dsk: DkgShareKeyCurve) -> Self {
-        let sk = le_bytes_to_hex(dsk.secret_key().to_bytes());
-        let vk: Point = dsk.verify_key().into();
-        DkgShareKey {
-            index: dsk.index(),
-            sk,
-            vk,
-        }
+        (&dsk).into()
     }
 }
 
@@ -534,20 +405,13 @@ impl From<&DkgShareKeyCurve> for DkgShareKey {
 
 impl Into<DkgShareKeyCurve> for DkgShareKey {
     fn into(self) -> DkgShareKeyCurve {
-        let sk_bytes = hex_to_le_bytes(self.sk);
-        let sk = Fr::from_bytes(&sk_bytes).expect("failed to deserialise Bn256 scalar");
-        let vk: BnG1 = self.vk.into();
-        let g = BnG1::generator();
-        let p = (g * sk).to_affine();
-        assert_eq!(vk, p);
-
-        DkgShareKeyCurve::new(self.index, sk, vk)
+        (&self).into()
     }
 }
 
 impl Into<DkgShareKeyCurve> for &DkgShareKey {
     fn into(self) -> DkgShareKeyCurve {
-        let sk_bytes = hex_to_le_bytes(self.sk.clone());
+        let sk_bytes = hex_to_le_bytes(&self.sk);
         let sk = Fr::from_bytes(&sk_bytes).expect("failed to deserialise Bn256 scalar");
         let vk: BnG1 = (&self.vk).into();
         let g = BnG1::generator();
@@ -566,10 +430,7 @@ pub struct PartialEvalProof {
 
 impl From<PartialEvalProofCurve> for PartialEvalProof {
     fn from(proof: PartialEvalProofCurve) -> Self {
-        let z = le_bytes_to_hex(proof.z.to_bytes());
-        let c = le_bytes_to_hex(proof.c.to_bytes());
-
-        PartialEvalProof { z, c }
+        (&proof).into()
     }
 }
 
@@ -584,21 +445,16 @@ impl From<&PartialEvalProofCurve> for PartialEvalProof {
 
 impl Into<PartialEvalProofCurve> for PartialEvalProof {
     fn into(self) -> PartialEvalProofCurve {
-        let z =
-            Fr::from_bytes(&hex_to_le_bytes(self.z)).expect("failed to deserialise Bn256 scalar");
-        let c =
-            Fr::from_bytes(&hex_to_le_bytes(self.c)).expect("failed to deserialise Bn256 scalar");
-
-        PartialEvalProofCurve { z, c }
+        (&self).into()
     }
 }
 
 impl Into<PartialEvalProofCurve> for &PartialEvalProof {
     fn into(self) -> PartialEvalProofCurve {
-        let z = Fr::from_bytes(&hex_to_le_bytes(self.z.clone()))
-            .expect("failed to deserialise Bn256 scalar");
-        let c = Fr::from_bytes(&hex_to_le_bytes(self.c.clone()))
-            .expect("failed to deserialise Bn256 scalar");
+        let z =
+            Fr::from_bytes(&hex_to_le_bytes(&self.z)).expect("failed to deserialise Bn256 scalar");
+        let c =
+            Fr::from_bytes(&hex_to_le_bytes(&self.c)).expect("failed to deserialise Bn256 scalar");
 
         PartialEvalProofCurve { z, c }
     }
@@ -613,13 +469,7 @@ pub struct PartialEval {
 
 impl From<PartialEvalCurve> for PartialEval {
     fn from(sigma: PartialEvalCurve) -> Self {
-        let value: Point = sigma.value.into();
-        let proof = sigma.proof.into();
-        PartialEval {
-            index: sigma.index,
-            value,
-            proof,
-        }
+        (&sigma).into()
     }
 }
 
@@ -637,14 +487,7 @@ impl From<&PartialEvalCurve> for PartialEval {
 
 impl Into<PartialEvalCurve> for PartialEval {
     fn into(self) -> PartialEvalCurve {
-        let value: BnG1 = self.value.into();
-        let proof = self.proof.into();
-
-        PartialEvalCurve {
-            index: self.index,
-            value,
-            proof,
-        }
+        (&self).into()
     }
 }
 
@@ -668,11 +511,7 @@ pub struct PseudoRandom {
 
 impl From<PseudoRandomCurve> for PseudoRandom {
     fn from(sigma: PseudoRandomCurve) -> Self {
-        let proof: Point = sigma.proof.into();
-        PseudoRandom {
-            proof,
-            value: sigma.value,
-        }
+        (&sigma).into()
     }
 }
 
@@ -688,12 +527,7 @@ impl From<&PseudoRandomCurve> for PseudoRandom {
 
 impl Into<PseudoRandomCurve> for PseudoRandom {
     fn into(self) -> PseudoRandomCurve {
-        let proof: BnG1 = self.proof.into();
-
-        PseudoRandomCurve {
-            proof,
-            value: self.value,
-        }
+        (&self).into()
     }
 }
 
@@ -719,7 +553,7 @@ mod tests {
         let x = Fr::random(&mut rng);
         let bytes = x.to_bytes();
         let xs = le_bytes_to_hex(bytes);
-        let z = hex_to_le_bytes(xs);
+        let z = hex_to_le_bytes(&xs);
         assert_eq!(bytes, z);
     }
 }

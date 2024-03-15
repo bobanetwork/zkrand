@@ -467,7 +467,7 @@ fn main() -> Result<()> {
                     let bytes = read_to_string(instance_path)?;
                     let instance_bytes: Vec<String> = serde_json::from_str(&bytes)?;
                     let instance: Vec<BnScalar> = instance_bytes
-                        .into_iter()
+                        .iter()
                         .map(|e| {
                             BnScalar::from_bytes(&hex_to_le_bytes(e))
                                 .expect("Failed to deserialise Bn256 scalar")
@@ -522,7 +522,7 @@ fn main() -> Result<()> {
                         let mut instances = vec![];
                         for instance in instances_bytes.into_iter() {
                             let s: Vec<_> = instance
-                                .into_iter()
+                                .iter()
                                 .map(|c| {
                                     BnScalar::from_bytes(&hex_to_le_bytes(c))
                                         .expect("Failed to deserialise Bn256 scalar")
