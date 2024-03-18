@@ -62,7 +62,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Set values (threshold, number of members, degree) in config
+    /// Set (threshold, number of members, degree) in config
     Config {
         threshold: u32,
         number_of_members: u32,
@@ -77,7 +77,11 @@ enum Commands {
         split: bool,
     },
     /// Generate member secret/public key pair
-    Keygen,
+    Keygen {
+        /// Save the member's secret key to "zkdvrf/data/members/<file>.json"
+        #[arg(short, default_value = "member")]
+        file: Option<String>,
+    },
     /// Dkg commands
     Dkg(DkgArgs),
     /// Random commands
@@ -98,10 +102,10 @@ enum DkgCommands {
     Prove { index: usize },
     /// Verify the snark proof for dkg public parameters for member i
     Verify { index: usize },
-    /// Derive the global public parameters and (if index is given) the secret share for member i.
-    /// Read the member's secret key from file zkdvrf/data/members/<file>.json;
+    /// Derive the global public parameters and (if index is given) the secret share for member i
     Derive {
         index: Option<usize>,
+        /// Read the member's secret key from "zkdvrf/data/members/<file>.json"
         #[arg(short, default_value = "member")]
         file: Option<String>,
     },
@@ -127,10 +131,10 @@ enum RandCommands {
         index: usize,
         input: String,
     },
-    /// Combine partial evaluations into the final pseudorandom.
-    /// If skip is selected, it skips the verification of partial evaluations.
+    /// Combine partial evaluations into the final pseudorandom
     Combine {
         input: String,
+        /// If skip is selected, it skips the verification of partial evaluations
         #[arg(short, long, default_value_t = false)]
         skip: bool,
     },
@@ -386,15 +390,20 @@ fn main() -> Result<()> {
         Commands::Setup { split } => {
             setup(&params, split)?;
         }
-        Commands::Keygen => {
+        Commands::Keygen { file } => {
             let member = MemberKey::random(&mut rng);
             let mpk = member.public_key();
             let member_bytes: MemberKeySerde = member.into();
 
-            let path = &format!("{MEMBERS_DIR}/member.json");
+            let path = file
+                .map(|f| format!("{MEMBERS_DIR}/{f}.json"))
+                .ok_or_else(|| anyhow!("File path not available"))?;
             let member_seralised = serde_json::to_string(&member_bytes)?;
-            write(path, &member_seralised)?;
-            info!("member secret key and public key generated and saved in {path}");
+            write(&path, &member_seralised)?;
+            info!(
+                "member secret key and public key generated and saved in {}",
+                path
+            );
 
             let mpk_bytes: Point = mpk.into();
             let mpk_serialised = serde_json::to_string(&mpk_bytes)?;
