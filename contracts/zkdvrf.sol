@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {Halo2Verifier} from "./Halo2Verifier-3-5-g2.sol";
+import {Halo2Verifier} from "./Halo2Verifier.sol";
 import {GlobalPublicParams} from "./GlobalPublicParams.sol";
 import {Pairing} from "./libs/Pairing.sol";
 import {IPseudoRand} from "./IPseudoRand.sol";
@@ -51,6 +51,7 @@ contract zkdvrf is Ownable {
 
     Status public contractPhase;
     address public halo2Verifier;
+    address public halo2VerifyingKey;
     address public globalPublicParams;
     address public pseudoRand;
 
@@ -62,12 +63,13 @@ contract zkdvrf is Ownable {
     mapping (uint256 => uint32) public roundSubmissionCount;
     mapping (uint256 => IPseudoRand.PseudoRandom) public roundToRandom;
 
-    constructor(address halo2VerifierAddress, address globalPublicParamsAddress, address pseudoRandAddress, uint256 minDeposit) Ownable(msg.sender) {
+    constructor(address halo2VerifierAddress, address halo2VerifyingKeyAddress, address globalPublicParamsAddress, address pseudoRandAddress, uint256 minDeposit) Ownable(msg.sender) {
         require (halo2VerifierAddress != address(0) && globalPublicParamsAddress != address(0) && pseudoRandAddress != address(0), "Cannot be zero addresses");
         memberCount = 5;
         threshold = 3;
         ppLength = 7 * memberCount + 14;
         halo2Verifier = halo2VerifierAddress;
+        halo2VerifyingKey = halo2VerifyingKeyAddress;
         globalPublicParams = globalPublicParamsAddress;
         pseudoRand = pseudoRandAddress;
         minNodeDeposit = minDeposit;
@@ -121,7 +123,7 @@ contract zkdvrf is Ownable {
         require(contractPhase == Status.Nidkg, "Contract not in NIDKG phase");
         require(!addrToNode[msg.sender].statusPP, "Node already submitted");
         require(checkPublicParams(pp), "Invalid public parameters");
-        require(Halo2Verifier(halo2Verifier).verifyProof(zkProof, pp), "SNARK proof verification failed");
+        require(Halo2Verifier(halo2Verifier).verifyProof(halo2VerifyingKey, zkProof, pp), "SNARK proof verification failed");
 
         addrToNode[msg.sender].statusPP = true;
 
