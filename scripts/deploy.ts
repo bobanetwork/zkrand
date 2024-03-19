@@ -5,6 +5,8 @@ async function main() {
   const netprovider = new providers.JsonRpcProvider(process.env.RPC_URL)
   const accPrivateKey = process.env.PRIVATE_KEY ?? ''
   const deployerWallet = new Wallet(accPrivateKey, netprovider)
+  const threshold = process.env.THRESHOLD
+  const numberOfMembers = process.env.NUMBER_OF_MEMBERS
   const minDeposit = process.env.MIN_DEPOSIT ?? '0'
   const deployNoHelpers = process.env.DEPLOY_NO_HELPERS === 'true'
 
@@ -50,7 +52,7 @@ async function main() {
   }
 
   const Zkdvrf = await ethers.getContractFactory('zkdvrf')
-  const zkdvrf = await Zkdvrf.connect(deployerWallet).deploy(halo2VerifierAddress, halo2VerifyingKeyAddress, globalPublicParamsAddress, pseudoRandAddress, minDeposit)
+  const zkdvrf = await Zkdvrf.connect(deployerWallet).deploy(threshold, numberOfMembers, halo2VerifierAddress, halo2VerifyingKeyAddress, globalPublicParamsAddress, pseudoRandAddress, minDeposit)
   await zkdvrf.deployed()
 
   console.log("Zkdvrf deployed at", zkdvrf.address)

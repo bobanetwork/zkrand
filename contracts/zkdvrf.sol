@@ -63,10 +63,10 @@ contract zkdvrf is Ownable {
     mapping (uint256 => uint32) public roundSubmissionCount;
     mapping (uint256 => IPseudoRand.PseudoRandom) public roundToRandom;
 
-    constructor(address halo2VerifierAddress, address halo2VerifyingKeyAddress, address globalPublicParamsAddress, address pseudoRandAddress, uint256 minDeposit) Ownable(msg.sender) {
+    constructor(uint32 thresholdValue, uint32 numberValue, address halo2VerifierAddress, address halo2VerifyingKeyAddress, address globalPublicParamsAddress, address pseudoRandAddress, uint256 minDeposit) Ownable(msg.sender) {
         require (halo2VerifierAddress != address(0) && globalPublicParamsAddress != address(0) && pseudoRandAddress != address(0), "Cannot be zero addresses");
-        memberCount = 5;
-        threshold = 3;
+        memberCount = numberValue;
+        threshold = thresholdValue;
         ppLength = 7 * memberCount + 14;
         halo2Verifier = halo2VerifierAddress;
         halo2VerifyingKey = halo2VerifyingKeyAddress;

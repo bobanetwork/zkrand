@@ -89,7 +89,7 @@ describe('ZKDVRF on-chain tests', async () => {
         PseudoRand = await(await ethers.getContractFactory('PseudoRand')).deploy()
         Zkdvrf = await (
             await ethers.getContractFactory('zkdvrf')
-        ).deploy(Halo2Verifier.address, Halo2VerifyingKey.address, GlobalPublicParams.address, PseudoRand.address, minDeposit)
+        ).deploy(3, 5, Halo2Verifier.address, Halo2VerifyingKey.address, GlobalPublicParams.address, PseudoRand.address, minDeposit)
         
         account1 = (await ethers.getSigners())[0]
         account2 = (await ethers.getSigners())[1]
