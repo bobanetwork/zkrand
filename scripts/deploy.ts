@@ -5,19 +5,30 @@ async function main() {
   const netprovider = new providers.JsonRpcProvider(process.env.RPC_URL)
   const accPrivateKey = process.env.PRIVATE_KEY ?? ''
   const deployerWallet = new Wallet(accPrivateKey, netprovider)
+  const threshold = process.env.THRESHOLD
+  const numberOfMembers = process.env.NUMBER_OF_MEMBERS
+  const degree = process.env.DEGREE
   const minDeposit = process.env.MIN_DEPOSIT ?? '0'
   const deployNoHelpers = process.env.DEPLOY_NO_HELPERS === 'true'
 
   let halo2VerifierAddress
+  let halo2VerifyingKeyAddress
   let globalPublicParamsAddress
   let pseudoRandAddress
 
   if (deployNoHelpers) {
-    halo2VerifierAddress = process.env.HALO2V 
+    halo2VerifierAddress = process.env.HALO2V
+    halo2VerifyingKeyAddress = process.env.HALO2VK
     globalPublicParamsAddress = process.env.GPP
     pseudoRandAddress = process.env.PSRAND
   } else {
-    const Halo2Verifier = await ethers.getContractFactory('contracts/Halo2Verifier-3-5-g2.sol:Halo2Verifier')
+    const Halo2VerifyingKey = await ethers.getContractFactory(`contracts/Halo2VerifyingKey-${threshold}-${numberOfMembers}-${degree}-g2.sol:Halo2VerifyingKey`)
+    const halo2VerifyingKey = await Halo2VerifyingKey.connect(deployerWallet).deploy()
+    await halo2VerifyingKey.deployed()
+
+    console.log("Halo2VerifyingKey deployed at", halo2VerifyingKey.address)
+
+    const Halo2Verifier = await ethers.getContractFactory('contracts/Halo2Verifier.sol:Halo2Verifier')
     const halo2Verifier = await Halo2Verifier.connect(deployerWallet).deploy()
     await halo2Verifier.deployed()
   
@@ -35,13 +46,14 @@ async function main() {
   
     console.log("PseudoRand deployed at", pseudoRand.address)
 
+    halo2VerifyingKeyAddress = halo2VerifyingKey.address
     halo2VerifierAddress = halo2Verifier.address
     globalPublicParamsAddress = globalPublicParams.address
     pseudoRandAddress = pseudoRand.address
   }
 
   const Zkdvrf = await ethers.getContractFactory('zkdvrf')
-  const zkdvrf = await Zkdvrf.connect(deployerWallet).deploy(halo2VerifierAddress, globalPublicParamsAddress, pseudoRandAddress, minDeposit)
+  const zkdvrf = await Zkdvrf.connect(deployerWallet).deploy(threshold, numberOfMembers, halo2VerifierAddress, halo2VerifyingKeyAddress, globalPublicParamsAddress, pseudoRandAddress, minDeposit)
   await zkdvrf.deployed()
 
   console.log("Zkdvrf deployed at", zkdvrf.address)

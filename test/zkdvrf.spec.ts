@@ -8,6 +8,7 @@ chai.use(solidity);
 
 let Zkdvrf: Contract
 let Halo2Verifier: Contract
+let Halo2VerifyingKey: Contract
 let GlobalPublicParams: Contract
 let PseudoRand: Contract
 
@@ -82,12 +83,13 @@ const local_provider = new providers.JsonRpcProvider(cfg['url'])
 
 describe('ZKDVRF on-chain tests', async () => {
     before(async () => {
-        Halo2Verifier = await(await ethers.getContractFactory('contracts/Halo2Verifier-3-5-18-g2.sol:Halo2Verifier')).deploy()
+        Halo2Verifier = await(await ethers.getContractFactory('contracts/Halo2Verifier.sol:Halo2Verifier')).deploy()
+        Halo2VerifyingKey = await(await ethers.getContractFactory('contracts/Halo2VerifyingKey-3-5-18-g2.sol:Halo2VerifyingKey')).deploy()
         GlobalPublicParams = await(await ethers.getContractFactory('GlobalPublicParams')).deploy()
         PseudoRand = await(await ethers.getContractFactory('PseudoRand')).deploy()
         Zkdvrf = await (
             await ethers.getContractFactory('zkdvrf')
-        ).deploy(Halo2Verifier.address, GlobalPublicParams.address, PseudoRand.address, minDeposit)
+        ).deploy(3, 5, Halo2Verifier.address, Halo2VerifyingKey.address, GlobalPublicParams.address, PseudoRand.address, minDeposit)
         
         account1 = (await ethers.getSigners())[0]
         account2 = (await ethers.getSigners())[1]

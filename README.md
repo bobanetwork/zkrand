@@ -199,7 +199,8 @@ To deploy the Zkdvrf contracts on-chain-
 RPC_URL = <rpc of network to deploy on>
 PRIVATE_KEY = <deployer pk>
 DEPLOY_NO_HELPERS = <true/false> # optional
-HALO2V = <Halo2VerifyingKey-3-5-18-g2 address> # optional
+HALO2V = <Halo2Verifier address> # optional
+HALO2VK = <Halo2VerifyingKey-3-5-18-g2 address> # optional
 GPP = <GlobalPublicParam address> # optional
 PSRAND = <PseudoRand address> # optional
 ```
