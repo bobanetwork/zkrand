@@ -7,6 +7,7 @@ async function main() {
   const deployerWallet = new Wallet(accPrivateKey, netprovider)
   const threshold = process.env.THRESHOLD
   const numberOfMembers = process.env.NUMBER_OF_MEMBERS
+  const degree = process.env.DEGREE
   const minDeposit = process.env.MIN_DEPOSIT ?? '0'
   const deployNoHelpers = process.env.DEPLOY_NO_HELPERS === 'true'
 
@@ -21,7 +22,7 @@ async function main() {
     globalPublicParamsAddress = process.env.GPP
     pseudoRandAddress = process.env.PSRAND
   } else {
-    const Halo2VerifyingKey = await ethers.getContractFactory('contracts/Halo2VerifyingKey-3-5-18-g2.sol:Halo2VerifyingKey')
+    const Halo2VerifyingKey = await ethers.getContractFactory(`contracts/Halo2VerifyingKey-${threshold}-${numberOfMembers}-${degree}-g2.sol:Halo2VerifyingKey`)
     const halo2VerifyingKey = await Halo2VerifyingKey.connect(deployerWallet).deploy()
     await halo2VerifyingKey.deployed()
 
