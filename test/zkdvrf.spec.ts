@@ -191,6 +191,11 @@ describe('ZKDVRF on-chain tests', async () => {
             expect((await Zkdvrf.pkList(3))[1]).to.eq(pubKeyAcc4.y)
             expect((await Zkdvrf.pkList(4))[0]).to.eq(pubKeyAcc5.x)
             expect((await Zkdvrf.pkList(4))[1]).to.eq(pubKeyAcc5.y)
+            expect(await Zkdvrf.getIndexPlus(account1Address)).to.eq(1)
+            expect(await Zkdvrf.getIndexPlus(account2Address)).to.eq(2)
+            expect(await Zkdvrf.getIndexPlus(account3Address)).to.eq(3)
+            expect(await Zkdvrf.getIndexPlus(account4Address)).to.eq(4)
+            expect(await Zkdvrf.getIndexPlus(account5Address)).to.eq(5)
         })
     })
 

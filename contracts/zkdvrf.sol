@@ -258,8 +258,8 @@ contract zkdvrf is Ownable {
     }
 
     function getIndexPlus(address nodeAdress) public view returns (uint32) {
-        uint32 ppIndex = addrToNode[msg.sender].pkIndex;
-        return ppIndex + 1;
+        uint32 pkIndex = addrToNode[nodeAdress].pkIndex;
+        return pkIndex + 1;
     }
 
     function getPkList() public view returns (Grumpkin.Point[] memory) {
