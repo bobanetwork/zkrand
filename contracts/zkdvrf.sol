@@ -15,11 +15,12 @@ contract zkdvrf is Ownable {
     using Grumpkin for *;
 
     event RegistrationCompleted(uint32 count);
+    event NidkgStarted();
     event NidkgCompleted(uint32 count);
     event GlobalPublicParamsCreated();
-    event RandomInitiated(string input);
-    event ThresholdReached(string input);
-    event RandomReady(string input);
+    event RandomInitiated(uint roundNum, string input);
+    event RandomThresholdReached(uint roundNum, string input);
+    event RandomReady(uint roundNum, string input);
 
     struct dvrfNode {
         address nodeAddress;
@@ -69,7 +70,7 @@ contract zkdvrf is Ownable {
     mapping (address => dvrfNode) public addrToNode;
     mapping (uint256 => string) public roundInput;
     mapping (address => uint256) public lastSubmittedRound;
-    mapping (uint256 => mapping (uint32 => IPseudoRand.PartialEval)) public roundToEval;
+    mapping (uint256 => IPseudoRand.PartialEval[]) public roundToEval;
     mapping (uint256 => uint32) public roundSubmissionCount;
     mapping (uint256 => IPseudoRand.PseudoRandom) public roundToRandom;
 
@@ -129,6 +130,8 @@ contract zkdvrf is Ownable {
         require(contractPhase == Status.Unregistered, "NIDKG has already been completed");
         require(registeredCount == memberCount, "Not all Members are ready");
         contractPhase = Status.Nidkg;
+
+        emit NidkgStarted();
     }
 
     // each node can submit pp_i, zk_i
@@ -178,7 +181,7 @@ contract zkdvrf is Ownable {
         uint256 currentTimestamp = block.timestamp;
         roundInput[currentRoundNum] = currentTimestamp.toString();
 
-        emit RandomInitiated(roundInput[currentRoundNum]);
+        emit RandomInitiated(currentRoundNum, roundInput[currentRoundNum]);
     }
 
     function submitPartialEval(IPseudoRand.PartialEval memory pEval) public {
@@ -188,16 +191,16 @@ contract zkdvrf is Ownable {
         // this will help revert calls if the contract status is not Ready and the first initiateRandom() is not called
         require (lastSubmittedRound[msg.sender] < currentRoundNum, "Already submitted for round");
         bytes memory currentX = bytes(roundInput[currentRoundNum]);
-        uint32 ppIndex = addrToNode[msg.sender].pkIndex;
-        require(pEval.indexPlus == ppIndex + 1);
-        Pairing.G1Point memory vkStored = vkList[ppIndex];
+        uint32 pkIndex = addrToNode[msg.sender].pkIndex;
+        require(pEval.indexPlus == pkIndex + 1);
+        Pairing.G1Point memory vkStored = vkList[pkIndex];
         require(IPseudoRand(pseudoRand).verifyPartialEval(currentX, pEval.value, pEval.proof, vkStored), "Verification of partial eval failed");
         lastSubmittedRound[msg.sender] = currentRoundNum;
-        roundToEval[currentRoundNum][ppIndex] = pEval;
+        roundToEval[currentRoundNum].push(pEval);
         roundSubmissionCount[currentRoundNum]++;
 
         if (roundSubmissionCount[currentRoundNum] == threshold) {
-            emit ThresholdReached(roundInput[currentRoundNum]);
+            emit RandomThresholdReached(currentRoundNum, roundInput[currentRoundNum]);
         }
     }
 
@@ -212,7 +215,7 @@ contract zkdvrf is Ownable {
         require(pseudo.value == value, "Incorrect pseudorandom value");
         roundToRandom[currentRoundNum] = pseudo;
 
-        emit RandomReady(roundInput[currentRoundNum]);
+        emit RandomReady(currentRoundNum, roundInput[currentRoundNum]);
     }
 
     function getLatestRandom() public view returns (IPseudoRand.PseudoRandom memory pseudo) {
@@ -276,5 +279,9 @@ contract zkdvrf is Ownable {
 
     function getVkList() public view returns (Pairing.G1Point[] memory) {
         return vkList;
+    }
+
+    function getEvalList(uint roundNum) public view returns (IPseudoRand.PartialEval[] memory) {
+        return roundToEval[roundNum];
     }
 }

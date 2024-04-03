@@ -28,7 +28,11 @@
   },
   "scripts": {
     "test": "npx hardhat test",
-    "deploy": "npx hardhat run scripts/deploy.ts"
+    "deploy": "npx hardhat run scripts/deploy.ts",
+    "admin": "npx hardhat run scripts/admin.ts",
+    "register": "npx hardhat run scripts/register.ts",
+    "nidkg": "npx hardhat run scripts/nidkg.ts",
+    "random": "npx hardhat run scripts/random.ts"
   },
   "repository": {
     "type": "git",
