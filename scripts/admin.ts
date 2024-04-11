@@ -15,6 +15,10 @@ const config = readJsonFromFile("demo-config.json")
 const zkdvrfAddress = config.zkdvrfAddress
 const memberAdresses = config.memberAddresses
 
+interface Eval {
+    indexPlus: number
+}
+
 async function main() {
     const netprovider = new providers.JsonRpcProvider(process.env.RPC_URL)
     const accPrivateKey = process.env.PRIVATE_KEY ?? ''
@@ -48,7 +52,7 @@ async function main() {
         });
     }
 
-    listenRegister()
+    // listenRegister()
 
     async function listenNidkg() {
         // This will run when the event is emitted
@@ -144,7 +148,14 @@ async function main() {
             await sleep(2000)
             console.log("end sleep")
 
-            const evals = await contract.getEvalList(roundNum)
+            const evals: Eval[] = []
+            for (let i = 0; i < memberAdresses.length; i++) {
+                const evalFromContract = await contract.roundToEval(roundNum, i)
+                console.log(evalFromContract)
+                if (evalFromContract.indexPlus != 0) {
+                    evals.push(evalFromContract)
+                }
+            }
 
             const pEvals = []
             for (let i = 0; i < evals.length; i++) {
@@ -195,7 +206,7 @@ async function main() {
             const rand = await contract.getLatestRandom()
             console.log("pseudorandom from contract", rand.value)
 
-
+            process.exit(0);
         });
     }
 

@@ -59,7 +59,10 @@ async function main() {
   console.log("Zkdvrf deployed at", zkdvrf.address)
 }
 
-main().catch((error) => {
+main().then(() => {
+  process.exit(0);
+})
+.catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

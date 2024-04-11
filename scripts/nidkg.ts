@@ -57,6 +57,7 @@ async function main() {
                 console.log(res[`stderr`])
             }
 
+            process.exit(0);
             // todo: compare the local global public parameters with the one from the contract
         });
     }
