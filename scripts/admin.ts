@@ -151,7 +151,9 @@ async function main() {
     // start listening for the event
     if (!restart) {
         const eventGpp = `GlobalPublicParamsCreated`
-        contract.on(eventGpp, initiateRand(eventGpp));
+        contract.on(eventGpp, async (event) => {
+            await initiateRand(eventGpp);
+        });
     }
 
     async function listenRandThreshold() {
