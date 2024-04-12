@@ -167,7 +167,6 @@ async function main() {
             const evals: Eval[] = []
             for (let i = 0; i < memberAdresses.length; i++) {
                 const evalFromContract = await contract.roundToEval(roundNum, i)
-                console.log(evalFromContract)
                 if (evalFromContract.indexPlus != 0) {
                     evals.push(evalFromContract)
                 }
