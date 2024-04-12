@@ -10,6 +10,7 @@ import {
     waitForWriteJsonToFile,
     writeJsonToFile
 } from "./utils";
+import { createInterface } from "readline";
 
 const config = readJsonFromFile("demo-config.json")
 const zkdvrfAddress = config.zkdvrfAddress
@@ -28,10 +29,19 @@ async function main() {
     const contractABI = Zkdvrf.interface.format();
     const contract = new ethers.Contract(zkdvrfAddress, contractABI, netprovider).connect(adminWallet)
 
-    for (let i = 0; i < memberAdresses.length; i++) {
-        const res = await contract.addPermissionedNodes(memberAdresses[i])
-       // console.log(res)
-        console.log("added member", memberAdresses[i])
+    const restart = process.env.RESTART === 'true'
+
+    const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    if (!restart) {
+        for (let i = 0; i < memberAdresses.length; i++) {
+            const res = await contract.addPermissionedNodes(memberAdresses[i])
+           // console.log(res)
+            console.log("added member", memberAdresses[i])
+        }
     }
 
     async function listenRegister() {
@@ -52,7 +62,9 @@ async function main() {
         });
     }
 
-    // listenRegister()
+    if (!restart) {
+        listenRegister()
+    }
 
     async function listenNidkg() {
         // This will run when the event is emitted
@@ -117,27 +129,30 @@ async function main() {
         });
     }
 
-    listenNidkg()
-
-    async function listenGpp() {
-        // This will run when the event is emitted
-        const eventGpp = `GlobalPublicParamsCreated`
-        contract.on(eventGpp, async (event) => {
-            console.log("\nevent", eventGpp)
-            // Proceed to the next step here
-            const res = await contract.initiateRandom()
-            const receipt = await netprovider.getTransactionReceipt(res.hash);
-            // Check if the transaction was successful
-            if (receipt.status === 1) {
-                console.log("Transaction initiateRandom() successful!");
-            } else {
-                console.log("Transaction initiateRandom() failed!");
-            }
-
-        });
+    if (!restart) {
+        listenNidkg()
     }
 
-    listenGpp()
+    async function initiateRand(eventReceived) {
+        console.log("\nevent received ", eventReceived)
+        // Proceed to the next step here
+        const res = await contract.initiateRandom()
+        const receipt = await netprovider.getTransactionReceipt(res.hash);
+        // Check if the transaction was successful
+        if (receipt.status === 1) {
+            console.log("Transaction initiateRandom() successful!");
+        } else {
+            console.log("Transaction initiateRandom() failed!");
+        }
+
+        console.log('\n 🔔 Please continue by running \'yarn random\' on a new terminal to submit partial evals...')
+    }
+
+    // start listening for the event
+    if (!restart) {
+        const eventGpp = `GlobalPublicParamsCreated`
+        contract.on(eventGpp, initiateRand(eventGpp));
+    }
 
     async function listenRandThreshold() {
         const eventRandThreshold = `RandomThresholdReached`
@@ -204,13 +219,24 @@ async function main() {
             }
 
             const rand = await contract.getLatestRandom()
-            console.log("pseudorandom from contract", rand.value)
-
-            process.exit(0);
+            console.log("✅ pseudorandom from contract", rand.value)
         });
     }
 
     listenRandThreshold()
+
+    // start listening for event
+    const eventRandReady = `RandomReady`
+    contract.on(eventRandReady,  async (roundNum, roundInput, event) => {
+        rl.question("\n 🔔 Do you want to initiate random again? (yes/no): ", async (answer) => {
+            if (answer.toLowerCase() === "yes") {
+                await initiateRand(eventRandReady);
+            } else {
+                console.log("Exiting the process...");
+                process.exit(0);
+            }
+        });
+    });
 }
 
 
