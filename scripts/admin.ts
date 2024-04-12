@@ -79,8 +79,7 @@ async function main() {
                 subList.map(num => num.toHexString())
             );
             const obj = JSON.stringify(ppListHex)
-            writeJsonToFile(obj, instancesPath)
-            //await waitForWriteJsonToFile(obj, instancesPath)
+            await waitForWriteJsonToFile(obj, instancesPath)
             //console.log("retrieved all instances from contract")
 
 
@@ -191,7 +190,7 @@ async function main() {
 
             const obj = JSON.stringify(pEvals)
             const evalsPath = randDir + `evals.json`
-            writeJsonToFile(obj, evalsPath)
+            await waitForWriteJsonToFile(obj, evalsPath)
 
             console.log("begin sleep...")
             await sleep(2000)

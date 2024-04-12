@@ -8,7 +8,8 @@ import {
     dkgDir,
     readBytesFromFile,
     execPromise,
-    instancesPath
+    instancesPath,
+    waitForWriteJsonToFile
 } from "./utils";
 
 
@@ -45,7 +46,7 @@ async function main() {
                 subList.map(num => num.toHexString())
             );
             const obj = JSON.stringify(ppListHex)
-            writeJsonToFile(obj, instancesPath)
+            await waitForWriteJsonToFile(obj, instancesPath)
 
             // each member derives its own secret share and global public parameters
             const cmd = `RUST_LOG=info ./target/release/client dkg derive`

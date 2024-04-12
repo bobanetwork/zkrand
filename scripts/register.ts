@@ -2,7 +2,7 @@ import hre, {artifacts, ethers} from "hardhat";
 import {Contract, ContractFactory, providers, utils, Wallet} from "ethers";
 import { promisify } from 'util';
 import { exec } from "child_process";
-import {readJsonFromFile, writeJsonToFile, memberDir, mpksPath, execPromise} from "./utils";
+import {readJsonFromFile, writeJsonToFile, waitForWriteJsonToFile, memberDir, mpksPath, execPromise} from "./utils";
 
 const config = readJsonFromFile("demo-config.json")
 const zkdvrfAddress = config.zkdvrfAddress
@@ -25,7 +25,9 @@ async function main() {
 
         const pks = res.map(pk => ({x: pk[0].toHexString(), y: pk[1].toHexString()}))
         const obj = JSON.stringify(pks);
-        writeJsonToFile(obj, mpksPath)
+        await waitForWriteJsonToFile(obj, mpksPath);
+
+        process.exit(0);
     });
 
 
@@ -59,10 +61,7 @@ async function main() {
 
 }
 
-main().then(() => {
-    process.exit(0);
-  })
-  .catch((error) => {
+main().catch((error) => {
     console.error(error);
     process.exitCode = 1;
   });
