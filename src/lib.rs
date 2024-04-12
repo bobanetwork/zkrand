@@ -107,8 +107,8 @@ impl MemberKey {
 
         let k = index - 1;
         let mut sk = BnScalar::zero();
-        for i in 0..dkg_config.number_of_members() {
-            let s = self.decrypt_share(&pps[i].gr, &pps[i].ciphers[k]);
+        for &pp in pps.iter() {
+            let s = self.decrypt_share(&pp.gr, &pp.ciphers[k]);
             sk += s;
         }
 

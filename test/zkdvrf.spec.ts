@@ -50,25 +50,25 @@ let gpk = {x: ['0x124c4b7c4838cb025a33347ed0311ebc59cae6809670a1868f377980ee38ff
 // pEvals for input: 2655988642
 let valueAcc1 = {x: '0x0aa06e25ae7be82895afb10f9eb859671b929cb18f590b1f7eca7e5ed2f6edb8', y: '0x25d82353f39628544aec24a491447c44dea9da639cae8a1c70bfa1415a121e71'}
 let proofAcc1 = {z: '0x01d11529b4d25e5b97860184f5c5c4a20466bc254666b07525f5fd1c413cf0d1', c: '0x0af43b75018b04c5af8546f734d090e0320bcdf0f095b601af4d91c0a9e20633'}
-let pEvalAcc1 = {index: 1, value: valueAcc1, proof: proofAcc1}
+let pEvalAcc1 = {indexPlus: 1, value: valueAcc1, proof: proofAcc1}
 
 let valueAcc2 = {x: '0x24cc41179416462fa60951d33d37d92cbf537bdaed45f710c3cc920a9cc29a91', y: '0x1b2ee70238dd732c9203f6050a92dff7de975269396738be03e585eb923c5160'}
 let proofAcc2 = {z: '0x1134eb0fde7885ecc3aeae80fc083d70280e9627ca1970cadf392cd389f49b7f', c: '0x155afb118357ed7ea6a6504529a0149f507ffc9e0b66d44c9fe90cce7fe28669'}
-let pEvalAcc2 = {index: 2, value: valueAcc2, proof: proofAcc2}
+let pEvalAcc2 = {indexPlus: 2, value: valueAcc2, proof: proofAcc2}
 
 let valueAcc3 = {x: '0x23381a99bb649a8b4912c27c11362947ed457661ae4ce19c0e539c2244924b07', y: '0x027f8e63851920a00f55ad60a3bdc5a9f8db4521aa44cd03533fbbee94dc58a9'}
 let proofAcc3 = {z: '0x213b1aad2d26a8ec0a2299bd0dfc91390c5649444174f0142dbfe9355c135c6b', c: '0x1308b9206b6531f8b3486b64903fbbb3e844d1774e9fe977de7f166c1bb97205'}
-let pEvalAcc3 = {index: 3, value: valueAcc3, proof: proofAcc3}
+let pEvalAcc3 = {indexPlus: 3, value: valueAcc3, proof: proofAcc3}
 
 let valueAcc4 = {x: '0x0204b5d48536ba70995480323ea102bb085c321ace441c46d7941a83575edb64', y: '0x027311080fe325c61bf97d1e1413515bc92967efef10e180ddea4737e0012483'}
 let proofAcc4 = {z: '0x05b51059891996db457c1cd49a8c6c4ba7a03146fe56c17cfa50f1187e0a28a8', c: '0x20ab8d582e8ff821cabf9db6573c5ec1498fac4151814ed718379f3a60527f16'}
-let pEvalAcc4 = {index: 4, value: valueAcc4, proof: proofAcc4}
+let pEvalAcc4 = {indexPlus: 4, value: valueAcc4, proof: proofAcc4}
 
 let valueAcc5 = {x: '0x0764e44dc3fd4f311c677b8482639a409ea71be1f13bc7171e1312affcc47543', y: '0x22e8c46aebc87318220ecf5184f5f539e57f8ee65098f7f1b3b4fbef694e70ec'}
 let proofAcc5 = {z: '0x1b27e3dc0b5202fa969a8a02a1a63617eb10d8f7d1357123e6212f08279ddfb4', c: '0x1fcf444fd698d2d7aebb139b70143151c697704a63d29020fa1f342fe21fc579'}
-let pEvalAcc5 = {index: 5, value: valueAcc5, proof: proofAcc5}
+let pEvalAcc5 = {indexPlus: 5, value: valueAcc5, proof: proofAcc5}
 
-let pEvalInvalid = {index: 1, value: valueAcc1, proof: proofAcc2}
+let pEvalInvalid = {indexPlus: 1, value: valueAcc1, proof: proofAcc2}
 
 let combinedSigma = {x: '0x2acbaf7515bc51af1b7237fbe9678c0507eb51894b3aefc37bab2bdb30e2bed9', y: '0x04dfaa96489890f327bdd8d6900631e82fe4c7f83f4360c678838aaee3bb006f'}
 let expectedValue = '0xc6e38ed65c903e42501071b33f39be8e70128cc4cb7d393f219211a135d4a1e4'
@@ -191,6 +191,11 @@ describe('ZKDVRF on-chain tests', async () => {
             expect((await Zkdvrf.pkList(3))[1]).to.eq(pubKeyAcc4.y)
             expect((await Zkdvrf.pkList(4))[0]).to.eq(pubKeyAcc5.x)
             expect((await Zkdvrf.pkList(4))[1]).to.eq(pubKeyAcc5.y)
+            expect(await Zkdvrf.getIndexPlus(account1Address)).to.eq(1)
+            expect(await Zkdvrf.getIndexPlus(account2Address)).to.eq(2)
+            expect(await Zkdvrf.getIndexPlus(account3Address)).to.eq(3)
+            expect(await Zkdvrf.getIndexPlus(account4Address)).to.eq(4)
+            expect(await Zkdvrf.getIndexPlus(account5Address)).to.eq(5)
         })
     })
 

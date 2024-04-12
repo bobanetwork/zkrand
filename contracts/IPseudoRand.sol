@@ -11,7 +11,7 @@ interface IPseudoRand {
     }
 
     struct PartialEval {
-        uint32 index;
+        uint32 indexPlus;
         Pairing.G1Point value;
         IPseudoRand.PartialEvalProof proof;
     }
