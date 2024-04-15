@@ -8,7 +8,8 @@ import {
     dkgDir,
     readBytesFromFile,
     execPromise,
-    instancesPath
+    instancesPath,
+    waitForWriteJsonToFile
 } from "./utils";
 
 
@@ -45,7 +46,7 @@ async function main() {
                 subList.map(num => num.toHexString())
             );
             const obj = JSON.stringify(ppListHex)
-            writeJsonToFile(obj, instancesPath)
+            await waitForWriteJsonToFile(obj, instancesPath)
 
             // each member derives its own secret share and global public parameters
             const cmd = `RUST_LOG=info ./target/release/client dkg derive`
@@ -57,6 +58,7 @@ async function main() {
                 console.log(res[`stderr`])
             }
 
+            process.exit(0);
             // todo: compare the local global public parameters with the one from the contract
         });
     }
@@ -76,7 +78,7 @@ async function main() {
         // generate snark proof and instance
         console.log("running command <", cmdProve, ">...")
         let result = await execPromise(cmdProve)
-        console.log(result[`stderr`])
+        console.log(result[`stdout`])
 
         // verify snark proof and instance
         console.log("running command <", cmdVerify, ">...")

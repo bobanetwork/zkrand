@@ -25,24 +25,17 @@ export function readJsonFromFile(filePath: string): any {
     }
 }
 
-export function writeJsonToFile(obj: string, filePath: string): void {
+export function writeJsonToFile(obj: string, filePath: string, callback: () => void) {
     // Write the JSON string to a file
-    fs.writeFile(filePath, obj, 'utf8', function(err) {
-        if (err) {
-            console.log("An error occurred while writing JSON Object to File.");
-            return console.log(err);
-        }
-
-        console.log(`JSON file has been saved at ${filePath}`);
-    });
+    fs.writeFile(filePath, obj, 'utf8', callback);
 }
 
-export async function waitForWriteJsonToFile(obj: string, filePath: string) {
-    console.log('Before writeJsonToFile');
+export function waitForWriteJsonToFile(obj: string, filePath: string) {
     return new Promise<void>((resolve, reject) => {
-        writeJsonToFile(obj, filePath); // Call the function without a callback
-        console.log('After writeJsonToFile');
-        resolve();
+        writeJsonToFile(obj, filePath, () => {
+            console.log(`JSON file has been saved at ${filePath}`);
+            resolve();
+        });
     });
 }
 

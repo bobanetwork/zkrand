@@ -10,10 +10,15 @@ import {
     waitForWriteJsonToFile,
     writeJsonToFile
 } from "./utils";
+import { createInterface } from "readline";
 
 const config = readJsonFromFile("demo-config.json")
 const zkdvrfAddress = config.zkdvrfAddress
 const memberAdresses = config.memberAddresses
+
+interface Eval {
+    indexPlus: number
+}
 
 async function main() {
     const netprovider = new providers.JsonRpcProvider(process.env.RPC_URL)
@@ -24,10 +29,19 @@ async function main() {
     const contractABI = Zkdvrf.interface.format();
     const contract = new ethers.Contract(zkdvrfAddress, contractABI, netprovider).connect(adminWallet)
 
-    for (let i = 0; i < memberAdresses.length; i++) {
-        const res = await contract.addPermissionedNodes(memberAdresses[i])
-       // console.log(res)
-        console.log("added member", memberAdresses[i])
+    const restart = process.env.RESTART === 'true'
+
+    const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    if (!restart) {
+        for (let i = 0; i < memberAdresses.length; i++) {
+            const res = await contract.addPermissionedNodes(memberAdresses[i])
+           // console.log(res)
+            console.log("added member", memberAdresses[i])
+        }
     }
 
     async function listenRegister() {
@@ -48,7 +62,9 @@ async function main() {
         });
     }
 
-    listenRegister()
+    if (!restart) {
+        listenRegister()
+    }
 
     async function listenNidkg() {
         // This will run when the event is emitted
@@ -63,8 +79,7 @@ async function main() {
                 subList.map(num => num.toHexString())
             );
             const obj = JSON.stringify(ppListHex)
-            writeJsonToFile(obj, instancesPath)
-            //await waitForWriteJsonToFile(obj, instancesPath)
+            await waitForWriteJsonToFile(obj, instancesPath)
             //console.log("retrieved all instances from contract")
 
 
@@ -113,27 +128,32 @@ async function main() {
         });
     }
 
-    listenNidkg()
-
-    async function listenGpp() {
-        // This will run when the event is emitted
-        const eventGpp = `GlobalPublicParamsCreated`
-        contract.on(eventGpp, async (event) => {
-            console.log("\nevent", eventGpp)
-            // Proceed to the next step here
-            const res = await contract.initiateRandom()
-            const receipt = await netprovider.getTransactionReceipt(res.hash);
-            // Check if the transaction was successful
-            if (receipt.status === 1) {
-                console.log("Transaction initiateRandom() successful!");
-            } else {
-                console.log("Transaction initiateRandom() failed!");
-            }
-
-        });
+    if (!restart) {
+        listenNidkg()
     }
 
-    listenGpp()
+    async function initiateRand(eventReceived) {
+        console.log("\nevent received ", eventReceived)
+        // Proceed to the next step here
+        const res = await contract.initiateRandom()
+        const receipt = await netprovider.getTransactionReceipt(res.hash);
+        // Check if the transaction was successful
+        if (receipt.status === 1) {
+            console.log("Transaction initiateRandom() successful!");
+        } else {
+            console.log("Transaction initiateRandom() failed!");
+        }
+
+        console.log('\n 🔔 Please continue by running \'yarn random\' on a new terminal to submit partial evals...')
+    }
+
+    // start listening for the event
+    if (!restart) {
+        const eventGpp = `GlobalPublicParamsCreated`
+        contract.on(eventGpp, async (event) => {
+            await initiateRand(eventGpp);
+        });
+    }
 
     async function listenRandThreshold() {
         const eventRandThreshold = `RandomThresholdReached`
@@ -144,7 +164,13 @@ async function main() {
             await sleep(2000)
             console.log("end sleep")
 
-            const evals = await contract.getEvalList(roundNum)
+            const evals: Eval[] = []
+            for (let i = 0; i < memberAdresses.length; i++) {
+                const evalFromContract = await contract.roundToEval(roundNum, i)
+                if (evalFromContract.indexPlus != 0) {
+                    evals.push(evalFromContract)
+                }
+            }
 
             const pEvals = []
             for (let i = 0; i < evals.length; i++) {
@@ -163,7 +189,7 @@ async function main() {
 
             const obj = JSON.stringify(pEvals)
             const evalsPath = randDir + `evals.json`
-            writeJsonToFile(obj, evalsPath)
+            await waitForWriteJsonToFile(obj, evalsPath)
 
             console.log("begin sleep...")
             await sleep(2000)
@@ -193,13 +219,24 @@ async function main() {
             }
 
             const rand = await contract.getLatestRandom()
-            console.log("pseudorandom from contract", rand.value)
-
-
+            console.log("✅ pseudorandom from contract", rand.value)
         });
     }
 
     listenRandThreshold()
+
+    // start listening for event
+    const eventRandReady = `RandomReady`
+    contract.on(eventRandReady,  async (roundNum, roundInput, event) => {
+        rl.question("\n 🔔 Do you want to initiate random again? (yes/no): ", async (answer) => {
+            if (answer.toLowerCase() === "yes") {
+                await initiateRand(eventRandReady);
+            } else {
+                console.log("Exiting the process...");
+                process.exit(0);
+            }
+        });
+    });
 }
 
 

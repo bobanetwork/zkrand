@@ -30,8 +30,10 @@
     "test": "npx hardhat test",
     "deploy": "npx hardhat run scripts/deploy.ts",
     "admin": "npx hardhat run scripts/admin.ts",
+    "admin:restart": "RESTART=true npx hardhat run scripts/admin.ts",
     "register": "npx hardhat run scripts/register.ts",
     "nidkg": "npx hardhat run scripts/nidkg.ts",
+    "member": "yarn register && yarn nidkg",
     "random": "npx hardhat run scripts/random.ts"
   },
   "repository": {

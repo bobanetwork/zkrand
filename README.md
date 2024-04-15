@@ -220,3 +220,92 @@ Run contract tests using-
 ```
 $ yarn test
 ```
+
+## Running the Demo
+
+The Demo offers a quick, interactive overview of the system's end-to-end flow, including memeber interactions, the different phases and their functionality.
+
+### Step-1: Build
+
+1. Build  by running 
+
+```
+$ cargo build --release
+```
+
+2. Download KZG parameters using
+
+```
+sh download_params.sh
+``` 
+
+3. Setup proving key and verifying key. This might take a few minutes. This command also generates SNARK verifier contract.
+
+```
+RUST_LOG=info ./target/release/client setup -s
+```
+
+4. The demo will require a test blockchain, for a quickstart - download [Ganache](https://archive.trufflesuite.com/ganache/) and start a local network
+
+```
+ganache --wallet.seed "my insecure seeds"
+```
+
+5. Set up your .env file (use .env.example for reference)
+
+```
+RPC_URL=HTTP://127.0.0.1:8545
+PRIVATE_KEY=<private-key-from-a-ganache-account>
+THRESHOLD=3
+NUMBER_OF_MEMBERS=5
+DEGREE=18
+```
+
+### Step-2: Deploy Contracts
+
+1. To deploy the zkdvrf contracts, run-
+
+```
+yarn deploy
+```
+
+2. Populate your demo-config.json file using-
+
+a) your zkdvrf deployed address
+b) five sample addresses, and their private keys from ganache pre-generated accounts
+
+### Step-3: NIDKG
+
+1. Start the demo by running your admin script-
+
+```
+yarn admin
+```
+
+After adding members on the contract, the admin script needs to be kept running as you move on to the subsequent steps
+
+2. On a separate window, register the members and start the NIDKG process by running-
+
+```
+yarn member
+```
+
+### Step-4: Generating Random
+
+1. After the NIDKG process is complete, the admin script will automatically initiate a round for random generation. Follow the instructions on the admin window and run the following for the members to submit partial evaluations-
+
+```
+yarn random
+```
+
+After the members have done submitting partial evaluations - verify that a pseudorandom number is generated on the admin window!
+
+### Re-running
+Respond 'yes' on the admin window to continue generating pseudorandom numbers.
+
+If you have exited the admin script, but have already been through the NIDKG process, you can continue with random number generation through running-
+
+```
+yarn admin:restart
+```
+

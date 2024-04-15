@@ -70,7 +70,7 @@ contract zkdvrf is Ownable {
     mapping (address => dvrfNode) public addrToNode;
     mapping (uint256 => string) public roundInput;
     mapping (address => uint256) public lastSubmittedRound;
-    mapping (uint256 => IPseudoRand.PartialEval[]) public roundToEval;
+    mapping (uint256 => mapping (uint32 => IPseudoRand.PartialEval)) public roundToEval;
     mapping (uint256 => uint32) public roundSubmissionCount;
     mapping (uint256 => IPseudoRand.PseudoRandom) public roundToRandom;
 
@@ -100,7 +100,6 @@ contract zkdvrf is Ownable {
 
     // each node registers with deposit and confirms
     function registerNode(Grumpkin.Point memory pubKey) public payable {
-        require(registeredCount < currentIndex, "All the permitted nodes have registered so far. Please try again later");
         require(contractPhase == Status.Unregistered, "Registration has already been completed");
         require(msg.sender == addrToNode[msg.sender].nodeAddress, "Unauthorized call");
         require(!addrToNode[msg.sender].status, "Node Already registered");
@@ -196,7 +195,7 @@ contract zkdvrf is Ownable {
         Pairing.G1Point memory vkStored = vkList[pkIndex];
         require(IPseudoRand(pseudoRand).verifyPartialEval(currentX, pEval.value, pEval.proof, vkStored), "Verification of partial eval failed");
         lastSubmittedRound[msg.sender] = currentRoundNum;
-        roundToEval[currentRoundNum].push(pEval);
+        roundToEval[currentRoundNum][pkIndex] = pEval;
         roundSubmissionCount[currentRoundNum]++;
 
         if (roundSubmissionCount[currentRoundNum] == threshold) {
@@ -279,9 +278,5 @@ contract zkdvrf is Ownable {
 
     function getVkList() public view returns (Pairing.G1Point[] memory) {
         return vkList;
-    }
-
-    function getEvalList(uint roundNum) public view returns (IPseudoRand.PartialEval[] memory) {
-        return roundToEval[roundNum];
     }
 }
