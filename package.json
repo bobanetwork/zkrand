@@ -33,7 +33,7 @@
     "admin:restart": "RESTART=true npx hardhat run scripts/admin.ts",
     "register": "npx hardhat run scripts/register.ts",
     "nidkg": "npx hardhat run scripts/nidkg.ts",
-    "setup": "yarn register && yarn nidkg",
+    "member": "yarn register && yarn nidkg",
     "random": "npx hardhat run scripts/random.ts"
   },
   "repository": {

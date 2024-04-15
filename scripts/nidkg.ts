@@ -78,7 +78,7 @@ async function main() {
         // generate snark proof and instance
         console.log("running command <", cmdProve, ">...")
         let result = await execPromise(cmdProve)
-        console.log(result[`stderr`])
+        console.log(result[`stdout`])
 
         // verify snark proof and instance
         console.log("running command <", cmdVerify, ">...")

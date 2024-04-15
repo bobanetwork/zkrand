@@ -239,12 +239,22 @@ $ cargo build --release
 sh download_params.sh
 ``` 
 
-3. The demo will require a test blockchain, for a quickstart - download [Ganache](https://archive.trufflesuite.com/ganache/) and start a local network
-
-4. Set up your .env file (use .env.example for reference)
+3. Setup proving key and verifying key. This might take a few minutes. This command also generates SNARK verifier contract.
 
 ```
-RPC_URL=HTTP://127.0.0.1:7545
+RUST_LOG=info ./target/release/client setup -s
+```
+
+4. The demo will require a test blockchain, for a quickstart - download [Ganache](https://archive.trufflesuite.com/ganache/) and start a local network
+
+```
+ganache --wallet.seed "my insecure seeds"
+```
+
+5. Set up your .env file (use .env.example for reference)
+
+```
+RPC_URL=HTTP://127.0.0.1:8545
 PRIVATE_KEY=<private-key-from-a-ganache-account>
 THRESHOLD=3
 NUMBER_OF_MEMBERS=5
@@ -272,12 +282,12 @@ b) five sample addresses, and their private keys from ganache pre-generated acco
 yarn admin
 ```
 
-After registering members on the contract, the admin script needs to be kept running as you move on to the subsequent steps
+After adding members on the contract, the admin script needs to be kept running as you move on to the subsequent steps
 
-2. On a separate window, register and allow the members to register and start the NIDKG process by running-
+2. On a separate window, register the members and start the NIDKG process by running-
 
 ```
-yarn setup
+yarn member
 ```
 
 ### Step-4: Generating Random
