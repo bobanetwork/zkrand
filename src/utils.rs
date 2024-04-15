@@ -5,6 +5,7 @@ use crate::{
     WRAP_LEN,
 };
 use anyhow::Result;
+use ark_std::{end_timer, start_timer};
 use halo2_ecc::integer::rns::Rns;
 use halo2_ecc::Point;
 use halo2wrong::curves::ff::PrimeField;
@@ -184,17 +185,22 @@ pub fn hash_to_curve_grumpkin<'a>(
 pub fn load_or_create_params(params_dir: &str, degree: usize) -> Result<ParamsKZG<Bn256>> {
     // read params
     let params_path = format!("{params_dir}/params{degree}");
-    log::info!("load_params {}", params_path);
+    log::info!("load params from {}", params_path);
     if let Ok(params) = load_params(&params_path, degree, DEFAULT_SERDE_FORMAT) {
         return Ok(params);
     }
 
     // create params for degree
     let max_params_path = format!("{params_dir}/params{MAX_DEGREE}");
-    log::info!("load_max_params {}", params_path);
+    log::info!(
+        "failed to load params; load max_params from {}",
+        max_params_path
+    );
     if let Ok(mut params) = load_params(&max_params_path, MAX_DEGREE, DEFAULT_SERDE_FORMAT) {
         if degree < MAX_DEGREE {
+            let start = start_timer!(|| format!("kzg setup params for degree {}", degree));
             params.downsize(degree as u32);
+            end_timer!(start);
 
             let mut file = File::create(params_path)?;
             params.write_custom(&mut file, DEFAULT_SERDE_FORMAT)?;
@@ -313,9 +319,12 @@ pub fn load_or_create_vk(
         return Ok(vk);
     }
 
-    log::info!("load vk failed; create and store a new vk!");
+    let start = start_timer!(|| "failed to load vk; generate verifying key vk");
     let circuit_dummy = DkgCircuit::dummy(dkg_config);
     let vk = keygen_vk(params, &circuit_dummy).expect("keygen_vk should not fail");
+    end_timer!(start);
+
+    let start = start_timer!(|| "store vk to file");
     let vk_path = {
         let threshold = dkg_config.threshold();
         let number_of_members = dkg_config.number_of_members();
@@ -328,6 +337,7 @@ pub fn load_or_create_vk(
     };
     let mut f_vk = File::create(vk_path)?;
     vk.write(&mut f_vk, DEFAULT_SERDE_FORMAT)?;
+    end_timer!(start);
 
     Ok(vk)
 }
@@ -349,10 +359,15 @@ pub fn load_or_create_pk(
         return Ok(pk);
     }
 
-    log::info!("load pk failed; create and store a new vk and pk!");
+    log::info!("failed to load pk; generate and store vk and pk");
     let vk = load_or_create_vk(dkg_config, params_dir, params, degree)?;
     let circuit_dummy = DkgCircuit::dummy(dkg_config);
+
+    let start = start_timer!(|| "generate proving key pk");
     let pk = keygen_pk(params, vk, &circuit_dummy).expect("keygen_pk should not fail");
+    end_timer!(start);
+
+    let start = start_timer!(|| "store pk to file");
     let pk_path = {
         let threshold = dkg_config.threshold();
         let number_of_members = dkg_config.number_of_members();
@@ -365,6 +380,7 @@ pub fn load_or_create_pk(
     };
     let mut f_pk = File::create(pk_path)?;
     pk.write(&mut f_pk, DEFAULT_SERDE_FORMAT)?;
+    end_timer!(start);
 
     Ok(pk)
 }

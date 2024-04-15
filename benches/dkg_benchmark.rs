@@ -45,13 +45,16 @@ mod dkg_benches {
         let dimension = DimensionMeasurement::measure(&circuit).unwrap();
         println!("dimention: {:?}", dimension);
 
-        let start1 = start_timer!(|| format!("kzg setup with degree {}", DEGREE));
+        let start = start_timer!(|| format!("kzg (mock) setup with degree {}", DEGREE));
         let general_params = ParamsKZG::<Bn256>::setup(DEGREE as u32, &mut rng);
         let verifier_params: ParamsVerifierKZG<Bn256> = general_params.verifier_params().clone();
-        end_timer!(start1);
+        end_timer!(start);
 
+        let start =
+            start_timer!(|| format!("generate verifying and proving key with degree {}", DEGREE));
         let vk = keygen_vk(&general_params, &circuit).expect("keygen_vk should not fail");
         let pk = keygen_pk(&general_params, vk, &circuit).expect("keygen_pk should not fail");
+        end_timer!(start);
 
         let mut transcript = Blake2bWrite::<_, BnG1, Challenge255<_>>::init(vec![]);
 
