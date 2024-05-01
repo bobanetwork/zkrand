@@ -50,9 +50,9 @@ async function main() {
         const receipt = await netprovider.getTransactionReceipt(res.hash);
         // Check if the transaction was successful
         if (receipt.status === 1) {
-            console.log(`Transaction submitPartialEval(..) from member ${memberAddress} successful!`);
+            console.log(`Transaction submitPartialEval(..) from member ${memberAddress} successful!\n`);
         } else {
-            console.log(`Transaction submitPartialEval(..) from member ${memberAddress} failed!`);
+            console.log(`Transaction submitPartialEval(..) from member ${memberAddress} failed!\n`);
         }
     }
 

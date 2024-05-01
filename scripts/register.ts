@@ -41,6 +41,7 @@ async function main() {
         const file = `member_${index}`
         const command = `RUST_LOG=info ./target/release/client keygen -f ${file}`
 
+        console.log("running command <", command, ">...")
         const result = await execPromise(command);
         console.log(result[`stderr`]);
 

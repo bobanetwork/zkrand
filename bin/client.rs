@@ -408,7 +408,6 @@ fn main() -> Result<()> {
             let mpk_bytes: Point = mpk.into();
             let mpk_serialised = serde_json::to_string(&mpk_bytes)?;
             info!("member public key is {}", mpk_serialised);
-            // TODO: network transmission for public key
         }
         Commands::Dkg(dkg) => {
             match dkg.command {
@@ -422,15 +421,6 @@ fn main() -> Result<()> {
                     let mpks: Vec<GkG1> = mpks_bytes.into_iter().map(|pk| pk.into()).collect();
 
                     let dkg = DkgMemberParams::new(dkg_config, mpks, &mut rng)?;
-                    {
-                        // save dkg secrets for member i
-                        let path = &format!("{DKG_SECRETS_DIR}/secret_{index}.json");
-                        let dkg_bytes: DkgMemberParamsSerde = (&dkg).into();
-                        let serialized = serde_json::to_string(&dkg_bytes)?;
-                        write(path, serialized.as_bytes())?;
-                        info!("dkg secrets for member {index} generated and saved in {path}");
-                    }
-
                     let circuit = dkg.circuit(&mut rng);
                     let instance = dkg.instance();
 
@@ -460,7 +450,6 @@ fn main() -> Result<()> {
                     end_timer!(start);
                     info!("size of proof {:?}", proof.len());
 
-                    // todo: network transmission for (proof, instance[0])
                     save_proof(&proof, &instance[0], index)?;
                 }
                 DkgCommands::Verify { index } => {
@@ -678,7 +667,6 @@ fn main() -> Result<()> {
                         "final pseudorandom on input \"{}\" generated and saved at {}",
                         input, path
                     );
-                    // todo: network transmission for pseudo random
                 }
                 RandCommands::VerifyFinal { input } => {
                     let path = &format!("{RANDOM_DIR}/pseudo.json");

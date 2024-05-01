@@ -90,6 +90,7 @@ async function main() {
 
             // derive global public parameters
             const cmd = `RUST_LOG=info ./target/release/client dkg derive`
+            console.log("running command <", cmd, ">...")
             let result = await execPromise(cmd)
             console.log(result[`stderr`])
 
