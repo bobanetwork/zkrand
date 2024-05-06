@@ -159,7 +159,7 @@ async function main() {
     async function listenRandThreshold() {
         const eventRandThreshold = `RandomThresholdReached`
         contract.on(eventRandThreshold, async (roundNum, input, event) => {
-            console.log("\nevent", eventRandThreshold, `round ${roundNum} input ${input}`)
+            console.log("\nevent", eventRandThreshold, `round ${roundNum} input "${input}"`)
 
             console.log("begin sleep...")
             await sleep(2000)
@@ -196,12 +196,12 @@ async function main() {
             await sleep(2000)
             console.log("end sleep")
 
-            const cmdCombine = `RUST_LOG=info ./target/release/client rand combine ${input}`
+            const cmdCombine = `RUST_LOG=info ./target/release/client rand combine "${input}"`
             console.log("running command <", cmdCombine, ">...")
             let result = await execPromise(cmdCombine)
             console.log(result[`stderr`])
 
-            const cmdVerify = `RUST_LOG=info ./target/release/client rand verify-final ${input}`
+            const cmdVerify = `RUST_LOG=info ./target/release/client rand verify-final "${input}"`
             console.log("running command <", cmdVerify, ">...")
             result = await execPromise(cmdVerify)
             console.log(result[`stderr`])

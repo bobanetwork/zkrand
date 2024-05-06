@@ -27,8 +27,8 @@ async function main() {
         const memberContract = contract.connect(memberWallet)
 
         const index = await memberContract.getIndexPlus(memberAddress)
-        const cmdEval = `RUST_LOG=info ./target/release/client rand eval ${index} ${input}`
-        const cmdVerify = `RUST_LOG=info ./target/release/client rand verify ${index} ${input}`
+        const cmdEval = `RUST_LOG=info ./target/release/client rand eval ${index} "${input}"`
+        const cmdVerify = `RUST_LOG=info ./target/release/client rand verify ${index} "${input}"`
 
         console.log("running command <", cmdEval, ">...")
         let result = await execPromise(cmdEval)

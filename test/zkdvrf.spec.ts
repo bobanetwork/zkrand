@@ -47,33 +47,20 @@ let ppZkAcc5 = '0x2dc87c995b5b2c865be9732ab2f39eb6b822b9eb217479228aaf6a7286ffaf
 
 let gpk = {x:["0x2a69fc6c9e39bce2a7bf7c37d9766494243948f0119370a06f317005d70f9304","0x16cea21f93a20dc52769e8714618f9ddccbf97343a927ba2a559b4c1fe8fc8ed"],y:["0x21975b057269f1962d7e637ab7f110b9edbe79705824c5293d714ca2c651a7ad","0x2f90279a7c5a60a9e18257f3431ac08156c09d51439c17ce5eabcca999fecffb"]}
 
-// pEvals for input: "zkRand v1 2024: 1"
-let valueAcc1 = {x: '0x1064d6e2dcee178c7d845d61131978592c29ee71e40273a72facee6689445f93', y: '0x067afacedacfb510b09278d216ea19aaee3cdb4a03d2c7157f11016a795e6900'}
-let proofAcc1 = {z: '0x00cdb7bb98419e845fd36c099faa0ca347102bbe2fedb2b1ee049392cc1f37e9', c: '0x15ab41ab094379613d98f05db1bf206428e445b5ee34d2d2394ea936019c2f99'}
-let pEvalAcc1 = {indexPlus: 1, value: valueAcc1, proof: proofAcc1}
+// pEvals for input: "zkRand-v1-2024:1"
+let pEvals = [
+    {indexPlus: 1, value: {"x": "0x2e71e34ef44d8fc2e84d96337ca05234085d8b200668d225f15704a2fe9cae48", "y": "0x21733d9b459e1fd3fd2ac73470e8d147874d7c347694b82316e4d723c81c3a71"}, proof: {"z": "0x2b67e64aa7e8243292ed0dfed1590b31188f805480161de96b1efbc358334e38", "c": "0x0a5dd30c30b6dd6f0110b42d40b890b3749015ddab846700e1d5717ab6690032"}},
+    {indexPlus: 2, value: {"x": "0x00634933fa612e1813283b4316146c14ec4a497b95191ac9ab530a978a079ca5", "y": "0x07edff02b0b6ea9e9c4dd32cef005110ca2b3f77892ad8d95e23ebd2856c11e6"}, proof: {"z": "0x0ecc798a159496903719d68e011039ad0eec1c6ba069366dc6610dbcbf6bf094", "c": "0x014b6614e1be8489b1ce07cf4cb4c5e8846b417f99bccc852ce57140d43b2389"}},
+    {indexPlus: 3, value: {"x": "0x0cd9e6985ef4c2e08875832d595737e19c57a2fe6a0b678d995f4eea9aeaca33", "y": "0x1c22ed464da535f3f6cd9af94e6e1d40adfe68905340f23f6ddd23ec3ff4c9ed"}, proof: {"z": "0x0f2d2a3214bc7cb08ae5916fdc621358b1fb584647dd7a9684540e02103ba37b", "c": "0x22ca5d1d69e77f306dbd929ec05de88642ada0a918fcb483922c9893f400f74a"}},
+    {indexPlus: 4, value: {"x": "0x03a8c7bc077575bcda83aceb165dd6c84a7bf825cbba1c6e8c1c7fe8821a9a45", "y": "0x24335c3a2746992fb50efa146b11b2d8f6124f0dfde2c0b574556ea2c989dc09"}, proof: {"z": "0x11674197fa615eea4961feb5d58fb913342dfc27787f733b52de39123b0a7ebd", "c": "0x11591c9b8834e2555043e62d1ede43c08971d62297ff9785a5416e8d2cf65d6a"}},
+    {indexPlus: 5, value: {"x": "0x2e5002bd840108a25b59ae32ac914e3420e40a5de687a436bdb71c90d83c3707", "y": "0x136514a72a62c60ee8476847a197803d21acc64477855aab2e184b43301199d5"}, proof: {"z": "0x2d7b09f5a4e45222971297c223a351b2896f0b727864ea4c48c3eb727b14efed", "c": "0x0fbe5c46c1d6377d53f04d55c9846cacf000ba44e6085761761b2c84b5477b12"}}
+]
 
-let valueAcc2 = {x: '0x01490918d3be4ef26e40b813aaaf29adb3c0ecea705253775c6638da80237556', y: '0x28f7129970704ec1470b1aa6207a0c758bfa717a13df3aeb061e20839c6a40f1'}
-let proofAcc2 = {z: '0x2637d2bfa8abe4b0e80bebbac368182dc71c3e91ad9a574150e5c10ab6b3aa29', c: '0x1e3a37671aec5f7e1cde3b33b150602d4bbc9919787b442243cce11f41e7f96e'}
-let pEvalAcc2 = {indexPlus: 2, value: valueAcc2, proof: proofAcc2}
+let pEvalInvalid = {indexPlus: 1, value: pEvals[0].value, proof: pEvals[1].proof}
 
-let valueAcc3 = {x: '0x2e950d771c7a4e48c8e1ee11d17ef503e518cf418b2b24fb6b53ab83d1113f88', y: '0x0933ba8f16ce93cadec566329e7c45008380d0b57ae79a5c63d379dea0e9ada0'}
-let proofAcc3 = {z: '0x2b8b49962b1114e204b2f30f9fccdbb00ce2be9a1d28182e943ae380fe996322', c: '0x2b9658e94845b522a4be605f8da3e0827568acbef9dcb3529d2b6cfd07c83eba'}
-let pEvalAcc3 = {indexPlus: 3, value: valueAcc3, proof: proofAcc3}
-
-let valueAcc4 = {x: '0x2324ee59d3559c854493ce11320e5c57384b7e4c0413fac420f512d5493e4286', y: '0x0f9cef73e42d03b1f95ab8b552d38e3dc83e266fe4309c4ba0c0576be4e8f36f'}
-let proofAcc4 = {z: '0x0e6e62124e9de8974311ef8eca8d6cb8f03f65e27a7b163e737f23d58e36fcde', c: '0x15f9269db1c178d9525555ba7f69cc965dc794bf4bbea7f14d6403620727aef3'}
-let pEvalAcc4 = {indexPlus: 4, value: valueAcc4, proof: proofAcc4}
-
-let valueAcc5 = {x: '0x1373fe065e22eae067ff30f9a10ba7b3457d898859aea2554e1569a146f6f1bd', y: '0x2cb1266fe29d61b8f30df7e2977c79ff52d41cb2aac92ca30136a036b74d1053'}
-let proofAcc5 = {z: '0x0a72559aa0515257e7d22f85af70ff461941fce067dd52dc8c450e87eebd5ad9', c: '0x0a083759ebc48afa4dfe66e34fc0322d31ee0dc957706e23e9e7ac43b23c6246'}
-let pEvalAcc5 = {indexPlus: 5, value: valueAcc5, proof: proofAcc5}
-
-let pEvalInvalid = {indexPlus: 1, value: valueAcc1, proof: proofAcc2}
-
-let combinedSigma = {x: '0x2e92176359d3d73e00199ce2a246628d191a75f89ee7ee25cd27ec1360f77832', y: '0x14995fdba6e64057d57a6a76cc7908066dc8fa5055c36af74c3fb1f50e6b168c'}
-let expectedValue = '0x3a127cfb5addd6c17f4b46875eb34ed28dd83832aea73ff56d2a1d0db8a080d6'
+let combinedSigma = {x: '0x20f4174fbb447a6800e1aa7d98645cc35d4f935963577c09a697a3c07c3536e3', y: '0x2d2e6293260e3092d024adce73ae7ef3f219c55950a3b174832a48c88c33d375'}
+let expectedValue = '0xc2345a834612b9be480f1007e098485a91b2573b9bd6147f549047b84194ecd3'
 let pseudoRandom = {proof: combinedSigma, value: expectedValue}
-
 
 const cfg = hre.network.config
 const local_provider = new providers.JsonRpcProvider(cfg['url'])
@@ -268,7 +255,7 @@ describe('ZKDVRF on-chain tests', async () => {
 
         it('should be able to initiate random', async () => {
             await Zkdvrf.initiateRandom()
-            expect(await Zkdvrf.roundInput(1)).to.be.equal(`zkRand v1 2024: 1`)
+            expect(await Zkdvrf.roundInput(1)).to.be.equal(`zkRand-v1-2024:1`)
         })
 
         it('should not be able to initiate random without completing previous round', async () => {
@@ -282,17 +269,17 @@ describe('ZKDVRF on-chain tests', async () => {
         })
 
         it('non-registered nodes should not be able to submit partial eval', async () => {
-            await expect(Zkdvrf.connect((await ethers.getSigners())[5]).submitPartialEval(pEvalAcc1)).to.be.revertedWith('Unauthorized call')
+            await expect(Zkdvrf.connect((await ethers.getSigners())[5]).submitPartialEval(pEvals[0])).to.be.revertedWith('Unauthorized call')
         })
 
         it('should be able to submit partial eval', async () => {
-            await Zkdvrf.submitPartialEval(pEvalAcc1)
+            await Zkdvrf.submitPartialEval(pEvals[0])
             expect(await Zkdvrf.lastSubmittedRound(account1Address)).to.be.eq(1)
             expect(await Zkdvrf.roundSubmissionCount(1)).to.be.eq(1)
         })
 
         it('should not be able to submit partial eval again', async () => {
-            await expect(Zkdvrf.submitPartialEval(pEvalAcc1)).to.be.revertedWith('Already submitted for round')
+            await expect(Zkdvrf.submitPartialEval(pEvals[0])).to.be.revertedWith('Already submitted for round')
         })
 
         it('should not be able to generate random below threshold', async () => {
@@ -300,10 +287,10 @@ describe('ZKDVRF on-chain tests', async () => {
         })
 
         it('all nodes should be able to submit partial eval', async () => {
-            await Zkdvrf.connect(account2).submitPartialEval(pEvalAcc2)
-            await Zkdvrf.connect(account3).submitPartialEval(pEvalAcc3)
-            await Zkdvrf.connect(account4).submitPartialEval(pEvalAcc4)
-            await Zkdvrf.connect(account5).submitPartialEval(pEvalAcc5)
+            await Zkdvrf.connect(account2).submitPartialEval(pEvals[1])
+            await Zkdvrf.connect(account3).submitPartialEval(pEvals[2])
+            await Zkdvrf.connect(account4).submitPartialEval(pEvals[3])
+            await Zkdvrf.connect(account5).submitPartialEval(pEvals[4])
             expect(await Zkdvrf.roundSubmissionCount(1)).to.be.eq(5)
         })
     })

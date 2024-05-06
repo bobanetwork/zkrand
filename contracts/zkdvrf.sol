@@ -37,7 +37,7 @@ contract zkdvrf is Ownable {
         Ready
     }
 
-    string public constant INPUT_PREFIX = "zkRand v1 2024: ";
+    string public constant INPUT_PREFIX = "zkRand-v1-2024:";
 
     uint32 public memberCount;
     uint32 public threshold;
