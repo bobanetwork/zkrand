@@ -47,7 +47,6 @@ let ppZkAcc5 = '0x2dc87c995b5b2c865be9732ab2f39eb6b822b9eb217479228aaf6a7286ffaf
 
 let gpk = {x:["0x2a69fc6c9e39bce2a7bf7c37d9766494243948f0119370a06f317005d70f9304","0x16cea21f93a20dc52769e8714618f9ddccbf97343a927ba2a559b4c1fe8fc8ed"],y:["0x21975b057269f1962d7e637ab7f110b9edbe79705824c5293d714ca2c651a7ad","0x2f90279a7c5a60a9e18257f3431ac08156c09d51439c17ce5eabcca999fecffb"]}
 
-// todo: update partial evaluations
 // pEvals for input: "zkRand v1 2024: 1"
 let valueAcc1 = {x: '0x1064d6e2dcee178c7d845d61131978592c29ee71e40273a72facee6689445f93', y: '0x067afacedacfb510b09278d216ea19aaee3cdb4a03d2c7157f11016a795e6900'}
 let proofAcc1 = {z: '0x00cdb7bb98419e845fd36c099faa0ca347102bbe2fedb2b1ee049392cc1f37e9', c: '0x15ab41ab094379613d98f05db1bf206428e445b5ee34d2d2394ea936019c2f99'}
@@ -268,11 +267,7 @@ describe('ZKDVRF on-chain tests', async () => {
         })
 
         it('should be able to initiate random', async () => {
-            // timestamp set forward 30 yrs, rand Input
-          //  const newTimestamp = 2655988642
-          //  await hre.network.provider.send("evm_setNextBlockTimestamp", [newTimestamp])
             await Zkdvrf.initiateRandom()
-//            await hre.network.provider.send("evm_mine", [])
             expect(await Zkdvrf.roundInput(1)).to.be.equal(`zkRand v1 2024: 1`)
         })
 
