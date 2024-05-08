@@ -34,7 +34,10 @@
     "register": "npx hardhat run scripts/register.ts",
     "nidkg": "npx hardhat run scripts/nidkg.ts",
     "member": "yarn register && yarn nidkg",
-    "random": "npx hardhat run scripts/random.ts"
+    "random": "npx hardhat run scripts/random.ts",
+    "lottery:deploy": "npx hardhat run scripts/lottery/deploy.ts",
+    "lottery:admin": "npx hardhat run scripts/lottery/admin.ts",
+    "lottery:play": "npx hardhat run scripts/lottery/play.ts"
   },
   "repository": {
     "type": "git",

@@ -11,8 +11,10 @@ let Halo2Verifier: Contract
 let Halo2VerifyingKey: Contract
 let GlobalPublicParams: Contract
 let PseudoRand: Contract
+let Lottery: Contract
 
 let minDeposit = utils.parseEther('0.01')
+let minBet = utils.parseEther('0.5')
 
 let account1: Signer
 let account2: Signer
@@ -24,6 +26,16 @@ let account2Address: string
 let account3Address: string
 let account4Address: string
 let account5Address: string
+
+let lotteryAdmin: Signer
+let player1: Signer
+let player2: Signer
+let player3: Signer
+let player4: Signer
+let lotteryAdminAddress: string
+let player1Address: string
+let player2Address: string
+let player3Address: string
 
 
 let pubKeyAcc1 = {x:"0x1c5dd8ff5b131cbcd6c38d8143a5db4c6bd1593f436390b24880a4ce41ca5a47", y:"0x23976573e74b5ed2daa1ae1870a90d3463d86cf751381e2486c36a83ae2ee5dd"}
@@ -77,7 +89,7 @@ describe('ZKDVRF on-chain tests', async () => {
         Zkdvrf = await (
             await ethers.getContractFactory('zkdvrf')
         ).deploy(3, 5, Halo2Verifier.address, Halo2VerifyingKey.address, GlobalPublicParams.address, PseudoRand.address, minDeposit)
-        
+
         account1 = (await ethers.getSigners())[0]
         account2 = (await ethers.getSigners())[1]
         account3 = (await ethers.getSigners())[2]
@@ -88,6 +100,21 @@ describe('ZKDVRF on-chain tests', async () => {
         account3Address = await account3.getAddress()
         account4Address = await account4.getAddress()
         account5Address = await account5.getAddress()
+
+        lotteryAdmin = (await ethers.getSigners())[5]
+        player1 = (await ethers.getSigners())[6]
+        player2 = (await ethers.getSigners())[7]
+        player3 = (await ethers.getSigners())[8]
+        player4 = (await ethers.getSigners())[9]
+        lotteryAdminAddress = await lotteryAdmin.getAddress()
+        player1Address = await player1.getAddress()
+        player2Address = await player2.getAddress()
+        player3Address = await player3.getAddress()
+
+        Lottery = await (
+            await ethers.getContractFactory('Lottery')
+        ).connect(lotteryAdmin).deploy(Zkdvrf.address)
+
     })
 
     describe('Initialization', async () => {
@@ -97,6 +124,30 @@ describe('ZKDVRF on-chain tests', async () => {
             expect(memberCount).to.be.eq(5)
             expect(threshold).to.be.eq(3)
             expect(await Zkdvrf.owner()).to.be.eq(account1Address)
+        })
+    })
+
+    describe('Lottery Initialization', async () => {
+        it('lottery should be initialized', async () => {
+            expect(await Lottery.zkdvrfAddr()).to.be.eq(Zkdvrf.address)
+            expect(await Lottery.owner()).to.be.eq(lotteryAdminAddress)
+        })
+
+        it('lottery setup', async () => {
+            await Lottery.connect(lotteryAdmin).setup(1, minBet)
+            expect(await Lottery.randRoundNum()).to.be.eq(1)
+            expect(await Lottery.minBet()).to.be.eq(minBet)
+            expect(await Lottery.contractPhase()).to.be.eq(1)
+        })
+
+        it('lottery enter', async () => {
+            await Lottery.connect(player1).enter({value: minBet})
+            await Lottery.connect(player2).enter({value: minBet})
+            await Lottery.connect(player3).enter({value: minBet})
+            const players = await Lottery.getPlayers()
+            expect(players[0]).to.be.eq(player1Address)
+            expect(players[1]).to.be.eq(player2Address)
+            expect(players[2]).to.be.eq(player3Address)
         })
     })
 
@@ -263,6 +314,12 @@ describe('ZKDVRF on-chain tests', async () => {
         })
     })
 
+    describe('Lottery Deadline', async () => {
+        it('should not be able to enter lottery after random initiation of target round', async () => {
+            await expect(Lottery.connect(player4).enter({value: minBet})).to.be.revertedWith(`Too late. Random has been produced or is being produced`)
+        })
+    })
+
     describe('Phase 2 - Submit Partial Evaluation', async () => {
         it('should not be able to submit partial eval with invalid proof', async () => {
             await expect(Zkdvrf.submitPartialEval(pEvalInvalid)).to.be.revertedWith('Verification of partial eval failed')
@@ -330,6 +387,17 @@ describe('ZKDVRF on-chain tests', async () => {
 
         it('getRandomAtRound() at invalid round', async () => {
             await expect(Zkdvrf.getRandomAtRound(2)).to.be.revertedWith('Answer does not exist for the round yet')
+        })
+    })
+
+    describe('Lottery Pick Winner', async () => {
+        it('lottery pickWinner()', async () => {
+            await Lottery.connect(lotteryAdmin).pickWinner()
+            expect(await Lottery.contractPhase()).to.be.eq(2)
+            const players = await Lottery.getPlayers()
+            expect(players[0]).to.be.eq(player2Address)
+            expect(players[1]).to.be.eq(player1Address)
+            expect(players[2]).to.be.eq(player3Address)
         })
     })
 })
