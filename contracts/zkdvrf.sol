@@ -37,6 +37,8 @@ contract zkdvrf is Ownable {
         Ready
     }
 
+    string public constant INPUT_PREFIX = "zkRand-v1-2024:";
+
     uint32 public memberCount;
     uint32 public threshold;
     uint32 public ppLength;
@@ -177,8 +179,7 @@ contract zkdvrf is Ownable {
         }
 
         currentRoundNum++;
-        uint256 currentTimestamp = block.timestamp;
-        roundInput[currentRoundNum] = currentTimestamp.toString();
+        roundInput[currentRoundNum] = string(abi.encodePacked(INPUT_PREFIX, currentRoundNum.toString()));
 
         emit RandomInitiated(currentRoundNum, roundInput[currentRoundNum]);
     }
