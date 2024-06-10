@@ -10,6 +10,7 @@ contract Lottery is Ownable {
     using Strings for uint256;
 
     address payable[] public players;
+    mapping(address => bool) public hasEntered;
     uint256 public minBet;
 
     address public zkdvrfAddr;
@@ -49,9 +50,11 @@ contract Lottery is Ownable {
         require(contractPhase == Status.Open, "Not open yet");
         // Once the random generation starts or has completed, players are no longer allowed to enter
         require(!roundReached(), "Too late. Random has been produced or is being produced");
+        require(!hasEntered[msg.sender], "You have already entered the lottery");
         require(msg.value >= minBet, "Must provide enough bet");
 
         players.push(payable(msg.sender));
+        hasEntered[msg.sender] = true;
     }
 
     // Fisher-Yates Shuffle
@@ -68,14 +71,15 @@ contract Lottery is Ownable {
     }
 
     function pickWinner() public onlyOwner {
+        require(contractPhase == Status.Open, "Not open");
         require(players.length > 0, "No players");
         // read random from zkdvrf contract
         randValue = zkdvrf(zkdvrfAddr).getRandomAtRound(randRoundNum).value;
         shuffle(); // Shuffle the players array
         // The winner is the first player in the shuffled array
         // The permutation is randomly generated so we can also take more winners if needed
-        players[0].transfer(address(this).balance);
-      //  players = new address payable; // Resetting the players array
+        (bool success, ) = players[0].call{value: address(this).balance}("");
+        require(success, "Transfer failed.");
 
         contractPhase = Status.Close;
     }

@@ -8,9 +8,7 @@ const adminKey = config.lotteryAdminKey
 
 async function main() {
   const netprovider = new providers.JsonRpcProvider(process.env.RPC_URL)
- // const accPrivateKey = process.env.PRIVATE_KEY ?? ''
   const deployerWallet = new Wallet(adminKey, netprovider)
-
 
   const Lottery = await ethers.getContractFactory('Lottery')
   const lottery = await Lottery.connect(deployerWallet).deploy(zkdvrfAddress)

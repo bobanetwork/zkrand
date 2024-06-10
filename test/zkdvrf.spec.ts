@@ -75,10 +75,6 @@ let expectedValue = '0xc2345a834612b9be480f1007e098485a91b2573b9bd6147f549047b84
 let pseudoRandom = {proof: combinedSigma, value: expectedValue}
 
 const cfg = hre.network.config
-const local_provider = new providers.JsonRpcProvider(cfg['url'])
-
-// const deployerPK = hre.network.config.accounts[0]
-// const deployerWallet = new Wallet(deployerPK, local_provider)
 
 describe('ZKDVRF on-chain tests', async () => {
     before(async () => {
@@ -144,10 +140,13 @@ describe('ZKDVRF on-chain tests', async () => {
             await Lottery.connect(player1).enter({value: minBet})
             await Lottery.connect(player2).enter({value: minBet})
             await Lottery.connect(player3).enter({value: minBet})
-            const players = await Lottery.getPlayers()
-            expect(players[0]).to.be.eq(player1Address)
-            expect(players[1]).to.be.eq(player2Address)
-            expect(players[2]).to.be.eq(player3Address)
+            expect(await Lottery.players(0)).to.be.eq(player1Address)
+            expect(await Lottery.players(1)).to.be.eq(player2Address)
+            expect(await Lottery.players(2)).to.be.eq(player3Address)
+        })
+
+        it('should not be able to enter again', async () => {
+            await expect(Lottery.connect(player1).enter({value: minBet})).to.be.revertedWith("You have already entered the lottery");
         })
     })
 
@@ -315,7 +314,7 @@ describe('ZKDVRF on-chain tests', async () => {
     })
 
     describe('Lottery Deadline', async () => {
-        it('should not be able to enter lottery after random initiation of target round', async () => {
+        it('should not be able to enter lottery after initiation of target round', async () => {
             await expect(Lottery.connect(player4).enter({value: minBet})).to.be.revertedWith(`Too late. Random has been produced or is being produced`)
         })
     })
@@ -394,10 +393,9 @@ describe('ZKDVRF on-chain tests', async () => {
         it('lottery pickWinner()', async () => {
             await Lottery.connect(lotteryAdmin).pickWinner()
             expect(await Lottery.contractPhase()).to.be.eq(2)
-            const players = await Lottery.getPlayers()
-            expect(players[0]).to.be.eq(player2Address)
-            expect(players[1]).to.be.eq(player1Address)
-            expect(players[2]).to.be.eq(player3Address)
+            expect(await Lottery.players(0)).to.be.eq(player2Address)
+            expect(await Lottery.players(1)).to.be.eq(player1Address)
+            expect(await Lottery.players(2)).to.be.eq(player3Address)
         })
     })
 })
