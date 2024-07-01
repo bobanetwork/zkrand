@@ -1,6 +1,6 @@
-# zkDVRF
+# zkRand
 
-zkDVRF is a t-out-of-n threshold scheme that runs among a group of n distributed members. The protocol consists of two components:
+zkRand is a t-out-of-n threshold scheme that runs among a group of n distributed members. The protocol consists of two components:
 a snark-based non-interactive distributed key generation (NI-DKG) and randomness generation based on threshold bls-signatures.
 
 ### To build:
@@ -191,7 +191,7 @@ which can be used to obtain "evals.json" by converting all the big integers into
 
 ## Deploy
 
-To deploy the Zkdvrf contracts on-chain-
+To deploy the zkRand contracts on-chain-
 
 1. Set up your .env (use .env.example for reference)
 
@@ -263,7 +263,7 @@ DEGREE=18
 
 ### Step-2: Deploy Contracts
 
-1. To deploy the zkdvrf contracts, run-
+1. To deploy the zkRand contracts, run-
 
 ```
 yarn deploy
@@ -271,7 +271,7 @@ yarn deploy
 
 2. Populate your demo-config.json file using-
 
-a) your zkdvrf deployed address
+a) your zkdvrf.sol deployed address
 b) five sample addresses, and their private keys from ganache pre-generated accounts
 
 ### Step-3: NIDKG
@@ -309,3 +309,29 @@ If you have exited the admin script, but have already been through the NIDKG pro
 yarn admin:restart
 ```
 
+### Continuing with lottery demo
+1. Deploy the lottery contracts
+
+```
+yarn lottery:deploy
+```
+
+2. Populate your demo-config.json file using-
+
+a) your lottery.sol deployed address
+b) private keys for lottery admin and three players from ganache pre-generated accounts
+
+3. Run the lottery admin to start the lottery
+```
+yarn lottery:admin
+```
+The lottery will set a target random for picking up a winner. 
+The round number for target random is set to be 3 in the script.
+
+4. Run the players to place bets
+```
+yarn lottery:play
+```
+Before zkdvrf.sol starts producing the target random, players can enter the lottery by depositing a certain amount of ethers.
+
+5. Continuing the above Step-4 for generating random until the round number hits 3 which will trigger the lottery admin to pick and pay a winner. 
