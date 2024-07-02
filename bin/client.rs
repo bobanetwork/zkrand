@@ -29,8 +29,8 @@ use crate::serialise::{
 #[cfg(not(feature = "g2chip"))]
 use serialise::DkgMemberPublicParams as DkgMemberPublicParamsSerde;
 
-use zkdvrf::dkg::{DkgConfig, PartialEval};
-use zkdvrf::{
+use zkrand::dkg::{DkgConfig, PartialEval};
+use zkrand::{
     combine_partial_evaluations, dkg_global_public_params, load_or_create_params,
     load_or_create_pk, load_or_create_vk, DkgGlobalPubParams, DkgMemberParams,
     DkgMemberPublicParams, DkgShareKey, MemberKey, PseudoRandom,

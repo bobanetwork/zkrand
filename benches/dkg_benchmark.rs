@@ -16,8 +16,8 @@ mod dkg_benches {
     };
     use halo2wrong::utils::DimensionMeasurement;
     use rand_core::OsRng;
-    use zkdvrf::dkg::DkgConfig;
-    use zkdvrf::{DkgCircuit, DkgMemberParams, MemberKey};
+    use zkrand::dkg::DkgConfig;
+    use zkrand::{DkgCircuit, DkgMemberParams, MemberKey};
 
     fn dkg_proof_verify<
         const THRESHOLD: usize,

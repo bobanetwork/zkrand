@@ -12,8 +12,8 @@ use rand_chacha::ChaCha20Rng;
 use rand_core::{OsRng, RngCore, SeedableRng};
 use std::fs::{create_dir_all, File};
 use std::io::Write;
-use zkdvrf::dkg::DkgConfig;
-use zkdvrf::{load_or_create_params, load_or_create_pk, DkgMemberParams, MemberKey};
+use zkrand::dkg::DkgConfig;
+use zkrand::{load_or_create_params, load_or_create_pk, DkgMemberParams, MemberKey};
 
 const DIR_GENERATED: &str = "./contracts/dkg-verifier";
 

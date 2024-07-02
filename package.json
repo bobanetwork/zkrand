@@ -1,5 +1,5 @@
 {
-  "name": "zkdvrf",
+  "name": "zkrand",
   "description": "A  distributed verifiable random function (DVRF) is a t-out-of-n threshold scheme that enables  a group of n participants to jointly compute a random output. The output should be unique, publicly verifiable,  unpredictable, and unbiased.",
   "version": "1.0.0",
   "main": "hardhat.config.ts",
@@ -41,12 +41,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bobanetwork/zkdvrf.git"
+    "url": "git+https://github.com/bobanetwork/zkrand.git"
   },
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/bobanetwork/zkdvrf/issues"
+    "url": "https://github.com/bobanetwork/zkrand/issues"
   },
-  "homepage": "https://github.com/bobanetwork/zkdvrf#readme"
+  "homepage": "https://github.com/bobanetwork/zkrand#readme"
 }

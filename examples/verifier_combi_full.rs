@@ -14,8 +14,8 @@ use rand_core::{OsRng, RngCore, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::fs::{create_dir_all, File};
 use std::io::Write;
-use zkdvrf::dkg::{DkgConfig, PartialEval};
-use zkdvrf::{
+use zkrand::dkg::{DkgConfig, PartialEval};
+use zkrand::{
     combine_partial_evaluations, dkg_global_public_params, hash_to_curve_bn, load_or_create_params,
     load_or_create_pk, DkgGlobalPubParams, DkgMemberParams, MemberKey, PseudoRandom, EVAL_PREFIX,
 };

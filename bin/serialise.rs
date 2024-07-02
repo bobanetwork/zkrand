@@ -4,7 +4,7 @@ use halo2wrong::curves::grumpkin::G1Affine as GkG1;
 use halo2wrong::curves::CurveAffine;
 use hex::{decode, encode};
 use serde::{Deserialize, Serialize};
-use zkdvrf::{
+use zkrand::{
     dkg::DkgConfig, dkg::PartialEval as PartialEvalCurve,
     dkg::PartialEvalProof as PartialEvalProofCurve, DkgGlobalPubParams as DkgGlobalPubParamsCurve,
     DkgMemberParams as DkgMemberParamsCurve, DkgMemberPublicParams as DkgMemberPublicParamsCurve,

@@ -11,8 +11,8 @@ use halo2wrong::halo2::poly::kzg::commitment::{ParamsKZG, ParamsVerifierKZG};
 use rand_core::{OsRng, RngCore};
 use std::fs::{create_dir_all, File};
 use std::io::Write;
-use zkdvrf::dkg::DkgConfig;
-use zkdvrf::{load_or_create_params, load_or_create_pk, DkgMemberParams, MemberKey};
+use zkrand::dkg::DkgConfig;
+use zkrand::{load_or_create_params, load_or_create_pk, DkgMemberParams, MemberKey};
 
 const DIR_GENERATED: &str = "./demo/contracts_generated/separate";
 

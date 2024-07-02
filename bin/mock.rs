@@ -9,8 +9,8 @@ use anyhow::Result;
 use halo2wrong::curves::bn256::Fr as BnScalar;
 use rand_core::RngCore;
 use std::fs::{read_to_string, write};
-use zkdvrf::dkg::{DkgConfig, PartialEval};
-use zkdvrf::{
+use zkrand::dkg::{DkgConfig, PartialEval};
+use zkrand::{
     combine_partial_evaluations, dkg_global_public_params, DkgGlobalPubParams, DkgMemberParams,
     DkgMemberPublicParams, DkgShareKey, MemberKey, PseudoRandom,
 };

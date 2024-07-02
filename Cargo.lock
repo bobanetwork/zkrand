@@ -2856,7 +2856,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "zkdvrf"
+name = "zkrand"
 version = "0.1.0"
 dependencies = [
  "anyhow",

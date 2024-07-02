@@ -271,7 +271,7 @@ yarn deploy
 
 2. Populate your demo-config.json file using-
 
-a) your zkdvrf.sol deployed address
+a) your Zkdvrf deployed address
 b) five sample addresses, and their private keys from ganache pre-generated accounts
 
 ### Step-3: NIDKG
@@ -299,10 +299,9 @@ yarn random
 ```
 
 After the members have done submitting partial evaluations - verify that a pseudorandom number is generated on the admin window!
+Respond 'yes' on the admin window to start producing the next pseudorandom and 'no' to quit. 
 
 ### Re-running
-Respond 'yes' on the admin window to continue generating pseudorandom numbers.
-
 If you have exited the admin script, but have already been through the NIDKG process, you can continue with random number generation through running-
 
 ```
@@ -332,6 +331,6 @@ The round number for target random is set to be 3 in the script.
 ```
 yarn lottery:play
 ```
-Before zkdvrf.sol starts producing the target random, players can enter the lottery by depositing a certain amount of ethers.
+Before Zkdvrf starts producing the target random, players can enter the lottery by depositing a certain amount of ethers.
 
 5. Continuing the above Step-4 for generating random until the round number hits 3 which will trigger the lottery admin to pick and pay a winner. 

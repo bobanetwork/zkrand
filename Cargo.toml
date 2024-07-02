@@ -1,5 +1,5 @@
 [package]
-name = "zkdvrf"
+name = "zkrand"
 version = "0.1.0"
 authors = ["Jia Liu"]
 edition = "2021"
@@ -47,7 +47,7 @@ default = ['g2chip']
 g2chip = []
 
 [lib]
-name = "zkdvrf"
+name = "zkrand"
 path = "src/lib.rs"
 
 [[bin]]

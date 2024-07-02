@@ -7,8 +7,8 @@ mod dvrf_benches {
     use halo2wrong::halo2::arithmetic::Field;
     use rand_core::OsRng;
     use sha3::{Digest, Keccak256};
-    use zkdvrf::dkg::DkgConfig;
-    use zkdvrf::{
+    use zkrand::dkg::DkgConfig;
+    use zkrand::{
         combine_partial_evaluations, hash_to_curve_bn, keygen, shares, DkgShareKey, PseudoRandom,
         EVAL_PREFIX,
     };
@@ -89,11 +89,12 @@ mod dvrf_benches {
         let h: BnG1 = hasher(input).to_affine();
 
         let proof = (h * a).to_affine();
-        let value = Keccak256::new()
-            .chain_update(proof.x.to_bytes())
-            .chain_update(proof.y.to_bytes())
-            .finalize()
-            .to_vec();
+        // reverse order to match solidity version
+        let mut bytes = proof.y.to_bytes().to_vec();
+        bytes.extend(proof.x.to_bytes());
+        bytes.reverse();
+
+        let value = Keccak256::new().chain_update(bytes).finalize().to_vec();
         let pr = PseudoRandom::new(proof, value);
 
         c.bench_function("dvrf pseudorandom verification", move |b| {
