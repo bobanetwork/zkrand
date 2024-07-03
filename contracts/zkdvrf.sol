@@ -42,9 +42,9 @@ contract zkdvrf is Ownable {
     uint32 public memberCount;
     uint32 public threshold;
     uint32 public ppLength;
-    // current count of nodes added
+    // current count of members added
     uint32 internal currentIndex;
-    // current count of nodes deposited and registered
+    // current count of members deposited and registered
     uint32 internal registeredCount;
     uint32 internal ppSubmissionCount;
 
@@ -89,7 +89,7 @@ contract zkdvrf is Ownable {
     }
 
 
-    // phase: works until all members added,
+    // works until all members added,
     // to move to the next phase registeredCount has to be equal to memberCount
     function addPermissionedNodes(address nodeAddress) public onlyOwner {
         require(currentIndex < memberCount, "All members added");
@@ -100,7 +100,7 @@ contract zkdvrf is Ownable {
         currentIndex++;
     }
 
-    // each node registers with deposit and confirms
+    // each member registers with deposit and confirms
     function registerNode(Grumpkin.Point memory pubKey) public payable {
         require(contractPhase == Status.Unregistered, "Registration has already been completed");
         require(msg.sender == addrToNode[msg.sender].nodeAddress, "Unauthorized call");
@@ -124,9 +124,8 @@ contract zkdvrf is Ownable {
         }
     }
 
-    // owner Start Phase 1
-    // phase: cant proceed until everyone registered
-    // can't add nodes after this process
+    // owner starts nidkg protocol
+    // can't add members after this process
     function startNidkg() public onlyOwner {
         require(contractPhase == Status.Unregistered, "NIDKG has already been completed");
         require(registeredCount == memberCount, "Not all Members are ready");
@@ -135,7 +134,7 @@ contract zkdvrf is Ownable {
         emit NidkgStarted();
     }
 
-    // each node can submit pp_i, zk_i
+    // each member can submit pp_i, zk_i
     // contract validates zk_i here for each submission and then accepts it
     function submitPublicParams(uint256[] calldata pp, bytes calldata zkProof) public {
         require(msg.sender == addrToNode[msg.sender].nodeAddress, "Unauthorized call");
@@ -170,7 +169,7 @@ contract zkdvrf is Ownable {
         emit GlobalPublicParamsCreated();
     }
 
-    // 2nd Phase
+    // initiate public inputs for generating randoms
     function initiateRandom() public onlyOwner {
         require(contractPhase == Status.Ready, "Contract not ready");
 
@@ -184,6 +183,8 @@ contract zkdvrf is Ownable {
         emit RandomInitiated(currentRoundNum, roundInput[currentRoundNum]);
     }
 
+    // each member can submit their partial evaluation.
+    // this function can be taken offchain. The onchain storage and verification can help determine which node to reward or punish.
     function submitPartialEval(IPseudoRand.PartialEval memory pEval) public {
         require(msg.sender == addrToNode[msg.sender].nodeAddress, "Unauthorized call");
         // check valid round
@@ -204,9 +205,7 @@ contract zkdvrf is Ownable {
         }
     }
 
-    // accept a set of partial evals
-    // take sigma as a param, basically a point that the operator submits (combination of subset of partial evals)
-    // take the gpk as stored in contract
+    // submit the final pseudorandom value which is computed by combining t partial evaluations offchain
     function submitRandom(IPseudoRand.PseudoRandom memory pseudo) public onlyOwner {
         require(roundToRandom[currentRoundNum].value == bytes32(0), "Answer for round already exists");
         require(roundSubmissionCount[currentRoundNum] >= threshold, "Partial evaluation threshold not reached");
@@ -246,7 +245,7 @@ contract zkdvrf is Ownable {
             return false;
         }
 
-        // The last 2n elements in pp are public keys
+        // check if the last 2n elements in pp are public keys
         uint j = pp.length - 2 * memberCount;
         for (uint i = 0; i < memberCount; i++) {
             require(pp[j] == pkList[i].x, "Wrong public key x");
