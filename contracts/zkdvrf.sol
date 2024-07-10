@@ -208,7 +208,6 @@ contract zkdvrf is Ownable {
     // submit the final pseudorandom value which is computed by combining t partial evaluations offchain
     function submitRandom(IPseudoRand.PseudoRandom memory pseudo) public onlyOwner {
         require(roundToRandom[currentRoundNum].value == bytes32(0), "Answer for round already exists");
-        require(roundSubmissionCount[currentRoundNum] >= threshold, "Partial evaluation threshold not reached");
         require(IPseudoRand(pseudoRand).verifyPseudoRand(bytes(roundInput[currentRoundNum]), pseudo.proof, gpkVal), "Incorrect random submitted");
         bytes32 value = keccak256(abi.encodePacked(pseudo.proof.x, pseudo.proof.y));
         require(pseudo.value == value, "Incorrect pseudorandom value");

@@ -338,10 +338,6 @@ describe('ZKDVRF on-chain tests', async () => {
             await expect(Zkdvrf.submitPartialEval(pEvals[0])).to.be.revertedWith('Already submitted for round')
         })
 
-        it('should not be able to generate random below threshold', async () => {
-            await expect(Zkdvrf.submitRandom(pseudoRandom)).to.be.revertedWith('Partial evaluation threshold not reached')
-        })
-
         it('all nodes should be able to submit partial eval', async () => {
             await Zkdvrf.connect(account2).submitPartialEval(pEvals[1])
             await Zkdvrf.connect(account3).submitPartialEval(pEvals[2])
