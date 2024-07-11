@@ -4,19 +4,10 @@ import fs from "fs";
 import {promisify} from "util";
 import {exec} from "child_process";
 
-/* Imports: Internal */
 import { sleep } from '@eth-optimism/core-utils'
 import { BaseService } from '@eth-optimism/common-ts'
 
 import zkRandContractABI from '../artifacts/contracts/zkdvrf.sol/zkdvrf.json'
-
-// /* Imports: Inteface */
-// import {
-//   BobaLinkPairs,
-//   BobaLinkContracts,
-//   BobaLinkContract,
-//   GasPriceOverride,
-// } from './utils/types'
 
 export const memberDir = `./data/members/`
 export const mpksPath = `./data/mpks.json`
