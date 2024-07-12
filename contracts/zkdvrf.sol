@@ -43,7 +43,7 @@ contract zkdvrf is Ownable {
     uint32 public threshold;
     uint32 public ppLength;
     // current count of members added
-    uint32 internal currentIndex;
+    uint32 public currentIndex;
     // current count of members deposited and registered
     uint32 internal registeredCount;
     uint32 internal ppSubmissionCount;
