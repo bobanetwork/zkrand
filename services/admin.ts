@@ -123,6 +123,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             await this.listenNidkg()
         }
 
+        // TODO: need an if here to allow skipping on the second pass
         const eventGpp = `GlobalPublicParamsCreated`
         this.state.zkRandContract.on(eventGpp, async (event) => {
             await this.initiateRand();

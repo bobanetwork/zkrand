@@ -76,6 +76,7 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
     })
 
     this.state.gasOverride = { gasLimit: 10000000 }
+    // TODO: check the last round from the contract and set
     this.state.lastRoundSubmitted = 0
   }
 
@@ -123,6 +124,8 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
     const mpk = data[`pk`]
 
     const res = await this.state.zkRandContract.registerNode(mpk)
+    // const receipt = await res.wait()
+    // receipt.status
     const receipt = await this.options.l2RpcProvider.getTransactionReceipt(res.hash);
     // Check if the transaction was successful
     if (receipt.status === 1) {
