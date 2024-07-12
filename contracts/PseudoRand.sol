@@ -12,6 +12,11 @@ contract PseudoRand is IPseudoRand{
     bytes public constant DOMAIN = bytes("DVRF pseudorandom generation 2023");
     uint public constant R = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
 
+    function hashToG1(bytes memory message) public view returns (Pairing.G1Point memory) {
+        Pairing.G1Point memory h = Hash.hashToG1(DOMAIN, message);
+        return h;
+    }
+
     // verify partial eval without computing hash to point
     function verifyPartialEvalFast(
         Pairing.G1Point memory h,
