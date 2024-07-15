@@ -33,6 +33,7 @@ contract zkdvrf_pre is Ownable {
 
     enum Status {
         Unregistered,
+        Registered,
         Nidkg,
         NidkgComplete,
         Ready
@@ -44,7 +45,7 @@ contract zkdvrf_pre is Ownable {
     uint32 public threshold;
     uint32 public ppLength;
     // current count of members added
-    uint32 internal currentIndex;
+    uint32 public currentIndex;
     // current count of members deposited and registered
     uint32 internal registeredCount;
     uint32 internal ppSubmissionCount;
@@ -54,10 +55,8 @@ contract zkdvrf_pre is Ownable {
 
     uint32 public pkListIndex;
     Grumpkin.Point[] public pkList;
-    address[] public pkListOrder;
 
     uint256[][] public ppList;
-  //  address[] public ppListOrder;
 
     // The order in vkList is the same as pkList
     Pairing.G1Point[] public vkList;
@@ -69,18 +68,18 @@ contract zkdvrf_pre is Ownable {
     address public globalPublicParams;
     address public pseudoRand;
 
-    mapping (uint32 => address) public nodes;
-    mapping (address => dvrfNode) public addrToNode;
-    mapping (uint256 => string) public roundInput;
-    mapping (uint256 => Pairing.G1Point) public roundHash;
-    mapping (address => uint256) public lastSubmittedRound;
-    mapping (uint256 => mapping (uint32 => IPseudoRand.PartialEval)) public roundToEval;
-    mapping (uint256 => uint32) public roundSubmissionCount;
-    mapping (uint256 => IPseudoRand.PseudoRandom) public roundToRandom;
+    mapping(uint32 => address) public nodes;
+    mapping(address => dvrfNode) public addrToNode;
+    mapping(uint256 => string) public roundInput;
+    mapping(uint256 => Pairing.G1Point) public roundHash;
+    mapping(address => uint256) public lastSubmittedRound;
+    mapping(uint256 => mapping(uint32 => IPseudoRand.PartialEval)) public roundToEval;
+    mapping(uint256 => uint32) public roundSubmissionCount;
+    mapping(uint256 => IPseudoRand.PseudoRandom) public roundToRandom;
 
 
     constructor(uint32 thresholdValue, uint32 numberValue, address halo2VerifierAddress, address halo2VerifyingKeyAddress, address globalPublicParamsAddress, address pseudoRandAddress, uint256 minDeposit) Ownable(msg.sender) {
-        require (halo2VerifierAddress != address(0) && globalPublicParamsAddress != address(0) && pseudoRandAddress != address(0), "Cannot be zero addresses");
+        require(halo2VerifierAddress != address(0) && globalPublicParamsAddress != address(0) && pseudoRandAddress != address(0), "Cannot be zero addresses");
         memberCount = numberValue;
         threshold = thresholdValue;
         ppLength = 7 * memberCount + 14;
@@ -90,7 +89,6 @@ contract zkdvrf_pre is Ownable {
         pseudoRand = pseudoRandAddress;
         minNodeDeposit = minDeposit;
     }
-
 
     // works until all members added,
     // to move to the next phase registeredCount has to be equal to memberCount
@@ -116,13 +114,12 @@ contract zkdvrf_pre is Ownable {
         addrToNode[msg.sender].status = true;
         addrToNode[msg.sender].pkIndex = pkListIndex;
         pkList.push(pubKey);
-        // pkListOrder is unutilized but added for public visibility
-        pkListOrder.push(msg.sender);
         pkListIndex++;
         registeredCount++;
 
         // all the permitted nodes have registered
         if (registeredCount == memberCount) {
+            contractPhase = Status.Registered;
             emit RegistrationCompleted(registeredCount);
         }
     }
@@ -130,8 +127,7 @@ contract zkdvrf_pre is Ownable {
     // owner starts nidkg protocol
     // can't add members after this process
     function startNidkg() public onlyOwner {
-        require(contractPhase == Status.Unregistered, "NIDKG has already been completed");
-        require(registeredCount == memberCount, "Not all Members are ready");
+        require(contractPhase == Status.Registered, "Cannot start NIDKG");
         contractPhase = Status.Nidkg;
 
         emit NidkgStarted();
@@ -147,10 +143,7 @@ contract zkdvrf_pre is Ownable {
         require(Halo2Verifier(halo2Verifier).verifyProof(halo2VerifyingKey, zkProof, pp), "SNARK proof verification failed");
 
         addrToNode[msg.sender].statusPP = true;
-
         ppList.push(pp);
-        // ppListOrder is unutilized but added for public visibility
-      //  ppListOrder.push(msg.sender);
         ppSubmissionCount++;
 
         if (ppSubmissionCount == memberCount) {
@@ -195,7 +188,7 @@ contract zkdvrf_pre is Ownable {
         // check valid round
         require(roundToRandom[currentRoundNum].value == bytes32(0), "Round already computed");
         // this will help revert calls if the contract status is not Ready and the first initiateRandom() is not called
-        require (lastSubmittedRound[msg.sender] < currentRoundNum, "Already submitted for round");
+        require(lastSubmittedRound[msg.sender] < currentRoundNum, "Already submitted for round");
         uint32 pkIndex = addrToNode[msg.sender].pkIndex;
         require(pEval.indexPlus == pkIndex + 1);
         Pairing.G1Point memory vkStored = vkList[pkIndex];
@@ -253,11 +246,11 @@ contract zkdvrf_pre is Ownable {
         uint j = pp.length - 2 * memberCount;
         for (uint i = 0; i < memberCount; i++) {
             require(pp[j] == pkList[i].x, "Wrong public key x");
-            require(pp[j+1] == pkList[i].y, "Wrong public key y");
-            if (pp[j] != pkList[i].x || pp[j+1] != pkList[i].y) {
+            require(pp[j + 1] == pkList[i].y, "Wrong public key y");
+            if (pp[j] != pkList[i].x || pp[j + 1] != pkList[i].y) {
                 return false;
             }
-            j = j+2;
+            j = j + 2;
         }
 
         return true;
