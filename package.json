@@ -32,6 +32,7 @@
   "scripts": {
     "test": "npx hardhat test",
     "deploy": "npx hardhat run scripts/deploy.ts",
+    "build": "npx hardhat compile",
     "admin": "npx hardhat run scripts/admin.ts",
     "admin:restart": "RESTART=true npx hardhat run scripts/admin.ts",
     "register": "npx hardhat run scripts/register.ts",

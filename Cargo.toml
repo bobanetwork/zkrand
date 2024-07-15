@@ -12,6 +12,7 @@ halo2_gadgets = { git = "https://github.com/kitounliu/halo2.git", branch = "grum
 halo2wrong = { git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin"}
 halo2_ecc ={ package = "ecc", git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin"}
 halo2_maingate =  { package = "maingate", git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin"}
+halo2_proofs = { git = "https://github.com/kitounliu/halo2.git", branch = "grumpkin"}
 
 sha3 = "0.10"
 rand_core = { version = "0.6", default-features = false }

@@ -1,0 +1,39 @@
+FROM node:20
+
+RUN apt-get update && apt-get install -y curl \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    && echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $HOME/.bashrc
+
+RUN apt-get install -y \
+    llvm \
+    clang \
+    libclang-dev \
+    axel
+
+ENV LIBCLANG_PATH=/usr/lib/llvm-14/lib
+
+COPY ./package.json .
+RUN yarn install
+
+COPY ./contracts ./contracts
+COPY ./hardhat.config.ts .
+RUN yarn run build
+
+COPY ./Cargo.toml .
+COPY ./Cargo.lock .
+COPY ./bin ./bin
+COPY ./benches ./benches
+COPY ./src ./src
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN cargo build --release
+
+COPY download_params.sh .
+RUN chmod +x download_params.sh
+RUN ./download_params.sh
+
+COPY ./data ./data
+RUN RUST_LOG=info ./target/release/client setup -s
+
+COPY ./tsconfig.json .
+COPY ./services ./services
+CMD ["yarn", "run", "services:node"]
