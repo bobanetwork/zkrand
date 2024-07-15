@@ -21,6 +21,10 @@ interface IPseudoRand {
         bytes32 value;
     }
 
+    function hashToG1(
+        bytes memory message
+    ) external returns (Pairing.G1Point memory);
+
     function verifyPartialEvalFast(
         Pairing.G1Point memory h,
         Pairing.G1Point memory sigma,

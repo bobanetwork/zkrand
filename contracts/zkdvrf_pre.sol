@@ -10,7 +10,8 @@ import {Grumpkin} from "./libs/Grumpkin.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import '@openzeppelin/contracts/access/Ownable.sol';
 
-contract zkdvrf is Ownable {
+// zkdvrf with precomputation for hash2curve
+contract zkdvrf_pre is Ownable {
     using Strings for uint256;
     using Grumpkin for *;
 
@@ -43,7 +44,7 @@ contract zkdvrf is Ownable {
     uint32 public threshold;
     uint32 public ppLength;
     // current count of members added
-    uint32 public currentIndex;
+    uint32 internal currentIndex;
     // current count of members deposited and registered
     uint32 internal registeredCount;
     uint32 internal ppSubmissionCount;
@@ -56,7 +57,7 @@ contract zkdvrf is Ownable {
     address[] public pkListOrder;
 
     uint256[][] public ppList;
-    address[] public ppListOrder;
+  //  address[] public ppListOrder;
 
     // The order in vkList is the same as pkList
     Pairing.G1Point[] public vkList;
@@ -71,10 +72,12 @@ contract zkdvrf is Ownable {
     mapping (uint32 => address) public nodes;
     mapping (address => dvrfNode) public addrToNode;
     mapping (uint256 => string) public roundInput;
+    mapping (uint256 => Pairing.G1Point) public roundHash;
     mapping (address => uint256) public lastSubmittedRound;
     mapping (uint256 => mapping (uint32 => IPseudoRand.PartialEval)) public roundToEval;
     mapping (uint256 => uint32) public roundSubmissionCount;
     mapping (uint256 => IPseudoRand.PseudoRandom) public roundToRandom;
+
 
     constructor(uint32 thresholdValue, uint32 numberValue, address halo2VerifierAddress, address halo2VerifyingKeyAddress, address globalPublicParamsAddress, address pseudoRandAddress, uint256 minDeposit) Ownable(msg.sender) {
         require (halo2VerifierAddress != address(0) && globalPublicParamsAddress != address(0) && pseudoRandAddress != address(0), "Cannot be zero addresses");
@@ -147,7 +150,7 @@ contract zkdvrf is Ownable {
 
         ppList.push(pp);
         // ppListOrder is unutilized but added for public visibility
-        ppListOrder.push(msg.sender);
+      //  ppListOrder.push(msg.sender);
         ppSubmissionCount++;
 
         if (ppSubmissionCount == memberCount) {
@@ -178,7 +181,9 @@ contract zkdvrf is Ownable {
         }
 
         currentRoundNum++;
-        roundInput[currentRoundNum] = string(abi.encodePacked(INPUT_PREFIX, currentRoundNum.toString()));
+        bytes memory input = abi.encodePacked(INPUT_PREFIX, currentRoundNum.toString());
+        roundInput[currentRoundNum] = string(input);
+        roundHash[currentRoundNum] = IPseudoRand(pseudoRand).hashToG1(input);
 
         emit RandomInitiated(currentRoundNum, roundInput[currentRoundNum]);
     }
@@ -191,11 +196,10 @@ contract zkdvrf is Ownable {
         require(roundToRandom[currentRoundNum].value == bytes32(0), "Round already computed");
         // this will help revert calls if the contract status is not Ready and the first initiateRandom() is not called
         require (lastSubmittedRound[msg.sender] < currentRoundNum, "Already submitted for round");
-        bytes memory currentX = bytes(roundInput[currentRoundNum]);
         uint32 pkIndex = addrToNode[msg.sender].pkIndex;
         require(pEval.indexPlus == pkIndex + 1);
         Pairing.G1Point memory vkStored = vkList[pkIndex];
-        require(IPseudoRand(pseudoRand).verifyPartialEval(currentX, pEval.value, pEval.proof, vkStored), "Verification of partial eval failed");
+        require(IPseudoRand(pseudoRand).verifyPartialEvalFast(roundHash[currentRoundNum], pEval.value, pEval.proof, vkStored), "Verification of partial eval failed");
         lastSubmittedRound[msg.sender] = currentRoundNum;
         roundToEval[currentRoundNum][pkIndex] = pEval;
         roundSubmissionCount[currentRoundNum]++;
@@ -208,7 +212,8 @@ contract zkdvrf is Ownable {
     // submit the final pseudorandom value which is computed by combining t partial evaluations offchain
     function submitRandom(IPseudoRand.PseudoRandom memory pseudo) public onlyOwner {
         require(roundToRandom[currentRoundNum].value == bytes32(0), "Answer for round already exists");
-        require(IPseudoRand(pseudoRand).verifyPseudoRand(bytes(roundInput[currentRoundNum]), pseudo.proof, gpkVal), "Incorrect random submitted");
+        require(roundSubmissionCount[currentRoundNum] >= threshold, "Partial evaluation threshold not reached");
+        require(IPseudoRand(pseudoRand).verifyPseudoRandFast(roundHash[currentRoundNum], pseudo.proof, gpkVal), "Incorrect random submitted");
         bytes32 value = keccak256(abi.encodePacked(pseudo.proof.x, pseudo.proof.y));
         require(pseudo.value == value, "Incorrect pseudorandom value");
         roundToRandom[currentRoundNum] = pseudo;

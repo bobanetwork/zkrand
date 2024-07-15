@@ -76,14 +76,14 @@ let pseudoRandom = {proof: combinedSigma, value: expectedValue}
 
 const cfg = hre.network.config
 
-describe('ZKDVRF on-chain tests', async () => {
+describe('ZKDVRF (with precomputation of hash) on-chain tests', async () => {
     before(async () => {
         Halo2Verifier = await(await ethers.getContractFactory('contracts/Halo2Verifier.sol:Halo2Verifier')).deploy()
         Halo2VerifyingKey = await(await ethers.getContractFactory('contracts/Halo2VerifyingKey-3-5-18-g2.sol:Halo2VerifyingKey')).deploy()
         GlobalPublicParams = await(await ethers.getContractFactory('GlobalPublicParams')).deploy()
         PseudoRand = await(await ethers.getContractFactory('PseudoRand')).deploy()
         Zkdvrf = await (
-            await ethers.getContractFactory('zkdvrf')
+            await ethers.getContractFactory('zkdvrf_pre')
         ).deploy(3, 5, Halo2Verifier.address, Halo2VerifyingKey.address, GlobalPublicParams.address, PseudoRand.address, minDeposit)
 
         account1 = (await ethers.getSigners())[0]
@@ -336,6 +336,10 @@ describe('ZKDVRF on-chain tests', async () => {
 
         it('should not be able to submit partial eval again', async () => {
             await expect(Zkdvrf.submitPartialEval(pEvals[0])).to.be.revertedWith('Already submitted for round')
+        })
+
+        it('should not be able to generate random below threshold', async () => {
+            await expect(Zkdvrf.submitRandom(pseudoRandom)).to.be.revertedWith('Partial evaluation threshold not reached')
         })
 
         it('all nodes should be able to submit partial eval', async () => {

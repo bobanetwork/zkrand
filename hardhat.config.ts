@@ -38,6 +38,7 @@ module.exports = {
       }
     }],
     overrides: {
+      'contracts/GlobalPublicParams.sol': altCompilerSettings,
       'contracts/PseudoRand.sol': altCompilerSettings,
     },
     gasReporter: {
