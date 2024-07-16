@@ -2869,6 +2869,7 @@ dependencies = [
  "ecc",
  "env_logger 0.9.3",
  "halo2_gadgets",
+ "halo2_proofs",
  "halo2_solidity_verifier",
  "halo2wrong",
  "hex",
