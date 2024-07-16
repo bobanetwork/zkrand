@@ -33,15 +33,7 @@ interface NodeZkRandOptions {
     l2Wallet: Wallet
     // chain ID of the L2 network
     chainId: number
-
     zkRandAddress: string
-
-    nodeOneAddress: string
-    nodeTwoAddress: string
-    nodeThreeAddress: string
-    nodeFourAddress: string
-    nodeFiveAddress: string
-
     pollingInterval: number
 }
 

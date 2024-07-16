@@ -26,11 +26,6 @@ const main = async () => {
     )
 
     const ZK_RAND_ADDRESS = config.str('zk-rand-address', env.ZK_RAND_ADDRESS)
-    const NODE_ONE_ADDRESS = config.str('node-one-address', env.NODE_ONE_ADDRESS)
-    const NODE_TWO_ADDRESS = config.str('node-two-address', env.NODE_TWO_ADDRESS)
-    const NODE_THREE_ADDRESS = config.str('node-three-address', env.NODE_THREE_ADDRESS)
-    const NODE_FOUR_ADDRESS = config.str('node-four-address', env.NODE_FOUR_ADDRESS)
-    const NODE_FIVE_ADDRESS = config.str('node-five-address', env.NODE_FIVE_ADDRESS)
 
     if (!L2_NODE_WEB3_URL) {
         throw new Error('Must pass L2_NODE_WEB3_URL')
@@ -48,11 +43,6 @@ const main = async () => {
         l2Wallet: wallet,
         chainId,
         zkRandAddress: ZK_RAND_ADDRESS,
-        nodeOneAddress: NODE_ONE_ADDRESS,
-        nodeTwoAddress: NODE_TWO_ADDRESS,
-        nodeThreeAddress: NODE_THREE_ADDRESS,
-        nodeFourAddress: NODE_FOUR_ADDRESS,
-        nodeFiveAddress: NODE_FIVE_ADDRESS,
         pollingInterval: POLLING_INTERVAL,
     })
 
