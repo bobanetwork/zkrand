@@ -7,7 +7,7 @@ import {exec} from "child_process";
 import {sleep} from '@eth-optimism/core-utils'
 import {BaseService} from '@eth-optimism/common-ts'
 
-import zkRandContractABI from '../artifacts/contracts/zkdvrf.sol/zkdvrf.json'
+import zkRandContractABI from '../artifacts/contracts/zkdvrf_pre.sol/zkdvrf_pre.json'
 
 export const memberDir = `./data/members/`
 export const mpksPath = `./data/mpks.json`
@@ -45,6 +45,7 @@ interface AdminZkRandOptions {
     nodeFiveAddress: string
     pollingInterval: number
     randGenInterval: number
+    randGenStartDate: string
 }
 
 const optionSettings = {}
@@ -52,6 +53,8 @@ const optionSettings = {}
 const emptyAddress = '0x0000000000000000000000000000000000000000'
 // String representation of bytes32(0)
 const bytes32Zero = "0x" + "0".repeat(64);
+const gasLimitLow = 500000
+const gasLimitHigh = 3000000
 
 export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
     constructor(options: AdminZkRandOptions) {
@@ -62,6 +65,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         zkRandContract: Contract
         gasOverride: GasPriceOverride
         timeOfLastRound: number
+        startDate: number
     } = {} as any
 
     async _init(): Promise<void> {
@@ -87,6 +91,12 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
 
         this.state.gasOverride = {gasLimit: 10000000}
         this.state.timeOfLastRound = 0 // 0 indicates no round has been initiated
+
+        this.state.startDate = 0
+        let startDate = new Date(this.options.randGenStartDate);
+        if (!isNaN(startDate.getTime())) {
+            this.state.startDate = startDate.getTime()
+        }
     }
 
     async _start(): Promise<void> {
@@ -110,35 +120,35 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             console.log("adding permissioned nodes")
             const nodeOne = await this.state.zkRandContract.addrToNode(this.options.nodeOneAddress)
             if (nodeOne.nodeAddress === emptyAddress) {
-                const retOne = await this.state.zkRandContract.addPermissionedNodes(this.options.nodeOneAddress)
+                const retOne = await this.state.zkRandContract.addPermissionedNodes(this.options.nodeOneAddress, {gasLimit: gasLimitLow})
                 console.log("transaction hash for addPermissionedNodes on node one:", retOne.hash)
                 await retOne.wait()
             }
 
             const nodeTwo = await this.state.zkRandContract.addrToNode(this.options.nodeTwoAddress)
             if (nodeTwo.nodeAddress === emptyAddress) {
-                const retTwo = await this.state.zkRandContract.addPermissionedNodes(this.options.nodeTwoAddress)
+                const retTwo = await this.state.zkRandContract.addPermissionedNodes(this.options.nodeTwoAddress, {gasLimit: gasLimitLow})
                 console.log("transaction hash for addPermissionedNodes on node two:", retTwo.hash)
                 await retTwo.wait()
             }
 
             const nodeThree = await this.state.zkRandContract.addrToNode(this.options.nodeThreeAddress)
             if (nodeThree.nodeAddress === emptyAddress) {
-                const retThree = await this.state.zkRandContract.addPermissionedNodes(this.options.nodeThreeAddress)
+                const retThree = await this.state.zkRandContract.addPermissionedNodes(this.options.nodeThreeAddress, {gasLimit: gasLimitLow})
                 console.log("transaction hash for addPermissionedNodes on node three:", retThree.hash)
                 await retThree.wait()
             }
 
             const nodeFour = await this.state.zkRandContract.addrToNode(this.options.nodeFourAddress)
             if (nodeFour.nodeAddress === emptyAddress) {
-                const retFour = await this.state.zkRandContract.addPermissionedNodes(this.options.nodeFourAddress)
+                const retFour = await this.state.zkRandContract.addPermissionedNodes(this.options.nodeFourAddress, {gasLimit: gasLimitLow})
                 console.log("transaction hash for addPermissionedNodes on node four:", retFour.hash)
                 await retFour.wait()
             }
 
             const nodeFive = await this.state.zkRandContract.addrToNode(this.options.nodeFiveAddress)
             if (nodeFive.nodeAddress === emptyAddress) {
-                const retFive = await this.state.zkRandContract.addPermissionedNodes(this.options.nodeFiveAddress)
+                const retFive = await this.state.zkRandContract.addPermissionedNodes(this.options.nodeFiveAddress, {gasLimit: gasLimitLow})
                 console.log("transaction hash for addPermissionedNodes on node five:", retFive.hash)
                 await retFive.wait()
             }
@@ -149,8 +159,8 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             console.log("contractPhase", contractPhase)
             if (contractPhase == Status.Registered) {
                 // all the nodes have registered; start nidkg
-                const ret = await this.state.zkRandContract.startNidkg()
-                console.log("transaction hash for startNiDkg: ", ret.hash)
+                const ret = await this.state.zkRandContract.startNidkg({gasLimit: gasLimitLow})
+                console.log("transaction hash for startNiDkg:", ret.hash)
                 await ret.wait()
             } else if (contractPhase == Status.NidkgComplete) {
                 // nidkg has completed; calculate global public parameters
@@ -158,25 +168,30 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             } else if (contractPhase == Status.Ready) {
                 let currentRoundNum = await this.state.zkRandContract.currentRoundNum()
                 console.log("currentRoundNum", currentRoundNum.toString())
-                if (currentRoundNum == 0) {
-                    // random generation starts from 1
-                    await this.initiateRand()
+                if (Date.now() < this.state.startDate) {
+                    const begin = new Date(this.state.startDate);
+                    console.log("randomness generation will begin at", begin.toUTCString())
                 } else {
-                    let threshold = await this.state.zkRandContract.threshold()
-                    let submissionCount = await this.state.zkRandContract.roundSubmissionCount(currentRoundNum)
-                    let roundToRandom = await this.state.zkRandContract.roundToRandom(currentRoundNum)
+                    if (currentRoundNum == 0) {
+                        // random generation starts from 1
+                        await this.initiateRand()
+                    } else {
+                        let threshold = await this.state.zkRandContract.threshold()
+                        let submissionCount = await this.state.zkRandContract.roundSubmissionCount(currentRoundNum)
+                        let roundToRandom = await this.state.zkRandContract.roundToRandom(currentRoundNum)
 
-                    if (roundToRandom.value === bytes32Zero && submissionCount >= threshold) {
-                        await this.createRandom(currentRoundNum)
-                    }
+                        if (roundToRandom.value === bytes32Zero && submissionCount >= threshold) {
+                            await this.createRandom(currentRoundNum)
+                        }
 
-                    let secondsElapsed = Math.floor(
-                        (Date.now() - this.state.timeOfLastRound) / 1000
-                    )
-                    console.log('Seconds elapsed since last random initiation:', secondsElapsed)
+                        let secondsElapsed = Math.floor(
+                            (Date.now() - this.state.timeOfLastRound) / 1000
+                        )
+                        console.log('Seconds elapsed since last random initiation:', secondsElapsed)
 
-                    if (secondsElapsed > this.options.randGenInterval) {
-                        await this.initiateRand();
+                        if (secondsElapsed > this.options.randGenInterval) {
+                            await this.initiateRand();
+                        }
                     }
                 }
             }
@@ -191,15 +206,9 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         this.state.zkRandContract.on(eventReg, async (count, event) => {
             console.log("\nevent", eventReg, count);
             // Proceed to the next step here
-            const res = await this.state.zkRandContract.startNidkg()
-            const receipt = await this.options.l2RpcProvider.getTransactionReceipt(res.hash);
-            // Check if the transaction was successful
-            if (receipt.status === 1) {
-                console.log("Transaction startNidkg() successful!");
-            } else {
-                console.log("Transaction startNidkg() failed!");
-            }
-            console.log("NIDKG begins...")
+            const ret = await this.state.zkRandContract.startNidkg({gasLimit: gasLimitLow})
+            console.log("transaction hash for startNiDkg: ", ret.hash)
+            await ret.wait()
         });
     }
 
@@ -229,14 +238,9 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             const filePath = dkgDir + "gpk.json"
             const gpk = readJsonFromFile(filePath);
 
-            const res = await this.state.zkRandContract.computeVk(gpk)
-            const receipt = await this.options.l2RpcProvider.getTransactionReceipt(res.hash);
-            // Check if the transaction was successful
-            if (receipt.status === 1) {
-                console.log("Transaction computeVk(..) successful!");
-            } else {
-                console.log("Transaction computeVk(..) failed!");
-            }
+            const res = await this.state.zkRandContract.computeVk(gpk, {gasLimit: gasLimitHigh})
+            console.log("transaction hash for computeVk: ", res.hash)
+            await res.wait()
 
             // read global public parameters from the contract and compare them with the local version
             const gpkVal = await this.state.zkRandContract.getGpk()
@@ -284,7 +288,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         const filePath = dkgDir + "gpk.json"
         const gpk = readJsonFromFile(filePath);
 
-        const res = await this.state.zkRandContract.computeVk(gpk)
+        const res = await this.state.zkRandContract.computeVk(gpk, {gasLimit: gasLimitHigh})
         console.log("transaction hash for computeVk: ", res.hash)
         await res.wait()
 
@@ -312,11 +316,12 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
 
     async initiateRand() {
         // Proceed to the next step here
-        const res = await this.state.zkRandContract.initiateRandom()
+        const res = await this.state.zkRandContract.initiateRandom({gasLimit: gasLimitLow})
         console.log("transaction hash for initiateRandom: ", res.hash)
         await res.wait()
         this.state.timeOfLastRound = Date.now()
-        console.log("******** new random round begins at:", this.state.timeOfLastRound.toString())
+        const currentDate = new Date(this.state.timeOfLastRound);
+        console.log("******** new random round begins at:", currentDate.toUTCString(), "********")
     }
 
     async listenRandThreshold() {
@@ -368,14 +373,9 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             const pseudo = readJsonFromFile(pseudoPath)
             console.log("pseudorandom computed", '0x' + Buffer.from(pseudo[`value`]).toString('hex'))
 
-            const res = await this.state.zkRandContract.submitRandom(pseudo)
-            const receipt = await this.options.l2RpcProvider.getTransactionReceipt(res.hash);
-            // Check if the transaction was successful
-            if (receipt.status === 1) {
-                console.log("Transaction submitRandom(..) successful!");
-            } else {
-                console.log("Transaction submitRandom(..) failed!");
-            }
+            const res = await this.state.zkRandContract.submitRandom(pseudo, {gasLimit: gasLimitLow})
+            console.log("transaction hash for submitRandom:", res.hash)
+            await res.wait()
 
             const rand = await this.state.zkRandContract.getLatestRandom()
             console.log("✅ pseudorandom from contract", rand.value)
@@ -429,7 +429,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         const pseudo = readJsonFromFile(pseudoPath)
         console.log("pseudorandom computed", '0x' + Buffer.from(pseudo[`value`]).toString('hex'))
 
-        const res = await this.state.zkRandContract.submitRandom(pseudo)
+        const res = await this.state.zkRandContract.submitRandom(pseudo, {gasLimit: gasLimitLow})
         console.log("transaction hash for submitRandom:", res.hash)
         await res.wait()
     }

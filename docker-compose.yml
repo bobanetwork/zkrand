@@ -1,0 +1,97 @@
+services:
+  admin:
+    build:
+      context: .
+      dockerfile: ops/docker/Dockerfile.admin
+    container_name: zkrand_admin_service
+    volumes:
+      - admin_volume:/data
+    environment:
+      - L2_NODE_WEB3_URL=https://sepolia.boba.network
+      - POLLING_INTERVAL=12000
+      - RAND_GEN_INTERVAL=3600
+      - RAND_GEN_START_DATE=2024-07-18T12:00:00Z
+      - ZK_RAND_ADDRESS=0x1C2FfFeEee7d396597D60adAdAC63c2c48B829AF
+      - ADMIN_PRIVATE_KEY=0x58936e48436d9764c0c09775444fe6700d0a8aa84d4d6c09e110f70fc87c7289
+      - NODE_ONE_ADDRESS=0x85A6bCc74CB8570BEfF8526aec7d0Dfb6F128A60
+      - NODE_TWO_ADDRESS=0x7D9e5627B650650Fa3E848364Cb5B0b696B885f2
+      - NODE_THREE_ADDRESS=0xec21Cc95d30cc414922292790Bf2E9063bCEe94b
+      - NODE_FOUR_ADDRESS=0xE7a9aB7B20EFE5B450d7AcB5ABe169166a26DfAC
+      - NODE_FIVE_ADDRESS=0x5dbfFf2666C351b226cdCe7c1F82B9b0CEbb0bb9
+
+  node-one:
+    build:
+      context: .
+      dockerfile: ops/docker/Dockerfile.node
+    container_name: zkrand_node_1_service
+    volumes:
+      - node_1_volume:/data
+    environment:
+      - L2_NODE_WEB3_URL=https://sepolia.boba.network
+      - POLLING_INTERVAL=12000
+      - ZK_RAND_ADDRESS=0x1C2FfFeEee7d396597D60adAdAC63c2c48B829AF
+      - NODE_PRIVATE_KEY=0x2e978a5709ac0dc3cbc2260519f8fcf5542af54dfaff489bcb4a69182be49429
+
+  
+  node-two:
+    build:
+      context: .
+      dockerfile: ops/docker/Dockerfile.node
+    container_name: zkrand_node_2_service
+    volumes:
+      - node_2_volume:/data
+    environment:
+      - L2_NODE_WEB3_URL=https://sepolia.boba.network
+      - POLLING_INTERVAL=12000
+      - ZK_RAND_ADDRESS=0x1C2FfFeEee7d396597D60adAdAC63c2c48B829AF
+      - NODE_PRIVATE_KEY=0xa0a98d2341d78ed222b7a6314c026d8e85185203fd295f67b7146be956a05c58
+
+  node-three:
+    build:
+      context: .
+      dockerfile: ops/docker/Dockerfile.node
+    container_name: zkrand_node_3_service
+    volumes:
+      - node_3_volume:/data
+    environment:
+      - L2_NODE_WEB3_URL=https://sepolia.boba.network
+      - POLLING_INTERVAL=12000
+      - ZK_RAND_ADDRESS=0x1C2FfFeEee7d396597D60adAdAC63c2c48B829AF
+      - NODE_PRIVATE_KEY=0x742e271d909d026b2b4dcc0384ec0b8df8f674f0773c354b57c24858419e89d3
+
+
+  node-four:
+    build:
+      context: .
+      dockerfile: ops/docker/Dockerfile.node
+    container_name: zkrand_node_4_service
+    volumes:
+      - node_4_volume:/data
+    environment:
+      - L2_NODE_WEB3_URL=https://sepolia.boba.network
+      - POLLING_INTERVAL=12000
+      - ZK_RAND_ADDRESS=0x1C2FfFeEee7d396597D60adAdAC63c2c48B829AF
+      - NODE_PRIVATE_KEY=0xeeb82181766c7d0fe45d2cb5b3399b1da17a1a432938ec8c4d73daca85eedaea
+
+
+  node-five:
+    build:
+      context: .
+      dockerfile: ops/docker/Dockerfile.node
+    container_name: zkrand_node_5_service
+    volumes:
+      - node_5_volume:/data
+    environment:
+      - L2_NODE_WEB3_URL=https://sepolia.boba.network
+      - POLLING_INTERVAL=12000
+      - ZK_RAND_ADDRESS=0x1C2FfFeEee7d396597D60adAdAC63c2c48B829AF
+      - NODE_PRIVATE_KEY=0x88b68d7e8d96d8465cfe3dc4abf707e21aa49139189a784e2d50cc9ada9076c3
+
+
+volumes:
+  admin_volume:
+  node_1_volume:
+  node_2_volume:
+  node_3_volume:
+  node_4_volume:
+  node_5_volume:

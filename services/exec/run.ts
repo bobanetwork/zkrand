@@ -31,6 +31,8 @@ const main = async () => {
         parseInt(env.RAND_GEN_INTERVAL, 10) || 3600
     )
 
+    const RAND_GEN_START_DATE = config.str('rand-gen-start-date', env.RAND_GEN_START_DATE)
+
     const ZK_RAND_ADDRESS = config.str('zk-rand-address', env.ZK_RAND_ADDRESS)
     const NODE_ONE_ADDRESS = config.str('node-one-address', env.NODE_ONE_ADDRESS)
     const NODE_TWO_ADDRESS = config.str('node-two-address', env.NODE_TWO_ADDRESS)
@@ -61,6 +63,7 @@ const main = async () => {
         nodeFiveAddress: NODE_FIVE_ADDRESS,
         pollingInterval: POLLING_INTERVAL,
         randGenInterval: RAND_GEN_INTERVAL,
+        randGenStartDate: RAND_GEN_START_DATE,
     })
 
     await service.start()

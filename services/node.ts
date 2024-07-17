@@ -7,7 +7,7 @@ import {exec} from "child_process";
 import {sleep} from '@eth-optimism/core-utils'
 import {BaseService} from '@eth-optimism/common-ts'
 
-import zkRandContractABI from '../artifacts/contracts/zkdvrf.sol/zkdvrf.json'
+import zkRandContractABI from '../artifacts/contracts/zkdvrf_pre.sol/zkdvrf_pre.json'
 
 export const memberDir = `./data/members/`
 export const mpksPath = `./data/mpks.json`
@@ -38,6 +38,8 @@ interface NodeZkRandOptions {
 }
 
 const optionSettings = {}
+const gasLimitLow = 500000
+const gasLimitHigh = 3000000
 
 export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
     constructor(options: NodeZkRandOptions) {
@@ -133,7 +135,7 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
         const data = readJsonFromFile(filePath);
         const mpk = data[`pk`]
 
-        const res = await this.state.zkRandContract.registerNode(mpk)
+        const res = await this.state.zkRandContract.registerNode(mpk, {gasLimit: gasLimitLow})
         console.log("transaction hash for registerNode", res.hash)
         await res.wait()
         console.log("member ", index, "registered\n")
@@ -210,7 +212,7 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
         const instance = readJsonFromFile(instancePath)
 
         // submit proof and instance to contract
-        const resPP = await this.state.zkRandContract.submitPublicParams(instance, proof)
+        const resPP = await this.state.zkRandContract.submitPublicParams(instance, proof, {gasLimit: gasLimitHigh})
         console.log("transaction hash for submitPublicParams:", resPP.hash)
         resPP.wait()
     }
@@ -260,7 +262,7 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
             proof: evalJson[`proof`]
         }
 
-        const res = await this.state.zkRandContract.submitPartialEval(pEval)
+        const res = await this.state.zkRandContract.submitPartialEval(pEval, {gasLimit: gasLimitLow})
         console.log("transaction hash for submitPartialEval", res.hash)
         await res.wait()
     }
