@@ -110,6 +110,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             )
         }
 
+        let threshold = await this.state.zkRandContract.threshold()
         let memberCountFromContract = await this.state.zkRandContract.memberCount()
         console.log("memberCountFromContract", memberCountFromContract)
         let currentIndexFromContract = await this.state.zkRandContract.currentIndex()
@@ -176,7 +177,6 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
                         // random generation starts from 1
                         await this.initiateRand()
                     } else {
-                        let threshold = await this.state.zkRandContract.threshold()
                         let submissionCount = await this.state.zkRandContract.roundSubmissionCount(currentRoundNum)
                         let roundToRandom = await this.state.zkRandContract.roundToRandom(currentRoundNum)
 
