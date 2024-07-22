@@ -1,11 +1,11 @@
 import chai, {expect} from 'chai'
 import chaiAsPromised from 'chai-as-promised'
 
-chai.use(chaiAsPromised)
 import {solidity} from "ethereum-waffle";
 import hre, {ethers} from 'hardhat'
 import {Contract, Signer, BigNumber, utils, BigNumberish, ContractFactory, providers, Wallet} from 'ethers'
 
+chai.use(chaiAsPromised)
 chai.use(solidity);
 
 let Zkdvrf: Contract
@@ -234,7 +234,7 @@ describe('ZKDVRF (with precomputation of hash) on-chain tests', async () => {
         })
 
         it('non-owner should not be able to add nodes', async () => {
-            await expect(Zkdvrf.connect(account2).addPermissionedNodes(account2Address)).to.be.revertedWith('OwnableUnauthorizedAccount("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")');
+            await expect(Zkdvrf.connect(account2).addPermissionedNodes(account2Address)).to.be.revertedWith('OwnableUnauthorizedAccount');
         })
 
         it('should not be able to add more nodes than predefined count', async () => {
@@ -314,7 +314,7 @@ describe('ZKDVRF (with precomputation of hash) on-chain tests', async () => {
 
     describe('Phase 1 - Start NIDKG', async () => {
         it('non-owner should not be able to start NIDKG', async () => {
-            await expect(Zkdvrf.connect(account2).startNidkg()).to.be.revertedWith('OwnableUnauthorizedAccount("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")')
+            await expect(Zkdvrf.connect(account2).startNidkg()).to.be.revertedWith('OwnableUnauthorizedAccount')
         })
 
         it('should be able to start NIDKG', async () => {
@@ -379,7 +379,7 @@ describe('ZKDVRF (with precomputation of hash) on-chain tests', async () => {
 
     describe('Phase 2 - Initiate Random generation', async () => {
         it('non-owner should not be able to initiate random', async () => {
-            await expect(Zkdvrf.connect(account2).initiateRandom()).to.be.revertedWith('OwnableUnauthorizedAccount("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")')
+            await expect(Zkdvrf.connect(account2).initiateRandom()).to.be.revertedWith('OwnableUnauthorizedAccount')
         })
 
         it('should be able to initiate random', async () => {
@@ -441,7 +441,7 @@ describe('ZKDVRF (with precomputation of hash) on-chain tests', async () => {
         })
 
         it('non-owner should not be able to submit random', async () => {
-            await expect(Zkdvrf.connect(account2).submitRandom(pseudoRandom)).to.be.revertedWith('OwnableUnauthorizedAccount("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")')
+            await expect(Zkdvrf.connect(account2).submitRandom(pseudoRandom)).to.be.revertedWith('OwnableUnauthorizedAccount')
         })
 
         it('should be able to submit random', async () => {
