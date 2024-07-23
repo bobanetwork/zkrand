@@ -11,7 +11,7 @@
     "@eth-optimism/common-ts": "0.2.2",
     "@eth-optimism/core-utils": "0.8.1",
     "@nomiclabs/hardhat-waffle": "^2.0.6",
-    "@openzeppelin/contracts": "^5.0.1",
+    "@openzeppelin/contracts": "^5.0.2",
     "bcfg": "^0.2.2",
     "dotenv": "^16.4.5",
     "hardhat": "^2.22.1",
