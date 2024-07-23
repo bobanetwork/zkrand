@@ -3,7 +3,8 @@ import {Contract, ContractFactory, providers, utils, Wallet} from "ethers";
 
 async function main() {
     const netprovider = new providers.JsonRpcProvider(process.env.L2_NODE_WEB3_URL)
-    const accPrivateKey = process.env.ADMIN_PRIVATE_KEY ?? ''
+    const accPrivateKey = process.env.DEPLOYER_PRIVATE_KEY ?? ''
+    const adminAddress = process.env.ADMIN_ADDRESS ?? ''
     const deployerWallet = new Wallet(accPrivateKey, netprovider)
     const threshold = process.env.THRESHOLD
     const numberOfMembers = process.env.NUMBER_OF_MEMBERS
@@ -53,7 +54,7 @@ async function main() {
     }
 
     const Zkdvrf = await ethers.getContractFactory('zkdvrf_pre')
-    const zkdvrf = await Zkdvrf.connect(deployerWallet).deploy(threshold, numberOfMembers, halo2VerifierAddress, halo2VerifyingKeyAddress, globalPublicParamsAddress, pseudoRandAddress, minDeposit)
+    const zkdvrf = await Zkdvrf.connect(deployerWallet).deploy(threshold, numberOfMembers, adminAddress, halo2VerifierAddress, halo2VerifyingKeyAddress, globalPublicParamsAddress, pseudoRandAddress, minDeposit)
     await zkdvrf.deployed()
 
     console.log("zkdvrf_pre deployed at", zkdvrf.address)

@@ -155,9 +155,6 @@ describe('ZKDVRF (with precomputation of hash) on-chain tests', async () => {
         Halo2VerifyingKey = await (await ethers.getContractFactory('contracts/Halo2VerifyingKey-3-5-18-g2.sol:Halo2VerifyingKey')).deploy()
         GlobalPublicParams = await (await ethers.getContractFactory('GlobalPublicParams')).deploy()
         PseudoRand = await (await ethers.getContractFactory('PseudoRand')).deploy()
-        Zkdvrf = await (
-            await ethers.getContractFactory('zkdvrf_pre')
-        ).deploy(3, 5, Halo2Verifier.address, Halo2VerifyingKey.address, GlobalPublicParams.address, PseudoRand.address, minDeposit)
 
         account1 = (await ethers.getSigners())[0]
         account2 = (await ethers.getSigners())[1]
@@ -169,6 +166,11 @@ describe('ZKDVRF (with precomputation of hash) on-chain tests', async () => {
         account3Address = await account3.getAddress()
         account4Address = await account4.getAddress()
         account5Address = await account5.getAddress()
+
+        Zkdvrf = await (
+            await ethers.getContractFactory('zkdvrf_pre')
+        ).deploy(3, 5, account1Address, Halo2Verifier.address, Halo2VerifyingKey.address, GlobalPublicParams.address, PseudoRand.address, minDeposit)
+
 
         lotteryAdmin = (await ethers.getSigners())[5]
         player1 = (await ethers.getSigners())[6]
