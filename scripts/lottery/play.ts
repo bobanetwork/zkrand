@@ -3,12 +3,13 @@ import {providers, Wallet} from "ethers";
 import {readJsonFromFile} from "../utils";
 
 const config = readJsonFromFile("demo-config.json")
+const rpcUrl = config.rpcUrl
 const lotteryAddress = config.lotteryAddress
 const playerKeys = config.lotteryPlayerKeys
 
 
 async function main() {
-    const netprovider = new providers.JsonRpcProvider(process.env.RPC_URL)
+    const netprovider = new providers.JsonRpcProvider(rpcUrl)
 
     const Lottery = await ethers.getContractFactory('Lottery')
     const contractABI = Lottery.interface.format();

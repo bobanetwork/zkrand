@@ -3,12 +3,13 @@ import {Contract, ContractFactory, providers, utils, Wallet} from "ethers";
 import {readJsonFromFile} from "../utils";
 
 const config = readJsonFromFile("demo-config.json")
+const rpcUrl = config.rpcUrl
 const zkdvrfAddress = config.zkdvrfAddress
 const lotteryAddress = config.lotteryAddress
 const adminKey = config.lotteryAdminKey
 
 async function main() {
-    const netprovider = new providers.JsonRpcProvider(process.env.RPC_URL)
+    const netprovider = new providers.JsonRpcProvider(rpcUrl)
     const adminWallet = new Wallet(adminKey, netprovider)
 
     const Lottery = await ethers.getContractFactory('Lottery')
@@ -38,6 +39,8 @@ async function main() {
         console.log("event", eventName, roundNum, input);
         // Proceed to the next step here
         if (roundNum == randRoundNumber) {
+            const playersBefore = await contract.getPlayers()
+            console.log("Players before:", playersBefore)
             // the random number is ready
             const res = await contract.pickWinner()
             // Check if the transaction was successful
@@ -52,7 +55,7 @@ async function main() {
             console.log("Lottery contract status:", status)
 
             const players = await contract.getPlayers()
-            console.log("Players:", players)
+            console.log("Players after:", players)
 
             // query users balance
             for (let i = 0; i < players.length; i++) {

@@ -10,16 +10,18 @@ import {
     execPromise,
     instancesPath,
     waitForWriteJsonToFile
-} from "./utils";
+} from "../utils";
 
 
 const config = readJsonFromFile("demo-config.json")
+const rpcUrl = config.rpcUrl
 const zkdvrfAddress = config.zkdvrfAddress
 const memberKeys = config.memberKeys
-async function main() {
-    const netprovider = new providers.JsonRpcProvider(process.env.RPC_URL)
 
-    const Zkdvrf = await ethers.getContractFactory('zkdvrf')
+async function main() {
+    const netprovider = new providers.JsonRpcProvider(rpcUrl)
+
+    const Zkdvrf = await ethers.getContractFactory('zkdvrf_pre')
     const contractABI = Zkdvrf.interface.format();
     const contract = new ethers.Contract(zkdvrfAddress, contractABI, netprovider);
 
@@ -52,9 +54,9 @@ async function main() {
             const cmd = `RUST_LOG=info ./target/release/client dkg derive`
             for (let i = 0; i < memberKeys.length; i++) {
                 const index = indices[i]
-                const cmdMember = cmd + ` ${index} -f member_${i+1}`
+                const cmdMember = cmd + ` ${index} -f member_${i + 1}`
                 console.log("running command <", cmdMember, ">...")
-                const res =  await execPromise(cmdMember)
+                const res = await execPromise(cmdMember)
                 console.log(res[`stderr`])
             }
 

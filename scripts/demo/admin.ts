@@ -9,10 +9,12 @@ import {
     sleep,
     waitForWriteJsonToFile,
     writeJsonToFile
-} from "./utils";
-import { createInterface } from "readline";
+} from "../utils";
+import {createInterface} from "readline";
 
 const config = readJsonFromFile("demo-config.json")
+const rpcUrl = config.rpcUrl
+const adminKey = config.adminKey
 const zkdvrfAddress = config.zkdvrfAddress
 const memberAdresses = config.memberAddresses
 
@@ -21,11 +23,10 @@ interface Eval {
 }
 
 async function main() {
-    const netprovider = new providers.JsonRpcProvider(process.env.RPC_URL)
-    const accPrivateKey = process.env.PRIVATE_KEY ?? ''
-    const adminWallet = new Wallet(accPrivateKey, netprovider)
+    const netprovider = new providers.JsonRpcProvider(rpcUrl)
+    const adminWallet = new Wallet(adminKey, netprovider)
 
-    const Zkdvrf = await ethers.getContractFactory('zkdvrf')
+    const Zkdvrf = await ethers.getContractFactory('zkdvrf_pre')
     const contractABI = Zkdvrf.interface.format();
     const contract = new ethers.Contract(zkdvrfAddress, contractABI, netprovider).connect(adminWallet)
 
@@ -39,7 +40,7 @@ async function main() {
     if (!restart) {
         for (let i = 0; i < memberAdresses.length; i++) {
             const res = await contract.addPermissionedNodes(memberAdresses[i])
-           // console.log(res)
+            // console.log(res)
             console.log("added member", memberAdresses[i])
         }
     }
@@ -73,7 +74,7 @@ async function main() {
             console.log("\nevent", eventDkg, count);
             // read all instances from contract
             const ppList = await contract.getPpList()
-           // console.log("\nppList = ", ppList)
+            // console.log("\nppList = ", ppList)
             // save ppList for rust backend
             const ppListHex = ppList.map(subList =>
                 subList.map(num => num.toHexString())
@@ -179,13 +180,13 @@ async function main() {
                 const value = {x: evals[i][1][0].toHexString(), y: evals[i][1][1].toHexString()}
                 const proof = {z: evals[i][2][0].toHexString(), c: evals[i][2][1].toHexString()}
 
-               const sigma = {
-                   index: index,
-                   value: value,
-                   proof: proof,
-               }
+                const sigma = {
+                    index: index,
+                    value: value,
+                    proof: proof,
+                }
 
-               pEvals.push(sigma)
+                pEvals.push(sigma)
             }
 
             const obj = JSON.stringify(pEvals)
@@ -228,7 +229,7 @@ async function main() {
 
     // start listening for event
     const eventRandReady = `RandomReady`
-    contract.on(eventRandReady,  async (roundNum, roundInput, event) => {
+    contract.on(eventRandReady, async (roundNum, roundInput, event) => {
         rl.question("\n 🔔 Do you want to initiate random again? (yes/no): ", async (answer) => {
             if (answer.toLowerCase() === "yes") {
                 await initiateRand(eventRandReady);

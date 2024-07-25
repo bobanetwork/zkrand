@@ -1,7 +1,6 @@
 import fs from "fs";
 import {promisify} from "util";
 import {exec} from "child_process";
-import {ethers} from "hardhat";
 
 export const memberDir = `./data/members/`
 export const mpksPath = `./data/mpks.json`
@@ -10,6 +9,7 @@ export const instancesPath = `./data/dkg/all_instances.json`
 export const randDir = `./data/random/`
 
 export const execPromise = promisify(exec);
+
 export function readJsonFromFile(filePath: string): any {
     try {
         // Read file content

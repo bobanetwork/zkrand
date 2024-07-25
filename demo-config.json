@@ -1,5 +1,7 @@
 {
-  "zkdvrfAddress": "0x1C2FfFeEee7d396597D60adAdAC63c2c48B829AF",
+  "rpcUrl": "http://localhost:8545",
+  "zkdvrfAddress": "0x9B27Cd80c4B3823a94334d9285001F0cE959a37b",
+  "adminKey": "0x58936e48436d9764c0c09775444fe6700d0a8aa84d4d6c09e110f70fc87c7289",
   "memberAddresses": [
     "0x85A6bCc74CB8570BEfF8526aec7d0Dfb6F128A60",
     "0x7D9e5627B650650Fa3E848364Cb5B0b696B885f2",

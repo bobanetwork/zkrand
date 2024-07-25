@@ -1,17 +1,18 @@
 import hre, {artifacts, ethers} from "hardhat";
 import {Contract, ContractFactory, providers, utils, Wallet} from "ethers";
-import { promisify } from 'util';
-import { exec } from "child_process";
-import {readJsonFromFile, writeJsonToFile, memberDir, mpksPath, execPromise, randDir} from "./utils";
+import {promisify} from 'util';
+import {exec} from "child_process";
+import {readJsonFromFile, writeJsonToFile, memberDir, mpksPath, execPromise, randDir} from "../utils";
 
 const config = readJsonFromFile("demo-config.json")
+const rpcUrl = config.rpcUrl
 const zkdvrfAddress = config.zkdvrfAddress
 const memberKeys = config.memberKeys
 
 async function main() {
-    const netprovider = new providers.JsonRpcProvider(process.env.RPC_URL)
+    const netprovider = new providers.JsonRpcProvider(rpcUrl)
 
-    const Zkdvrf = await ethers.getContractFactory('zkdvrf')
+    const Zkdvrf = await ethers.getContractFactory('zkdvrf_pre')
     const contractABI = Zkdvrf.interface.format();
     const contract = new ethers.Contract(zkdvrfAddress, contractABI, netprovider);
 
@@ -60,8 +61,8 @@ async function main() {
 
 main().then(() => {
     process.exit(0);
-  })
-  .catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  });
+})
+    .catch((error) => {
+        console.error(error);
+        process.exitCode = 1;
+    });

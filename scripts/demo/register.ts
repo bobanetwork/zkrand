@@ -1,17 +1,18 @@
 import hre, {artifacts, ethers} from "hardhat";
 import {Contract, ContractFactory, providers, utils, Wallet} from "ethers";
-import { promisify } from 'util';
-import { exec } from "child_process";
-import {readJsonFromFile, writeJsonToFile, waitForWriteJsonToFile, memberDir, mpksPath, execPromise} from "./utils";
+import {promisify} from 'util';
+import {exec} from "child_process";
+import {readJsonFromFile, writeJsonToFile, waitForWriteJsonToFile, memberDir, mpksPath, execPromise} from "../utils";
 
 const config = readJsonFromFile("demo-config.json")
+const rpcUrl = config.rpcUrl
 const zkdvrfAddress = config.zkdvrfAddress
 const memberKeys = config.memberKeys
 
 async function main() {
-    const netprovider = new providers.JsonRpcProvider(process.env.RPC_URL)
+    const netprovider = new providers.JsonRpcProvider(rpcUrl)
 
-    const Zkdvrf = await ethers.getContractFactory('zkdvrf')
+    const Zkdvrf = await ethers.getContractFactory('zkdvrf_pre')
     const contractABI = Zkdvrf.interface.format();
     const contract = new ethers.Contract(zkdvrfAddress, contractABI, netprovider);
 
@@ -37,7 +38,7 @@ async function main() {
         const memberContract = contract.connect(memberWallet)
 
         // generate member secret key and member public key on grumpkin curve
-        const index = i+1
+        const index = i + 1
         const file = `member_${index}`
         const command = `RUST_LOG=info ./target/release/client keygen -f ${file}`
 
@@ -65,4 +66,4 @@ async function main() {
 main().catch((error) => {
     console.error(error);
     process.exitCode = 1;
-  });
+});
