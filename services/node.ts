@@ -29,6 +29,9 @@ export interface GasPriceOverride {
 }
 
 interface NodeZkRandOptions {
+    threshold: number
+    numberMembers: number
+    degree: number
     l2RpcProvider: providers.StaticJsonRpcProvider
     l2Wallet: Wallet
     // chain ID of the L2 network
@@ -74,6 +77,7 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
 
         this.state.gasOverride = {gasLimit: 10000000}
 
+        await this.config()
     }
 
     async _start(): Promise<void> {
@@ -118,6 +122,27 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
 
             await sleep(this.options.pollingInterval)
         }
+    }
+
+    async config() {
+        let threshold = await this.state.zkRandContract.threshold()
+        if (threshold != this.options.threshold) {
+            throw new Error(
+                `threshold=${this.options.threshold} does not match threshold=${threshold} from contract`
+            )
+        }
+        let memberCountFromContract = await this.state.zkRandContract.memberCount()
+        if (memberCountFromContract != this.options.numberMembers) {
+            throw new Error(
+                `number_of_members=${this.options.numberMembers} does not match number_of_members=${memberCountFromContract} from contract`
+            )
+        }
+        console.log("memberCountFromContract", memberCountFromContract)
+
+        const cmd = `RUST_LOG=info ./target/release/client config ${this.options.threshold} ${this.options.numberMembers} ${this.options.degree}`
+        console.log("running command <", cmd, ">...")
+        let result = await execPromise(cmd)
+        console.log(result[`stderr`])
     }
 
     async registerNode() {

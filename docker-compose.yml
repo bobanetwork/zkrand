@@ -1,12 +1,33 @@
 services:
+  init:
+    build:
+      context: .
+      dockerfile: ops/docker/Dockerfile.init
+    volumes:
+      - kzg_params_volume:/app/kzg_params
+    restart: "no"  # Prevent restart after completion
+    environment:
+      - THRESHOLD=3
+      - NUMBER_OF_MEMBERS=5
+      - DEGREE=18
+    healthcheck:
+      test: [ "CMD", "test", "-f", "/app/kzg_params/health_check_3_5_18" ]
+      interval: 1m
+      timeout: 10s
+      retries: 10
+      start_period: 10m
+
   admin:
     build:
       context: .
       dockerfile: ops/docker/Dockerfile.admin
     container_name: zkrand_admin_service
     volumes:
-      - admin_volume:/data
+      - admin_volume:/app/data
     environment:
+      - THRESHOLD=3
+      - NUMBER_OF_MEMBERS=5
+      - DEGREE=18
       - L2_NODE_WEB3_URL=https://sepolia.boba.network
       - POLLING_INTERVAL=12000
       - RAND_GEN_INTERVAL=3600
@@ -25,12 +46,20 @@ services:
       dockerfile: ops/docker/Dockerfile.node
     container_name: zkrand_node_1_service
     volumes:
-      - node_1_volume:/data
+      - kzg_params_volume:/app/kzg_params
+      - node_1_volume:/app/data
+    entrypoint: [ "" ]
     environment:
+      - THRESHOLD=3
+      - NUMBER_OF_MEMBERS=5
+      - DEGREE=18
       - L2_NODE_WEB3_URL=https://sepolia.boba.network
       - POLLING_INTERVAL=12000
       - ZK_RAND_ADDRESS=0x1C2FfFeEee7d396597D60adAdAC63c2c48B829AF
       - NODE_PRIVATE_KEY=0x2e978a5709ac0dc3cbc2260519f8fcf5542af54dfaff489bcb4a69182be49429
+    depends_on:
+      init:
+        condition: service_healthy
 
   
   node-two:
@@ -39,12 +68,20 @@ services:
       dockerfile: ops/docker/Dockerfile.node
     container_name: zkrand_node_2_service
     volumes:
-      - node_2_volume:/data
+      - kzg_params_volume:/app/kzg_params
+      - node_2_volume:/app/data
+    entrypoint: [ "" ]
     environment:
+      - THRESHOLD=3
+      - NUMBER_OF_MEMBERS=5
+      - DEGREE=18
       - L2_NODE_WEB3_URL=https://sepolia.boba.network
       - POLLING_INTERVAL=12000
       - ZK_RAND_ADDRESS=0x1C2FfFeEee7d396597D60adAdAC63c2c48B829AF
       - NODE_PRIVATE_KEY=0xa0a98d2341d78ed222b7a6314c026d8e85185203fd295f67b7146be956a05c58
+    depends_on:
+      init:
+        condition: service_healthy
 
   node-three:
     build:
@@ -52,12 +89,20 @@ services:
       dockerfile: ops/docker/Dockerfile.node
     container_name: zkrand_node_3_service
     volumes:
-      - node_3_volume:/data
+      - kzg_params_volume:/app/kzg_params
+      - node_3_volume:/app/data
+    entrypoint: [ "" ]
     environment:
+      - THRESHOLD=3
+      - NUMBER_OF_MEMBERS=5
+      - DEGREE=18
       - L2_NODE_WEB3_URL=https://sepolia.boba.network
       - POLLING_INTERVAL=12000
       - ZK_RAND_ADDRESS=0x1C2FfFeEee7d396597D60adAdAC63c2c48B829AF
       - NODE_PRIVATE_KEY=0x742e271d909d026b2b4dcc0384ec0b8df8f674f0773c354b57c24858419e89d3
+    depends_on:
+      init:
+        condition: service_healthy
 
 
   node-four:
@@ -66,12 +111,20 @@ services:
       dockerfile: ops/docker/Dockerfile.node
     container_name: zkrand_node_4_service
     volumes:
-      - node_4_volume:/data
+      - kzg_params_volume:/app/kzg_params
+      - node_4_volume:/app/data
+    entrypoint: [ "" ]
     environment:
+      - THRESHOLD=3
+      - NUMBER_OF_MEMBERS=5
+      - DEGREE=18
       - L2_NODE_WEB3_URL=https://sepolia.boba.network
       - POLLING_INTERVAL=12000
       - ZK_RAND_ADDRESS=0x1C2FfFeEee7d396597D60adAdAC63c2c48B829AF
       - NODE_PRIVATE_KEY=0xeeb82181766c7d0fe45d2cb5b3399b1da17a1a432938ec8c4d73daca85eedaea
+    depends_on:
+      init:
+        condition: service_healthy
 
 
   node-five:
@@ -80,15 +133,24 @@ services:
       dockerfile: ops/docker/Dockerfile.node
     container_name: zkrand_node_5_service
     volumes:
-      - node_5_volume:/data
+      - kzg_params_volume:/app/kzg_params
+      - node_5_volume:/app/data
+    entrypoint: [ "" ]
     environment:
+      - THRESHOLD=3
+      - NUMBER_OF_MEMBERS=5
+      - DEGREE=18
       - L2_NODE_WEB3_URL=https://sepolia.boba.network
       - POLLING_INTERVAL=12000
       - ZK_RAND_ADDRESS=0x1C2FfFeEee7d396597D60adAdAC63c2c48B829AF
       - NODE_PRIVATE_KEY=0x88b68d7e8d96d8465cfe3dc4abf707e21aa49139189a784e2d50cc9ada9076c3
+    depends_on:
+      init:
+        condition: service_healthy
 
 
 volumes:
+  kzg_params_volume:
   admin_volume:
   node_1_volume:
   node_2_volume:

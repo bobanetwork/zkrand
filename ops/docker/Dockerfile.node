@@ -12,6 +12,9 @@ RUN apt-get install -y \
 
 ENV LIBCLANG_PATH=/usr/lib/llvm-14/lib
 
+# Create a working directory
+WORKDIR /app
+
 COPY ./package.json .
 RUN yarn install
 
@@ -27,12 +30,16 @@ COPY ./src ./src
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN cargo build --release
 
-COPY download_params.sh .
-RUN chmod +x download_params.sh
-RUN ./download_params.sh
+# Declare the directory as a volume
+VOLUME /app/kzg_params
 
+# Declare the directory as a volume
 COPY ./data ./data
-RUN RUST_LOG=info ./target/release/client setup -s
+VOLUME /app/data
+
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
+ENTRYPOINT ["./entrypoint.sh"]
 
 COPY ./tsconfig.json .
 COPY ./services ./services

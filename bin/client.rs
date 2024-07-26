@@ -72,8 +72,11 @@ enum Commands {
     Mock(MockArgs),
     /// Generate kzg parameters, proving key and verifying key for SNARKs and verifier contract
     Setup {
+        /// If skip is selected, it skips the contract generation
+        #[arg(long, default_value_t = false)]
+        skip: bool,
         /// If split is selected, verifier contract and verifying key contract are generated separately
-        #[arg(short, long, default_value_t = false)]
+        #[arg(long, default_value_t = false)]
         split: bool,
     },
     /// Generate member secret/public key pair
@@ -260,7 +263,7 @@ fn public_keys(dkg_config: &DkgConfig, instance: &[BnScalar]) -> Vec<GkG1> {
     pks
 }
 
-fn setup(params: &ParamsConfig, split: bool) -> Result<()> {
+fn setup(params: &ParamsConfig, skip: bool, split: bool) -> Result<()> {
     let start = start_timer!(|| format!("kzg load or setup params with degree {}", params.degree));
     let general_params = load_or_create_params(KZG_PARAMS_DIR, params.degree as usize)?;
     end_timer!(start);
@@ -280,52 +283,54 @@ fn setup(params: &ParamsConfig, split: bool) -> Result<()> {
     let vk = pk.get_vk();
     end_timer!(start);
 
-    let num_instances = dkg_config.instance_size();
+    if !skip {
+        let num_instances = dkg_config.instance_size();
 
-    if split {
-        let start = start_timer!(|| format!(
-            "create verifier contract and verifying key contract for ({}, {}, {})",
-            params.threshold, params.number_of_members, params.degree
-        ));
-        let generator = SolidityGenerator::new(&general_params, vk, Bdfg21, num_instances);
-        let (verifier_solidity, vk_solidity) = generator.render_separately().unwrap();
-        save_solidity("Halo2Verifier.sol", &verifier_solidity)?;
+        if split {
+            let start = start_timer!(|| format!(
+                "create verifier contract and verifying key contract for ({}, {}, {})",
+                params.threshold, params.number_of_members, params.degree
+            ));
+            let generator = SolidityGenerator::new(&general_params, vk, Bdfg21, num_instances);
+            let (verifier_solidity, vk_solidity) = generator.render_separately().unwrap();
+            save_solidity("Halo2Verifier.sol", &verifier_solidity)?;
 
-        let contract_name = if cfg!(feature = "g2chip") {
-            format!(
-                "Halo2VerifyingKey-{}-{}-{}-g2.sol",
-                params.threshold, params.number_of_members, params.degree,
-            )
+            let contract_name = if cfg!(feature = "g2chip") {
+                format!(
+                    "Halo2VerifyingKey-{}-{}-{}-g2.sol",
+                    params.threshold, params.number_of_members, params.degree,
+                )
+            } else {
+                format!(
+                    "Halo2VerifyingKey-{}-{}-{}.sol",
+                    params.threshold, params.number_of_members, params.degree,
+                )
+            };
+
+            save_solidity(contract_name, &vk_solidity)?;
+            end_timer!(start);
         } else {
-            format!(
-                "Halo2VerifyingKey-{}-{}-{}.sol",
-                params.threshold, params.number_of_members, params.degree,
-            )
-        };
+            let start = start_timer!(|| format!(
+                "create solidity contracts for ({},{},{})",
+                params.threshold, params.number_of_members, params.degree
+            ));
+            let generator = SolidityGenerator::new(&general_params, vk, Bdfg21, num_instances);
+            let verifier_solidity = generator.render()?;
+            let contract_name = if cfg!(feature = "g2chip") {
+                format!(
+                    "Halo2Verifier-{}-{}-{}-g2.sol",
+                    params.threshold, params.number_of_members, params.degree,
+                )
+            } else {
+                format!(
+                    "Halo2Verifier-{}-{}-{}.sol",
+                    params.threshold, params.number_of_members, params.degree,
+                )
+            };
 
-        save_solidity(contract_name, &vk_solidity)?;
-        end_timer!(start);
-    } else {
-        let start = start_timer!(|| format!(
-            "create solidity contracts for ({},{},{})",
-            params.threshold, params.number_of_members, params.degree
-        ));
-        let generator = SolidityGenerator::new(&general_params, vk, Bdfg21, num_instances);
-        let verifier_solidity = generator.render()?;
-        let contract_name = if cfg!(feature = "g2chip") {
-            format!(
-                "Halo2Verifier-{}-{}-{}-g2.sol",
-                params.threshold, params.number_of_members, params.degree,
-            )
-        } else {
-            format!(
-                "Halo2Verifier-{}-{}-{}.sol",
-                params.threshold, params.number_of_members, params.degree,
-            )
-        };
-
-        save_solidity(contract_name, &verifier_solidity)?;
-        end_timer!(start);
+            save_solidity(contract_name, &verifier_solidity)?;
+            end_timer!(start);
+        }
     }
 
     Ok(())
@@ -387,8 +392,8 @@ fn main() -> Result<()> {
                 );
             }
         }
-        Commands::Setup { split } => {
-            setup(&params, split)?;
+        Commands::Setup { skip, split } => {
+            setup(&params, skip, split)?;
         }
         Commands::Keygen { file } => {
             let member = MemberKey::random(&mut rng);

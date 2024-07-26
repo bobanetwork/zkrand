@@ -16,6 +16,11 @@ const main = async () => {
     })
 
     const env = process.env
+
+    const THRESHOLD = config.uint("threshold", parseInt(env.THRESHOLD, 10))
+    const NUMBER_OF_MEMBERS = config.uint("number_of_members", parseInt(env.NUMBER_OF_MEMBERS, 10))
+    const DEGREE = config.uint("threshold", parseInt(env.DEGREE, 10))
+
     const L2_NODE_WEB3_URL = config.str('l2-node-web3-url', env.L2_NODE_WEB3_URL)
     const ADMIN_PRIVATE_KEY = config.str('admin-private-key', env.ADMIN_PRIVATE_KEY)
 
@@ -52,6 +57,9 @@ const main = async () => {
     const chainId = (await l2Provider.getNetwork()).chainId
 
     const service = new AdminZkRandService({
+        threshold: THRESHOLD,
+        numberMembers: NUMBER_OF_MEMBERS,
+        degree: DEGREE,
         l2RpcProvider: l2Provider,
         l2Wallet: wallet,
         chainId,

@@ -33,6 +33,9 @@ export interface GasPriceOverride {
 }
 
 interface AdminZkRandOptions {
+    threshold: number
+    numberMembers: number
+    degree: number
     l2RpcProvider: providers.StaticJsonRpcProvider
     l2Wallet: Wallet
     // chain ID of the L2 network
@@ -93,10 +96,12 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         this.state.timeOfLastRound = 0 // 0 indicates no round has been initiated
 
         this.state.startDate = 0
-        let startDate = new Date(this.options.randGenStartDate);
+        let startDate = new Date(this.options.randGenStartDate)
         if (!isNaN(startDate.getTime())) {
             this.state.startDate = startDate.getTime()
         }
+
+        await this.config()
     }
 
     async _start(): Promise<void> {
@@ -110,13 +115,11 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             )
         }
 
-        let threshold = await this.state.zkRandContract.threshold()
-        let memberCountFromContract = await this.state.zkRandContract.memberCount()
-        console.log("memberCountFromContract", memberCountFromContract)
+
         let currentIndexFromContract = await this.state.zkRandContract.currentIndex()
         console.log("currentIndexFromContract", currentIndexFromContract)
 
-        if (currentIndexFromContract != memberCountFromContract) {
+        if (currentIndexFromContract != this.options.numberMembers) {
             // check if nidkg is already completed, or if this step is already done
             console.log("adding permissioned nodes")
             const nodeOne = await this.state.zkRandContract.addrToNode(this.options.nodeOneAddress)
@@ -180,7 +183,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
                         let submissionCount = await this.state.zkRandContract.roundSubmissionCount(currentRoundNum)
                         let roundToRandom = await this.state.zkRandContract.roundToRandom(currentRoundNum)
 
-                        if (roundToRandom.value === bytes32Zero && submissionCount >= threshold) {
+                        if (roundToRandom.value === bytes32Zero && submissionCount >= this.options.threshold) {
                             await this.createRandom(currentRoundNum)
                         }
 
@@ -263,6 +266,27 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
                 }
             }
         });
+    }
+
+    async config() {
+        let threshold = await this.state.zkRandContract.threshold()
+        if (threshold != this.options.threshold) {
+            throw new Error(
+                `threshold=${this.options.threshold} does not match threshold=${threshold} from contract`
+            )
+        }
+        let memberCountFromContract = await this.state.zkRandContract.memberCount()
+        if (memberCountFromContract != this.options.numberMembers) {
+            throw new Error(
+                `number_of_members=${this.options.numberMembers} does not match number_of_members=${memberCountFromContract} from contract`
+            )
+        }
+        console.log("memberCountFromContract", memberCountFromContract)
+
+        const cmd = `RUST_LOG=info ./target/release/client config ${this.options.threshold} ${this.options.numberMembers} ${this.options.degree}`
+        console.log("running command <", cmd, ">...")
+        let result = await execPromise(cmd)
+        console.log(result[`stderr`])
     }
 
 
