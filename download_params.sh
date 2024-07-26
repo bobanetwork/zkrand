@@ -9,5 +9,5 @@ mkdir -p "$params_dir"
 degree_output_file="$params_dir"/params"${degree}"
 rm -f "$degree_output_file"
 
-axel -ac https://trusted-setup-halo2kzg.s3.eu-central-1.amazonaws.com/perpetual-powers-of-tau-raw-"$degree" -o "$degree_output_file"
-
+# https://docs.axiom.xyz/docs/transparency-and-security/kzg-trusted-setup
+axel -ac https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_"${degree}".srs -o "$degree_output_file"
