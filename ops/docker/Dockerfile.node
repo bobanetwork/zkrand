@@ -7,8 +7,7 @@ RUN apt-get update && apt-get install -y curl \
 RUN apt-get install -y \
     llvm \
     clang \
-    libclang-dev \
-    axel
+    libclang-dev
 
 ENV LIBCLANG_PATH=/usr/lib/llvm-14/lib
 
@@ -32,9 +31,6 @@ RUN cargo build --release
 
 # Declare the directory as a volume
 VOLUME /app/kzg_params
-
-# Declare the directory as a volume
-COPY ./data ./data
 VOLUME /app/data
 
 COPY entrypoint.sh ./entrypoint.sh
