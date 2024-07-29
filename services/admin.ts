@@ -233,7 +233,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             await waitForWriteJsonToFile(obj, instancesPath)
             console.log("retrieved all instances from contract")
             console.log("sleeping..")
-            await sleep(2000)
+            await sleep(5000)
 
             // derive global public parameters
             const cmd = `${this.cmdPrefix} dkg derive`
@@ -299,7 +299,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         await waitForWriteJsonToFile(obj, instancesPath)
         console.log("retrieved all instances from contract")
         console.log("sleeping..")
-        await sleep(2000)
+        await sleep(5000)
 
         // derive global public parameters
         const cmd = `${this.cmdPrefix} dkg derive`

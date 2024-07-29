@@ -192,7 +192,7 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
             const obj = JSON.stringify(ppListHex)
             await waitForWriteJsonToFile(obj, instancesPath)
             console.log("sleeping..")
-            await sleep(1000)
+            await sleep(5000)
 
             // each member derives its own secret share and global public parameters
             const cmd = `${this.cmdPrefix} dkg derive`
@@ -211,7 +211,7 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
         const obj = JSON.stringify(pks);
         await waitForWriteJsonToFile(obj, mpksPath);
         console.log("sleeping..")
-        await sleep(1000)
+        await sleep(2000)
 
         const index = await this.state.zkRandContract.getIndexPlus(this.options.l2Wallet.address)
         const cmdProve = `${this.cmdPrefix} dkg prove ${index}`
@@ -250,7 +250,7 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
         const obj = JSON.stringify(ppListHex)
         await waitForWriteJsonToFile(obj, instancesPath)
         console.log("sleeping..")
-        await sleep(2000)
+        await sleep(5000)
 
         // each member derives its own secret share and global public parameters
         const cmd = `${this.cmdPrefix} dkg derive`
