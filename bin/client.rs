@@ -1,8 +1,16 @@
+use crate::mock::{mock_dkg, mock_members, mock_random};
+use crate::proof::{create_proof_checked, verify_single};
+use crate::serialise::{
+    hex_to_le_bytes, le_bytes_to_hex, DkgGlobalPubParams as DkgGlobalPubParamsSerde,
+    DkgMemberParams as DkgMemberParamsSerde, DkgShareKey as DkgShareKeySerde,
+    MemberKey as MemberKeySerde, PartialEval as PartialEvalSerde, Point, Point2,
+    PseudoRandom as PseudoRandomSerde,
+};
 use anyhow::{anyhow, Result};
 use ark_std::{end_timer, start_timer};
 use clap::{Args, Parser, Subcommand};
-use config::Config;
 use const_format::formatcp;
+use dotenv::dotenv;
 use halo2_ecc::halo2::halo2curves::bn256::{Fr as BnScalar, G1Affine as BnG1, G2Affine as BnG2};
 use halo2_solidity_verifier::BatchOpenScheme::Bdfg21;
 use halo2_solidity_verifier::SolidityGenerator;
@@ -14,17 +22,8 @@ use pretty_env_logger;
 use rand_chacha::ChaCha20Rng;
 use rand_core::{OsRng, RngCore, SeedableRng};
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::fs::{create_dir_all, read, read_to_string, write};
-use toml::to_string_pretty;
-
-use crate::mock::{mock_dkg, mock_members, mock_random};
-use crate::proof::{create_proof_checked, verify_single};
-use crate::serialise::{
-    hex_to_le_bytes, le_bytes_to_hex, DkgGlobalPubParams as DkgGlobalPubParamsSerde,
-    DkgMemberParams as DkgMemberParamsSerde, DkgShareKey as DkgShareKeySerde,
-    MemberKey as MemberKeySerde, PartialEval as PartialEvalSerde, Point, Point2,
-    PseudoRandom as PseudoRandomSerde,
-};
 
 #[cfg(not(feature = "g2chip"))]
 use serialise::DkgMemberPublicParams as DkgMemberPublicParamsSerde;
@@ -43,7 +42,6 @@ mod serialise;
 const KZG_PARAMS_DIR: &str = "./kzg_params";
 const CONTRACT_DIR: &str = "./contracts";
 const DATA_DIR: &str = "./data";
-const CONFIG_PATH: &str = formatcp!("{}/config.toml", DATA_DIR);
 const MEM_PUBLIC_KEYS_PATH: &str = formatcp!("{}/mpks.json", DATA_DIR);
 const MEMBERS_DIR: &str = formatcp!("{}/members", DATA_DIR);
 const DKG_DIR: &str = formatcp!("{}/dkg", DATA_DIR);
@@ -62,12 +60,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Set (threshold, number of members, degree) in config
-    Config {
-        threshold: u32,
-        number_of_members: u32,
-        degree: u32,
-    },
     /// Mock n members and dkg parameters
     Mock(MockArgs),
     /// Generate kzg parameters, proving key and verifying key for SNARKs and verifier contract
@@ -172,26 +164,6 @@ impl ParamsConfig {
 
         Ok(config)
     }
-}
-
-fn update_config(threshold: u32, number_of_members: u32, degree: u32) -> Result<()> {
-    let min_threshold = (number_of_members + 2) / 2;
-    if threshold < min_threshold || threshold > number_of_members {
-        return Err(anyhow!("Invalid threshold"));
-    }
-
-    let params = ParamsConfig {
-        threshold,
-        number_of_members,
-        degree,
-    };
-    let toml_str = to_string_pretty(&params)?;
-
-    // Write the TOML string to a file
-    write(CONFIG_PATH, toml_str)?;
-    info!("config saved in {CONFIG_PATH}");
-
-    Ok(())
 }
 
 fn save_share(share: &DkgShareKey) -> Result<()> {
@@ -336,17 +308,9 @@ fn setup(params: &ParamsConfig, skip: bool, split: bool) -> Result<()> {
     Ok(())
 }
 
-fn load_config() -> Result<ParamsConfig> {
-    let settings = Config::builder()
-        .add_source(config::File::with_name(CONFIG_PATH))
-        .build()?;
-    let params: ParamsConfig = settings.try_deserialize()?;
-    // todo: automatically generate or check degree
-    Ok(params)
-}
-
 fn main() -> Result<()> {
     pretty_env_logger::init();
+
     // let mut rng = ChaCha20Rng::seed_from_u64(42);
     let mut rng = OsRng;
 
@@ -357,18 +321,45 @@ fn main() -> Result<()> {
     create_dir_all(CONTRACT_DIR)?;
     create_dir_all(RANDOM_DIR)?;
 
-    let params = load_config()?;
+    // Load environment variables from .env file if it exists
+    dotenv().ok();
+
+    let is_any_var_missing_or_invalid = |keys: &[&str]| {
+        keys.iter().any(|&key| {
+            env::var(key)
+                .ok()
+                .and_then(|val| val.parse::<u32>().ok())
+                .is_none()
+        })
+    };
+
+    let config_keys = ["THRESHOLD", "NUMBER_OF_MEMBERS", "DEGREE"];
+    let default_values: (u32, u32, u32) = (3, 5, 18);
+    let (threshold, number_of_members, degree) = if is_any_var_missing_or_invalid(&config_keys) {
+        info!("One or more env variables are missing or invalid. Using default config");
+        default_values
+    } else {
+        (
+            env::var(config_keys[0]).unwrap().parse::<u32>().unwrap(),
+            env::var(config_keys[1]).unwrap().parse::<u32>().unwrap(),
+            env::var(config_keys[2]).unwrap().parse::<u32>().unwrap(),
+        )
+    };
+
+    info!(
+        "(threshold, number_of_members, degree) = ({}, {}, {})",
+        threshold, number_of_members, degree
+    );
+
+    let params = ParamsConfig {
+        threshold,
+        number_of_members,
+        degree,
+    };
     let dkg_config = params.dkg_config()?;
 
     let cli = Cli::parse();
     match cli.command {
-        Commands::Config {
-            threshold,
-            number_of_members,
-            degree,
-        } => {
-            update_config(threshold, number_of_members, degree)?;
-        }
         Commands::Mock(mock) => {
             if mock.members {
                 mock_members(&dkg_config, &mut rng)?;

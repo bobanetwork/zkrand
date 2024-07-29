@@ -3,7 +3,6 @@ import {Contract, Wallet, BigNumber, providers} from 'ethers'
 import fs from "fs";
 import {promisify} from "util";
 import {exec} from "child_process";
-
 import {sleep} from '@eth-optimism/core-utils'
 import {BaseService} from '@eth-optimism/common-ts'
 
@@ -71,6 +70,8 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         startDate: number
     } = {} as any
 
+    private cmdPrefix: string;
+
     async _init(): Promise<void> {
         this.logger.info('Initializing AdminZkRand service...', {
             options: this.options,
@@ -101,7 +102,9 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             this.state.startDate = startDate.getTime()
         }
 
-        await this.config()
+        this.cmdPrefix = `RUST_LOG=info THRESHOLD=${this.options.threshold} NUMBER_OF_MEMBERS=${this.options.numberMembers} DEGREE=${this.options.degree} ./target/release/client`
+
+        await this.check_config()
     }
 
     async _start(): Promise<void> {
@@ -233,7 +236,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             await sleep(2000)
 
             // derive global public parameters
-            const cmd = `RUST_LOG=info ./target/release/client dkg derive`
+            const cmd = `${this.cmdPrefix} dkg derive`
             console.log("running command <", cmd, ">...")
             let result = await execPromise(cmd)
             console.log(result[`stderr`])
@@ -268,7 +271,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         });
     }
 
-    async config() {
+    async check_config() {
         let threshold = await this.state.zkRandContract.threshold()
         if (threshold != this.options.threshold) {
             throw new Error(
@@ -282,11 +285,6 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             )
         }
         console.log("memberCountFromContract", memberCountFromContract)
-
-        const cmd = `RUST_LOG=info ./target/release/client config ${this.options.threshold} ${this.options.numberMembers} ${this.options.degree}`
-        console.log("running command <", cmd, ">...")
-        let result = await execPromise(cmd)
-        console.log(result[`stderr`])
     }
 
 
@@ -304,7 +302,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         await sleep(2000)
 
         // derive global public parameters
-        const cmd = `RUST_LOG=info ./target/release/client dkg derive`
+        const cmd = `${this.cmdPrefix} dkg derive`
         console.log("running command <", cmd, ">...")
         let result = await execPromise(cmd)
         console.log(result[`stderr`])
@@ -383,12 +381,12 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             console.log("sleeping..")
             await sleep(2000)
 
-            const cmdCombine = `RUST_LOG=info ./target/release/client rand combine "${input}"`
+            const cmdCombine = `${this.cmdPrefix} rand combine "${input}"`
             console.log("running command <", cmdCombine, ">...")
             let result = await execPromise(cmdCombine)
             console.log(result[`stderr`])
 
-            const cmdVerify = `RUST_LOG=info ./target/release/client rand verify-final "${input}"`
+            const cmdVerify = `${this.cmdPrefix} rand verify-final "${input}"`
             console.log("running command <", cmdVerify, ">...")
             result = await execPromise(cmdVerify)
             console.log(result[`stderr`])
@@ -439,12 +437,12 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         console.log("sleep..")
         await sleep(2000)
 
-        const cmdCombine = `RUST_LOG=info ./target/release/client rand combine "${input}"`
+        const cmdCombine = `${this.cmdPrefix} rand combine "${input}"`
         console.log("running command <", cmdCombine, ">...")
         let result = await execPromise(cmdCombine)
         console.log(result[`stderr`])
 
-        const cmdVerify = `RUST_LOG=info ./target/release/client rand verify-final "${input}"`
+        const cmdVerify = `${this.cmdPrefix} rand verify-final "${input}"`
         console.log("running command <", cmdVerify, ">...")
         result = await execPromise(cmdVerify)
         console.log(result[`stderr`])

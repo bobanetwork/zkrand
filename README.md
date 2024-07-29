@@ -2,7 +2,7 @@
 
 zkRand is a t-out-of-n threshold scheme that runs among a group of n distributed members. The protocol consists of two
 components:
-a snark-based non-interactive distributed key generation (NI-DKG) and randomness generation based on threshold
+a snark-based non-interactive distributed key generation (NIDKG) and randomness generation based on threshold
 bls-signatures.
 
 ### To build:
@@ -26,28 +26,25 @@ $ ./target/release/client -h
    This downloads KZG parameters with degree = 22 from Ethereum Powers of Tau.
    The parameters are saved in "./kzg_params/params22". This is the KZG ceremony.
 
-2. Config. This step initialises the protocol configuration.
-   The default config is set to be (threshold, number_of_memnbers, degree) = (3, 5, 18).
-   This can be changed by:
-    ```
-    $ RUST_LOG=info ./target/release/client config <THRESHOLD> <NUMBER_OF_MEMBERS> <DEGREE>
-    ```
-   The configuration is saved at "data/config.toml". The degree determines maximum number of gates allowed in a DNI-KG
+2. Config. The default config is set to be (THRESHOLD, NUMBER_OF_MEMBERS, DEGREE=18) = (3, 5, 18).
+   These are environment variables that need to be used consistently throughout the protocol.
+   You can set their values in the .env file.
+   The degree determines maximum number of gates allowed in a NIDKG
    circuit.
-   Higher degree is required for supporting more members in the NI-DKG protocol.
+   Higher degree is required for supporting more members in the NIDKG protocol.
    The maximun (threshold, number_of_members) that can be supported for a given degree is:
 
    | degree |   18   | 19 | 20 | 21 | 22 |
-       |:------:|:------:| :----: | :----: |  :----: |  :----: |
+             |:------:|:------:| :----: | :----: |  :----: |  :----: |
    | (t, n) | (3, 5) | (9, 16) | (20, 38) | (42, 83) | (86, 171)
 
    The threshold is set as the majority of number_of_members.
 
-3. Setup. This generates SNARK proving key and verifying key for NI-DKG circuits,
+3. Setup. This generates SNARK proving key and verifying key for NIDKG circuits,
    and the verification contracts for checking SNARK proofs onchain.
    The SNARK parameters are generated using:
     ```
-    $ RUST_LOG=info ./target/release/client setup --split
+    $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client setup --split
     ```
    The parameters are computed using Ethereum power-of-tau,
    therefore, the proving/verifying keys are deterministic given a configuration.
@@ -56,10 +53,10 @@ $ ./target/release/client -h
    stays the same for different (t,n) values. The verifying key contract needs to be changed when (t,n) changes.
    The current implementation of contracts set (t,n) to be (3, 5).
 
-4. KeyGen. Before the NI-DKG protocol starts, each member $i$ pre-generates its member public key $mpk_i$ and
-   secret key $msk_i$ for encryption and decryption in NI-DKG protocol:
+4. KeyGen. Before the NIDKG protocol starts, each member $i$ pre-generates its member public key $mpk_i$ and
+   secret key $msk_i$ for encryption and decryption in NIDKG protocol:
     ```
-    $ RUST_LOG=info ./target/release/client keygen
+    $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client keygen
     ```
    The secret key is saved at "./data/members/member.json". The public key is printed in the format:
     ```
@@ -73,7 +70,7 @@ $ ./target/release/client -h
    Each member submits its member public key to contract "zkdvrf.sol" through
    function `registerNode`. The hex string may need to be converted to big integers before submitting to the contract.
    In the contract, all the submitted public keys are stored in `pubKeys` and their order is stored in `ppListOrder`.
-   To use these public keys in the following NI-DKG steps, `pubKeys` should be converted to a list that is compatible
+   To use these public keys in the following NIDKG steps, `pubKeys` should be converted to a list that is compatible
    with the Rust backend:
 
     ```
@@ -90,11 +87,11 @@ $ ./target/release/client -h
    for the next steps.
 
 
-5. NI-DKG.
+5. NIDKG.
     1. Create public parameters. Each member $i$ selects a random polynomial to create its public parameters $pp_i$
        and a SNARK proof $zkp_i$ to ensure the parameters are generated correctly.
          ```
-         $ RUST_LOG=info ./target/release/client dkg prove <INDEX>
+         $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client dkg prove <INDEX>
          ```
        Index is the member's position in the list of member public keys. The index ranges 1, 2, ..., number_of_members.
        This command reads "./data/mpks.json" to obtain all members public keys.
@@ -110,15 +107,15 @@ $ ./target/release/client -h
 
        $(pp_i, zpk_i)$ can also be verified locally using
          ```
-         $ RUST_LOG=info ./target/release/client dkg verify <INDEX>
+         $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client dkg verify <INDEX>
          ```
        This command reads $pp_i$ from "./data/dkg/proofs/instance_{INDEX}.json"
        and $zkp_i$ from  "./data/dkg/proofs/proof_{INDEX}.dat".
 
        The current implementation of contracts expect submission from each member. However,
        it is in fact not necessary to require each member to generate and submit $pp_i$.
-       Instead, a lower bound $m$ with threshold < m <= number_of_members can be set to accept the NI-DKG process.
-       For example, m = (2/3) * number_of_members. If at least m members submit valid $(pp_i, zkp_i)$, then the NI-DKG
+       Instead, a lower bound $m$ with threshold < m <= number_of_members can be set to accept the NIDKG process.
+       For example, m = (2/3) * number_of_members. If at least m members submit valid $(pp_i, zkp_i)$, then the NIDKG
        can be considered successfully.
        The members that do not submit will still be able to obtain a secret/verification key pair (in the following
        steps) as long as their member public keys are included.
@@ -129,7 +126,7 @@ $ ./target/release/client -h
        Member $i$ can derive its secret share $sk_i$ and the global public parameters using:
 
        ```
-       $ RUST_LOG=info ./target/release/client dkg derive <INDEX> -f <FILE>
+       $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client dkg derive <INDEX> -f <FILE>
        ```
        This command requires member $i$'s secret key $msk_i$ in "./data/members/FILE.json" and all the
        public parameters in "./data/all_instances.json". The default value of FILE is "member". `ppList` in the contract
@@ -140,7 +137,7 @@ $ ./target/release/client -h
        ./data/gpk.json"
        and all the verification keys saved at "./data/vks.json". Every member can obtain a verification key regardless
        of whether the
-       member participates in the NI-DKG or not. The verification keys are listed in the same order as the member public
+       member participates in the NIDKG or not. The verification keys are listed in the same order as the member public
        keys.
        The verification key $vk_i$ will be used to verify the partial evaluation generation by member $i$ using its
        secret share $sk_i$.
@@ -150,7 +147,7 @@ $ ./target/release/client -h
    `verifyPseudoRand` given $gpk$ and $x$.
     1. Each member $i$ computes a partial evaluation $eval_i$ using:
     ```
-    $ RUST_LOG=info ./target/release/client rand eval <INDEX> <INPUT>
+    $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client rand eval <INDEX> <INPUT>
     ```
    This command reads member $i$'s secret share $sk_i$ from "./data/dkg/shares/share_{INDEX}.json".
    The output of $eval_i$ is saved at "./data/random/eval_{INDEX}.json".
@@ -167,7 +164,7 @@ $ ./target/release/client -h
    All the hex string may need to be converted to big integers before submitting to the contract.
    $eval_i$ can also be verified locally using
    ```
-    $ RUST_LOG=info ./target/release/client rand verify <INDEX> <INPUT>
+    $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client rand verify <INDEX> <INPUT>
    ```
    This command reads $eval_i$ from "./data/random/eval_{INDEX}.json" and verification keys from "./data/vks.json".
 
@@ -177,7 +174,7 @@ $ ./target/release/client -h
        onchain verification cost, the combination can be done offchain and
        only the final pseudorandom value and its proof needs to be verified onchain.
     ```
-    $ RUST_LOG=info ./target/release/client rand combine <INPUT>
+    $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client rand combine <INPUT>
     ```
    This command reads all partial evaluations from "./data/evals.json"
    and outputs a pseudorandom value saved at "./data/random/pseudo.json".
@@ -208,7 +205,7 @@ $ ./target/release/client -h
 
    The pseudorandom value can also be verified locally:
     ```
-    $ RUST_LOG=info ./target/release/client rand verify-final <INPUT>
+    $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client rand verify-final <INPUT>
     ```
    This command reads pseudorandom from "./data/random/pseudo.json".
 
@@ -216,16 +213,20 @@ $ ./target/release/client -h
 
 To deploy the zkRand contracts on-chain-
 
-1. Set up your .env (use .env.example for reference)
+1. Set up your .env (use .env.example.deploy for reference)
 
 ```
-RPC_URL = <rpc of network to deploy on>
-PRIVATE_KEY = <deployer pk>
-DEPLOY_NO_HELPERS = <true/false> # optional
-HALO2V = <Halo2Verifier address> # optional
-HALO2VK = <Halo2VerifyingKey-3-5-18-g2 address> # optional
-GPP = <GlobalPublicParam address> # optional
-PSRAND = <PseudoRand address> # optional
+L2_NODE_WEB3_URL=<rpc>
+DEPLOYER_PRIVATE_KEY=<private key of deployer's account>
+ADMIN_ADDRESS=<admin account address>
+THRESHOLD=3
+NUMBER_OF_MEMBERS=5
+DEGREE=18
+DEPLOY_NO_HELPERS=false # optional
+HALO2VK=0x63311f167b6B07fd0D3d83310c16512701B4Cb2d # optional
+HALO2V=0x26Aa5a7c4CA7D0F81943ea9CbDf97D80c560D6Fa # optional
+GPP=0xbB9a8f4c3662b6EF4b512E5f358289d1Db63fc81 # optional
+PSRAND=0xAecFC1cc68dD9664F2fCF5f2958d5277c5385123 # optional
 ```
 
 deploying the helpers are optional, and to proceed with using prior-deployed helpers, set `DEPLOY_NO_HELPERS` to true
