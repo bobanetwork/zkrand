@@ -1,0 +1,48 @@
+# Stage 1: Builder Stage
+FROM rust:1.80 as builder
+
+# Install necessary dependencies
+RUN apt-get update && apt-get install -y \
+    llvm \
+    clang \
+    libclang-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set environment variables for Rust
+ENV LIBCLANG_PATH=/usr/lib/llvm-14/lib
+
+# Create a working directory
+WORKDIR /app
+
+# Copy Rust source code and build configuration files
+COPY ./Cargo.toml ./Cargo.lock ./
+COPY ./bin ./bin
+COPY ./benches ./benches
+COPY ./src ./src
+
+# Fetch dependencies and build the Rust project
+RUN cargo fetch
+RUN cargo build --release
+
+# Stage 2: Runtime Stage
+FROM ubuntu:22.04
+
+# Install curl for file downloading
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Copy the compiled Rust binary from the builder stage
+COPY --from=builder /app/target/release/client /usr/local/bin/client
+
+# Create a working directory for runtime
+WORKDIR /app
+
+# Declare the directory as a volume
+VOLUME /app/kzg_params
+
+# Copy the entrypoint script
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
+
+# Set the entrypoint
+ENTRYPOINT ["./entrypoint.sh"]

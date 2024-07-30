@@ -3,7 +3,6 @@ import {Contract, Wallet, BigNumber, providers} from 'ethers'
 import fs from "fs";
 import {promisify} from "util";
 import {exec} from "child_process";
-
 import {sleep} from '@eth-optimism/core-utils'
 import {BaseService} from '@eth-optimism/common-ts'
 
@@ -33,6 +32,9 @@ export interface GasPriceOverride {
 }
 
 interface AdminZkRandOptions {
+    threshold: number
+    numberMembers: number
+    degree: number
     l2RpcProvider: providers.StaticJsonRpcProvider
     l2Wallet: Wallet
     // chain ID of the L2 network
@@ -68,6 +70,8 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         startDate: number
     } = {} as any
 
+    private cmdPrefix: string;
+
     async _init(): Promise<void> {
         this.logger.info('Initializing AdminZkRand service...', {
             options: this.options,
@@ -93,10 +97,14 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         this.state.timeOfLastRound = 0 // 0 indicates no round has been initiated
 
         this.state.startDate = 0
-        let startDate = new Date(this.options.randGenStartDate);
+        let startDate = new Date(this.options.randGenStartDate)
         if (!isNaN(startDate.getTime())) {
             this.state.startDate = startDate.getTime()
         }
+
+        this.cmdPrefix = `RUST_LOG=info THRESHOLD=${this.options.threshold} NUMBER_OF_MEMBERS=${this.options.numberMembers} DEGREE=${this.options.degree} /usr/local/bin/client`
+
+        await this.check_config()
     }
 
     async _start(): Promise<void> {
@@ -110,13 +118,11 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             )
         }
 
-        let threshold = await this.state.zkRandContract.threshold()
-        let memberCountFromContract = await this.state.zkRandContract.memberCount()
-        console.log("memberCountFromContract", memberCountFromContract)
+
         let currentIndexFromContract = await this.state.zkRandContract.currentIndex()
         console.log("currentIndexFromContract", currentIndexFromContract)
 
-        if (currentIndexFromContract != memberCountFromContract) {
+        if (currentIndexFromContract != this.options.numberMembers) {
             // check if nidkg is already completed, or if this step is already done
             console.log("adding permissioned nodes")
             const nodeOne = await this.state.zkRandContract.addrToNode(this.options.nodeOneAddress)
@@ -180,7 +186,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
                         let submissionCount = await this.state.zkRandContract.roundSubmissionCount(currentRoundNum)
                         let roundToRandom = await this.state.zkRandContract.roundToRandom(currentRoundNum)
 
-                        if (roundToRandom.value === bytes32Zero && submissionCount >= threshold) {
+                        if (roundToRandom.value === bytes32Zero && submissionCount >= this.options.threshold) {
                             await this.createRandom(currentRoundNum)
                         }
 
@@ -227,10 +233,10 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             await waitForWriteJsonToFile(obj, instancesPath)
             console.log("retrieved all instances from contract")
             console.log("sleeping..")
-            await sleep(2000)
+            await sleep(5000)
 
             // derive global public parameters
-            const cmd = `RUST_LOG=info ./target/release/client dkg derive`
+            const cmd = `${this.cmdPrefix} dkg derive`
             console.log("running command <", cmd, ">...")
             let result = await execPromise(cmd)
             console.log(result[`stderr`])
@@ -265,6 +271,22 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         });
     }
 
+    async check_config() {
+        let threshold = await this.state.zkRandContract.threshold()
+        if (threshold != this.options.threshold) {
+            throw new Error(
+                `threshold=${this.options.threshold} does not match threshold=${threshold} from contract`
+            )
+        }
+        let memberCountFromContract = await this.state.zkRandContract.memberCount()
+        if (memberCountFromContract != this.options.numberMembers) {
+            throw new Error(
+                `number_of_members=${this.options.numberMembers} does not match number_of_members=${memberCountFromContract} from contract`
+            )
+        }
+        console.log("memberCountFromContract", memberCountFromContract)
+    }
+
 
     async createGpp() {
         // read all instances from contract
@@ -277,10 +299,10 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         await waitForWriteJsonToFile(obj, instancesPath)
         console.log("retrieved all instances from contract")
         console.log("sleeping..")
-        await sleep(2000)
+        await sleep(5000)
 
         // derive global public parameters
-        const cmd = `RUST_LOG=info ./target/release/client dkg derive`
+        const cmd = `${this.cmdPrefix} dkg derive`
         console.log("running command <", cmd, ">...")
         let result = await execPromise(cmd)
         console.log(result[`stderr`])
@@ -359,12 +381,12 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             console.log("sleeping..")
             await sleep(2000)
 
-            const cmdCombine = `RUST_LOG=info ./target/release/client rand combine "${input}"`
+            const cmdCombine = `${this.cmdPrefix} rand combine "${input}"`
             console.log("running command <", cmdCombine, ">...")
             let result = await execPromise(cmdCombine)
             console.log(result[`stderr`])
 
-            const cmdVerify = `RUST_LOG=info ./target/release/client rand verify-final "${input}"`
+            const cmdVerify = `${this.cmdPrefix} rand verify-final "${input}"`
             console.log("running command <", cmdVerify, ">...")
             result = await execPromise(cmdVerify)
             console.log(result[`stderr`])
@@ -415,12 +437,12 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         console.log("sleep..")
         await sleep(2000)
 
-        const cmdCombine = `RUST_LOG=info ./target/release/client rand combine "${input}"`
+        const cmdCombine = `${this.cmdPrefix} rand combine "${input}"`
         console.log("running command <", cmdCombine, ">...")
         let result = await execPromise(cmdCombine)
         console.log(result[`stderr`])
 
-        const cmdVerify = `RUST_LOG=info ./target/release/client rand verify-final "${input}"`
+        const cmdVerify = `${this.cmdPrefix} rand verify-final "${input}"`
         console.log("running command <", cmdVerify, ">...")
         result = await execPromise(cmdVerify)
         console.log(result[`stderr`])

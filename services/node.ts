@@ -3,7 +3,6 @@ import {Contract, Wallet, providers} from 'ethers'
 import fs from "fs";
 import {promisify} from "util";
 import {exec} from "child_process";
-
 import {sleep} from '@eth-optimism/core-utils'
 import {BaseService} from '@eth-optimism/common-ts'
 
@@ -29,6 +28,9 @@ export interface GasPriceOverride {
 }
 
 interface NodeZkRandOptions {
+    threshold: number
+    numberMembers: number
+    degree: number
     l2RpcProvider: providers.StaticJsonRpcProvider
     l2Wallet: Wallet
     // chain ID of the L2 network
@@ -50,6 +52,8 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
         zkRandContract: Contract
         gasOverride: GasPriceOverride
     } = {} as any
+
+    private cmdPrefix: string;
 
     async _init(): Promise<void> {
         this.logger.info('Initializing NodeZkRand service...', {
@@ -74,6 +78,9 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
 
         this.state.gasOverride = {gasLimit: 10000000}
 
+        this.cmdPrefix = `RUST_LOG=info THRESHOLD=${this.options.threshold} NUMBER_OF_MEMBERS=${this.options.numberMembers} DEGREE=${this.options.degree} /usr/local/bin/client`
+
+        await this.check_config()
     }
 
     async _start(): Promise<void> {
@@ -120,11 +127,27 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
         }
     }
 
+    async check_config() {
+        let threshold = await this.state.zkRandContract.threshold()
+        if (threshold != this.options.threshold) {
+            throw new Error(
+                `threshold=${this.options.threshold} does not match threshold=${threshold} from contract`
+            )
+        }
+        let memberCountFromContract = await this.state.zkRandContract.memberCount()
+        if (memberCountFromContract != this.options.numberMembers) {
+            throw new Error(
+                `number_of_members=${this.options.numberMembers} does not match number_of_members=${memberCountFromContract} from contract`
+            )
+        }
+        console.log("memberCountFromContract", memberCountFromContract)
+    }
+
     async registerNode() {
         // generate member secret key and member public key on grumpkin curve
         const index = this.options.l2Wallet.address
         const file = `member_${index}`
-        const command = `RUST_LOG=info ./target/release/client keygen -f ${file}`
+        const command = `${this.cmdPrefix} keygen -f ${file}`
 
         console.log("running command <", command, ">...")
         const result = await execPromise(command);
@@ -169,10 +192,10 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
             const obj = JSON.stringify(ppListHex)
             await waitForWriteJsonToFile(obj, instancesPath)
             console.log("sleeping..")
-            await sleep(1000)
+            await sleep(5000)
 
             // each member derives its own secret share and global public parameters
-            const cmd = `RUST_LOG=info ./target/release/client dkg derive`
+            const cmd = `${this.cmdPrefix} dkg derive`
             const index = await this.state.zkRandContract.getIndexPlus(this.options.l2Wallet.address)
             const cmdMember = cmd + ` ${index} -f member_${this.options.l2Wallet.address}`
             console.log("running command <", cmdMember, ">...")
@@ -188,11 +211,11 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
         const obj = JSON.stringify(pks);
         await waitForWriteJsonToFile(obj, mpksPath);
         console.log("sleeping..")
-        await sleep(1000)
+        await sleep(2000)
 
         const index = await this.state.zkRandContract.getIndexPlus(this.options.l2Wallet.address)
-        const cmdProve = `RUST_LOG=info ./target/release/client dkg prove ${index}`
-        const cmdVerify = `RUST_LOG=info ./target/release/client dkg verify ${index}`
+        const cmdProve = `${this.cmdPrefix} dkg prove ${index}`
+        const cmdVerify = `${this.cmdPrefix} dkg verify ${index}`
 
         // generate snark proof and instance
         console.log("running command <", cmdProve, ">...")
@@ -227,10 +250,10 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
         const obj = JSON.stringify(ppListHex)
         await waitForWriteJsonToFile(obj, instancesPath)
         console.log("sleeping..")
-        await sleep(2000)
+        await sleep(5000)
 
         // each member derives its own secret share and global public parameters
-        const cmd = `RUST_LOG=info ./target/release/client dkg derive`
+        const cmd = `${this.cmdPrefix} dkg derive`
         const index = await this.state.zkRandContract.getIndexPlus(this.options.l2Wallet.address)
         const cmdMember = cmd + ` ${index} -f member_${this.options.l2Wallet.address}`
         console.log("running command <", cmdMember, ">...")
@@ -243,8 +266,8 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
         const input = await this.state.zkRandContract.roundInput(currentRound)
         const index = await this.state.zkRandContract.getIndexPlus(this.options.l2Wallet.address)
 
-        const cmdEval = `RUST_LOG=info ./target/release/client rand eval ${index} "${input}"`
-        const cmdVerify = `RUST_LOG=info ./target/release/client rand verify ${index} "${input}"`
+        const cmdEval = `${this.cmdPrefix} rand eval ${index} "${input}"`
+        const cmdVerify = `${this.cmdPrefix} rand verify ${index} "${input}"`
 
         console.log("running command <", cmdEval, ">...")
         let result = await execPromise(cmdEval)
