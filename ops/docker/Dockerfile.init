@@ -26,7 +26,7 @@ RUN cargo fetch
 RUN cargo build --release
 
 # Stage 2: Runtime Stage
-FROM debian:buster-slim
+FROM ubuntu:22.04
 
 # Install curl for file downloading
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*

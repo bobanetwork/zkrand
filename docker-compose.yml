@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: ops/docker/Dockerfile.init
+    container_name: zkrand_init
     volumes:
       - kzg_params_volume:/app/kzg_params
     restart: "no"  # Prevent restart after completion
