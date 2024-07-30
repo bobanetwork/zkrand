@@ -102,7 +102,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             this.state.startDate = startDate.getTime()
         }
 
-        this.cmdPrefix = `RUST_LOG=info THRESHOLD=${this.options.threshold} NUMBER_OF_MEMBERS=${this.options.numberMembers} DEGREE=${this.options.degree} ./target/release/client`
+        this.cmdPrefix = `RUST_LOG=info THRESHOLD=${this.options.threshold} NUMBER_OF_MEMBERS=${this.options.numberMembers} DEGREE=${this.options.degree} /usr/local/bin/client`
 
         await this.check_config()
     }

@@ -1,42 +1,71 @@
-FROM node:20
+# Stage 1: Build Stage for Rust
+FROM rust:1.80 AS rust-builder
 
-RUN apt-get update && apt-get install -y curl \
-    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-    && echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $HOME/.bashrc
-
-RUN apt-get install -y \
+# Install necessary build dependencies
+RUN apt-get update && apt-get install -y \
     llvm \
     clang \
-    libclang-dev
+    libclang-dev \
+    && rm -rf /var/lib/apt/lists/*
 
+# Set environment variables for Rust
 ENV LIBCLANG_PATH=/usr/lib/llvm-14/lib
 
-# Create a working directory
+# Create a working directory for Rust build
 WORKDIR /app
 
-COPY ./package.json .
-RUN yarn install
-
-COPY ./contracts ./contracts
-COPY ./hardhat.config.ts .
-RUN yarn run build
-
-COPY ./Cargo.toml .
-COPY ./Cargo.lock .
+# Copy Rust source code and build configuration files
+COPY ./Cargo.toml ./Cargo.lock ./
 COPY ./bin ./bin
 COPY ./benches ./benches
 COPY ./src ./src
-ENV PATH="/root/.cargo/bin:${PATH}"
-RUN cargo build --release
 
-# Declare the directory as a volume
-VOLUME /app/kzg_params
-VOLUME /app/data
+# Fetch dependencies and build the Rust project
+RUN cargo fetch && cargo build --release
 
-COPY entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
-ENTRYPOINT ["./entrypoint.sh"]
+
+# Stage 2: Node Build Stage
+FROM node:20 AS node-builder
+
+# Create a working directory for Node build
+WORKDIR /app
+
+# Copy Node.js project files and install dependencies
+COPY ./package.json ./
+RUN yarn install
+
+# Copy the rest of the Node.js application source
+COPY ./contracts ./contracts
+COPY ./hardhat.config.ts ./
+RUN yarn run build
 
 COPY ./tsconfig.json .
 COPY ./services ./services
+COPY entrypoint.sh ./entrypoint.sh
+
+
+# Stage 3: Runtime Stage
+FROM node:20 AS runtime
+
+# Install runtime dependencies if needed (e.g., curl)
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create working directory
+WORKDIR /app
+
+# Declare the directories as volumes
+VOLUME /app/kzg_params
+VOLUME /app/data
+
+# Copy the built Rust binary
+COPY --from=node-builder /app /app
+COPY --from=rust-builder /app/target/release/client /usr/local/bin/client
+
+# Set executable permissions for the entrypoint script
+RUN chmod +x ./entrypoint.sh
+ENTRYPOINT ["./entrypoint.sh"]
+
+# Set the entrypoint or default command
 CMD ["yarn", "run", "services:node"]

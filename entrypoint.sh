@@ -1,9 +1,7 @@
 #!/bin/bash
 set -uex
 
-echo "THRESHOLD: ${THRESHOLD}"
-echo "NUMBER_OF_MEMBERS: ${NUMBER_OF_MEMBERS}"
-echo "DEGREE: ${DEGREE}"
+echo "(THRESHOLD, NUMBER_OF_MEMBERS, DEGREE) = (${THRESHOLD}, ${NUMBER_OF_MEMBERS}, ${DEGREE})"
 
 params_dir="kzg_params"
 degree_output_file="$params_dir/params${DEGREE}"
@@ -23,7 +21,7 @@ else
     fi
 fi
 
-RUST_LOG=info THRESHOLD=$THRESHOLD NUMBER_OF_MEMBERS=$NUMBER_OF_MEMBERS DEGREE=$DEGREE ./target/release/client setup --skip
+RUST_LOG=info THRESHOLD=$THRESHOLD NUMBER_OF_MEMBERS=$NUMBER_OF_MEMBERS DEGREE=$DEGREE /usr/local/bin/client setup --skip
 
 # Touch a health check file to indicate readiness
 touch "$params_dir/health_check_${THRESHOLD}_${NUMBER_OF_MEMBERS}_${DEGREE}"
