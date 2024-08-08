@@ -248,7 +248,6 @@ mod tests {
     use halo2wrong::curves::group::Curve;
     use halo2wrong::curves::grumpkin::Fr as Scalar;
 
-    use crate::hash_to_curve_grumpkin;
     use halo2wrong::halo2::arithmetic::Field;
     use halo2wrong::halo2::circuit::SimpleFloorPlanner;
     use halo2wrong::halo2::plonk::{Circuit, ConstraintSystem};

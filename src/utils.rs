@@ -1,5 +1,4 @@
 use crate::dkg::DkgConfig;
-use crate::hash_to_curve::svdw_hash_to_curve;
 use crate::{
     DkgCircuit, BIT_LEN_LIMB, COORD_LEN, NUMBER_OF_LIMBS, NUMBER_OF_LOOKUP_LIMBS, POINT_LEN,
     WRAP_LEN,
@@ -175,11 +174,7 @@ pub fn hash_to_curve_bn<'a>(domain_prefix: &'a str) -> Box<dyn Fn(&[u8]) -> bn25
 pub fn hash_to_curve_grumpkin<'a>(
     domain_prefix: &'a str,
 ) -> Box<dyn Fn(&[u8]) -> grumpkin::G1 + 'a> {
-    svdw_hash_to_curve::<grumpkin::G1>(
-        "grumpkin_g1",
-        domain_prefix,
-        <grumpkin::G1 as CurveExt>::Base::one(),
-    )
+    grumpkin::G1::hash_to_curve(domain_prefix)
 }
 
 pub fn load_or_create_params(params_dir: &str, degree: usize) -> Result<ParamsKZG<Bn256>> {

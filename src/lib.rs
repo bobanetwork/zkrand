@@ -5,7 +5,6 @@ mod ecc_chip;
 mod error;
 #[allow(dead_code)]
 mod grumpkin_chip;
-mod hash_to_curve;
 mod hash_to_curve_evm;
 mod poseidon;
 mod utils;
