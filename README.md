@@ -35,7 +35,7 @@ $ ./target/release/client -h
    The maximun (threshold, number_of_members) that can be supported for a given degree is:
 
    | degree |   18   |   19    |    20    |    21    |    22     |
-             |:------:|:------:|:-------:|:--------:|:--------:|:---------:|
+   |:------:|:------:|:-------:|:--------:|:--------:|:---------:|
    | (t, n) | (3, 5) | (9, 16) | (20, 38) | (42, 83) | (86, 171) |
 
    The threshold is set as the majority of number_of_members.
