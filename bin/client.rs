@@ -2,9 +2,8 @@ use crate::mock::{mock_dkg, mock_members, mock_random};
 use crate::proof::{create_proof_checked, verify_single};
 use crate::serialise::{
     hex_to_le_bytes, le_bytes_to_hex, DkgGlobalPubParams as DkgGlobalPubParamsSerde,
-    DkgMemberParams as DkgMemberParamsSerde, DkgShareKey as DkgShareKeySerde,
-    MemberKey as MemberKeySerde, PartialEval as PartialEvalSerde, Point, Point2,
-    PseudoRandom as PseudoRandomSerde,
+    DkgShareKey as DkgShareKeySerde, MemberKey as MemberKeySerde, PartialEval as PartialEvalSerde,
+    Point, Point2, PseudoRandom as PseudoRandomSerde,
 };
 use anyhow::{anyhow, Result};
 use ark_std::{end_timer, start_timer};
