@@ -8,12 +8,11 @@ edition = "2021"
 
 [dependencies]
 lazy_static = "1.4.0"
-halo2_gadgets = { git = "https://github.com/kitounliu/halo2.git", branch = "grumpkin" }
-halo2wrong = { git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin" }
-halo2_ecc = { package = "ecc", git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin" }
-halo2_maingate = { package = "maingate", git = "https://github.com/kitounliu/halo2wrong.git", branch = "grumpkin" }
-halo2_proofs = { git = "https://github.com/kitounliu/halo2.git", branch = "grumpkin" }
-
+halo2_gadgets = { git = "https://github.com/bobanetwork/halo2_gadget", branch = "poseidon" }
+halo2wrong =  { git = "https://github.com/bobanetwork/halo2wrong", branch = "fix" }
+halo2_ecc =  { package = "ecc", git = "https://github.com/bobanetwork/halo2wrong", branch = "fix" }
+halo2_maingate = { package = "maingate",  git = "https://github.com/bobanetwork/halo2wrong", branch = "fix"}
+halo2_proofs = { package = "halo2_proofs", git = "https://github.com/privacy-scaling-explorations/halo2", tag = "v0.3.0" }
 sha3 = "0.10"
 rand_core = { version = "0.6", default-features = false }
 static_assertions = "1.1.0"
@@ -29,7 +28,7 @@ clap = { version = "4.4.18", features = ["derive"] }
 serde_json = "1.0.108"
 rand_chacha = "0.3.1"
 ark-std = { version = "0.3", features = ["print-trace"] }
-halo2_solidity_verifier = { git = "https://github.com/kitounliu/halo2-solidity-verifier.git", branch = "grumpkin", features = ["evm"] }
+halo2_solidity_verifier = { git = "https://github.com/privacy-scaling-explorations/halo2-solidity-verifier.git", tag = "v2024_01_31", features = ["evm"] }
 const_format = "0.2.32"
 pretty_env_logger = "0.5.0"
 thiserror = "1.0"

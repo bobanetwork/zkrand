@@ -58,7 +58,7 @@ contract Halo2Verifier {
     uint256 internal constant   QUOTIENT_EVAL_MPTR = 0x13a0;
     uint256 internal constant      QUOTIENT_X_MPTR = 0x13c0;
     uint256 internal constant      QUOTIENT_Y_MPTR = 0x13e0;
-    uint256 internal constant          R_EVAL_MPTR = 0x1400;
+    uint256 internal constant       G1_SCALAR_MPTR = 0x1400;
     uint256 internal constant   PAIRING_LHS_X_MPTR = 0x1420;
     uint256 internal constant   PAIRING_LHS_Y_MPTR = 0x1440;
     uint256 internal constant   PAIRING_RHS_X_MPTR = 0x1460;
@@ -345,7 +345,9 @@ contract Halo2Verifier {
                         shift := add(shift, num_limb_bits)
                     }
 
+                    success := and(success, and(lt(lhs_x, q), lt(lhs_y, q)))
                     success := and(success, eq(mulmod(lhs_y, lhs_y, q), addmod(mulmod(lhs_x, mulmod(lhs_x, lhs_x, q), q), 3, q)))
+                    success := and(success, and(lt(rhs_x, q), lt(rhs_y, q)))
                     success := and(success, eq(mulmod(rhs_y, rhs_y, q), addmod(mulmod(rhs_x, mulmod(rhs_x, rhs_x, q), q), 3, q)))
 
                     mstore(ACC_LHS_X_MPTR, lhs_x)
@@ -1169,7 +1171,7 @@ contract Halo2Verifier {
                 }
                 {
                     let zeta := mload(ZETA_MPTR)
-                    let r_eval := 0
+                    let r_eval
                     r_eval := addmod(r_eval, mulmod(mload(0x20), calldataload(0x08e4), r), r)
                     r_eval := addmod(r_eval, mulmod(mload(0x40), calldataload(0x0804), r), r)
                     r_eval := addmod(r_eval, mulmod(mload(0x60), calldataload(0x08c4), r), r)
@@ -1186,29 +1188,29 @@ contract Halo2Verifier {
                 {
                     let coeff := mload(0x80)
                     let zeta := mload(ZETA_MPTR)
-                    let r_eval := 0
-                    r_eval := addmod(r_eval, mulmod(coeff, calldataload(0x0c24), r), r)
+                    let r_eval
+                    r_eval := mulmod(coeff, calldataload(0x0c24), r)
                     r_eval := mulmod(r_eval, zeta, r)
                     r_eval := addmod(r_eval, mulmod(coeff, mload(QUOTIENT_EVAL_MPTR), r), r)
                     for
                         {
-                            let mptr := 0x0d44
-                            let mptr_end := 0x0c24
+                            let cptr := 0x0d44
+                            let cptr_end := 0x0c24
                         }
-                        lt(mptr_end, mptr)
-                        { mptr := sub(mptr, 0x20) }
+                        lt(cptr_end, cptr)
+                        { cptr := sub(cptr, 0x20) }
                     {
-                        r_eval := addmod(mulmod(r_eval, zeta, r), mulmod(coeff, calldataload(mptr), r), r)
+                        r_eval := addmod(mulmod(r_eval, zeta, r), mulmod(coeff, calldataload(cptr), r), r)
                     }
                     for
                         {
-                            let mptr := 0x0c04
-                            let mptr_end := 0x0924
+                            let cptr := 0x0c04
+                            let cptr_end := 0x0924
                         }
-                        lt(mptr_end, mptr)
-                        { mptr := sub(mptr, 0x20) }
+                        lt(cptr_end, cptr)
+                        { cptr := sub(cptr, 0x20) }
                     {
-                        r_eval := addmod(mulmod(r_eval, zeta, r), mulmod(coeff, calldataload(mptr), r), r)
+                        r_eval := addmod(mulmod(r_eval, zeta, r), mulmod(coeff, calldataload(cptr), r), r)
                     }
                     r_eval := mulmod(r_eval, zeta, r)
                     r_eval := addmod(r_eval, mulmod(coeff, calldataload(0x1164), r), r)
@@ -1227,7 +1229,7 @@ contract Halo2Verifier {
                 }
                 {
                     let zeta := mload(ZETA_MPTR)
-                    let r_eval := 0
+                    let r_eval
                     r_eval := addmod(r_eval, mulmod(mload(0xa0), calldataload(0x10e4), r), r)
                     r_eval := addmod(r_eval, mulmod(mload(0xc0), calldataload(0x1104), r), r)
                     r_eval := mulmod(r_eval, zeta, r)
@@ -1253,7 +1255,7 @@ contract Halo2Verifier {
                 }
                 {
                     let zeta := mload(ZETA_MPTR)
-                    let r_eval := 0
+                    let r_eval
                     r_eval := addmod(r_eval, mulmod(mload(0xe0), calldataload(0x0e04), r), r)
                     r_eval := addmod(r_eval, mulmod(mload(0x0100), calldataload(0x0dc4), r), r)
                     r_eval := addmod(r_eval, mulmod(mload(0x0120), calldataload(0x0de4), r), r)
@@ -1266,7 +1268,7 @@ contract Halo2Verifier {
                 }
                 {
                     let zeta := mload(ZETA_MPTR)
-                    let r_eval := 0
+                    let r_eval
                     r_eval := addmod(r_eval, mulmod(mload(0x0140), calldataload(0x1144), r), r)
                     r_eval := addmod(r_eval, mulmod(mload(0x0160), calldataload(0x1124), r), r)
                     r_eval := mulmod(r_eval, zeta, r)
@@ -1342,92 +1344,93 @@ contract Halo2Verifier {
                         r_eval := mulmod(r_eval, mload(NU_MPTR), r)
                         r_eval := addmod(r_eval, mulmod(mload(sum_inv_mptr), mload(r_eval_mptr), r), r)
                     }
-                    mstore(R_EVAL_MPTR, r_eval)
+                    mstore(G1_SCALAR_MPTR, sub(r, r_eval))
                 }
                 {
+                    let zeta := mload(ZETA_MPTR)
                     let nu := mload(NU_MPTR)
                     mstore(0x00, calldataload(0x0104))
                     mstore(0x20, calldataload(0x0124))
-                    success := ec_mul_acc(success, mload(ZETA_MPTR))
+                    success := ec_mul_acc(success, zeta)
                     success := ec_add_acc(success, calldataload(0xc4), calldataload(0xe4))
-                    success := ec_mul_acc(success, mload(ZETA_MPTR))
+                    success := ec_mul_acc(success, zeta)
                     success := ec_add_acc(success, calldataload(0x84), calldataload(0xa4))
                     mstore(0x80, calldataload(0x0644))
                     mstore(0xa0, calldataload(0x0664))
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, mload(QUOTIENT_X_MPTR), mload(QUOTIENT_Y_MPTR))
                     for
                         {
-                            let mptr := 0x1120
-                            let mptr_end := 0x0da0
+                            let ptr := 0x1120
+                            let ptr_end := 0x0da0
                         }
-                        lt(mptr_end, mptr)
-                        { mptr := sub(mptr, 0x40) }
+                        lt(ptr_end, ptr)
+                        { ptr := sub(ptr, 0x40) }
                     {
-                        success := ec_mul_tmp(success, mload(ZETA_MPTR))
-                        success := ec_add_tmp(success, mload(mptr), mload(add(mptr, 0x20)))
+                        success := ec_mul_tmp(success, zeta)
+                        success := ec_add_tmp(success, mload(ptr), mload(add(ptr, 0x20)))
                     }
                     for
                         {
-                            let mptr := 0x0ce0
-                            let mptr_end := 0x0c20
+                            let ptr := 0x0ce0
+                            let ptr_end := 0x0c20
                         }
-                        lt(mptr_end, mptr)
-                        { mptr := sub(mptr, 0x40) }
+                        lt(ptr_end, ptr)
+                        { ptr := sub(ptr, 0x40) }
                     {
-                        success := ec_mul_tmp(success, mload(ZETA_MPTR))
-                        success := ec_add_tmp(success, mload(mptr), mload(add(mptr, 0x20)))
+                        success := ec_mul_tmp(success, zeta)
+                        success := ec_add_tmp(success, mload(ptr), mload(add(ptr, 0x20)))
                     }
                     for
                         {
-                            let mptr := 0x0da0
-                            let mptr_end := 0x0ce0
+                            let ptr := 0x0da0
+                            let ptr_end := 0x0ce0
                         }
-                        lt(mptr_end, mptr)
-                        { mptr := sub(mptr, 0x40) }
+                        lt(ptr_end, ptr)
+                        { ptr := sub(ptr, 0x40) }
                     {
-                        success := ec_mul_tmp(success, mload(ZETA_MPTR))
-                        success := ec_add_tmp(success, mload(mptr), mload(add(mptr, 0x20)))
+                        success := ec_mul_tmp(success, zeta)
+                        success := ec_add_tmp(success, mload(ptr), mload(add(ptr, 0x20)))
                     }
                     for
                         {
-                            let mptr := 0x0c20
-                            let mptr_end := 0x0b20
+                            let ptr := 0x0c20
+                            let ptr_end := 0x0b20
                         }
-                        lt(mptr_end, mptr)
-                        { mptr := sub(mptr, 0x40) }
+                        lt(ptr_end, ptr)
+                        { ptr := sub(ptr, 0x40) }
                     {
-                        success := ec_mul_tmp(success, mload(ZETA_MPTR))
-                        success := ec_add_tmp(success, mload(mptr), mload(add(mptr, 0x20)))
+                        success := ec_mul_tmp(success, zeta)
+                        success := ec_add_tmp(success, mload(ptr), mload(add(ptr, 0x20)))
                     }
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, mload(0x0ae0), mload(0x0b00))
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, mload(0x0aa0), mload(0x0ac0))
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, mload(0x0b20), mload(0x0b40))
                     for
                         {
-                            let mptr := 0x0a60
-                            let mptr_end := 0x0920
+                            let ptr := 0x0a60
+                            let ptr_end := 0x0920
                         }
-                        lt(mptr_end, mptr)
-                        { mptr := sub(mptr, 0x40) }
+                        lt(ptr_end, ptr)
+                        { ptr := sub(ptr, 0x40) }
                     {
-                        success := ec_mul_tmp(success, mload(ZETA_MPTR))
-                        success := ec_add_tmp(success, mload(mptr), mload(add(mptr, 0x20)))
+                        success := ec_mul_tmp(success, zeta)
+                        success := ec_add_tmp(success, mload(ptr), mload(add(ptr, 0x20)))
                     }
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, calldataload(0x0404), calldataload(0x0424))
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, calldataload(0x0384), calldataload(0x03a4))
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, calldataload(0x0304), calldataload(0x0324))
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, calldataload(0x0284), calldataload(0x02a4))
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, calldataload(0x0204), calldataload(0x0224))
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, calldataload(0x0144), calldataload(0x0164))
                     success := ec_mul_tmp(success, mulmod(nu, mload(0x0500), r))
                     success := ec_add_acc(success, mload(0x80), mload(0xa0))
@@ -1436,42 +1439,42 @@ contract Halo2Verifier {
                     mstore(0xa0, calldataload(0x0624))
                     for
                         {
-                            let mptr := 0x05c4
-                            let mptr_end := 0x0484
+                            let ptr := 0x05c4
+                            let ptr_end := 0x0484
                         }
-                        lt(mptr_end, mptr)
-                        { mptr := sub(mptr, 0x40) }
+                        lt(ptr_end, ptr)
+                        { ptr := sub(ptr, 0x40) }
                     {
-                        success := ec_mul_tmp(success, mload(ZETA_MPTR))
-                        success := ec_add_tmp(success, calldataload(mptr), calldataload(add(mptr, 0x20)))
+                        success := ec_mul_tmp(success, zeta)
+                        success := ec_add_tmp(success, calldataload(ptr), calldataload(add(ptr, 0x20)))
                     }
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, calldataload(0x0184), calldataload(0x01a4))
                     success := ec_mul_tmp(success, mulmod(nu, mload(0x0520), r))
                     success := ec_add_acc(success, mload(0x80), mload(0xa0))
                     nu := mulmod(nu, mload(NU_MPTR), r)
                     mstore(0x80, calldataload(0x0484))
                     mstore(0xa0, calldataload(0x04a4))
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, calldataload(0x0444), calldataload(0x0464))
                     success := ec_mul_tmp(success, mulmod(nu, mload(0x0540), r))
                     success := ec_add_acc(success, mload(0x80), mload(0xa0))
                     nu := mulmod(nu, mload(NU_MPTR), r)
                     mstore(0x80, calldataload(0x03c4))
                     mstore(0xa0, calldataload(0x03e4))
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, calldataload(0x0344), calldataload(0x0364))
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, calldataload(0x02c4), calldataload(0x02e4))
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, calldataload(0x0244), calldataload(0x0264))
-                    success := ec_mul_tmp(success, mload(ZETA_MPTR))
+                    success := ec_mul_tmp(success, zeta)
                     success := ec_add_tmp(success, calldataload(0x01c4), calldataload(0x01e4))
                     success := ec_mul_tmp(success, mulmod(nu, mload(0x0560), r))
                     success := ec_add_acc(success, mload(0x80), mload(0xa0))
                     mstore(0x80, mload(G1_X_MPTR))
                     mstore(0xa0, mload(G1_Y_MPTR))
-                    success := ec_mul_tmp(success, sub(r, mload(R_EVAL_MPTR)))
+                    success := ec_mul_tmp(success, mload(G1_SCALAR_MPTR))
                     success := ec_add_acc(success, mload(0x80), mload(0xa0))
                     mstore(0x80, calldataload(0x1184))
                     mstore(0xa0, calldataload(0x11a4))

@@ -34,9 +34,9 @@ $ ./target/release/client -h
    Higher degree is required for supporting more members in the NIDKG protocol.
    The maximun (threshold, number_of_members) that can be supported for a given degree is:
 
-   | degree |   18   | 19 | 20 | 21 | 22 |
-             |:------:|:------:| :----: | :----: |  :----: |  :----: |
-   | (t, n) | (3, 5) | (9, 16) | (20, 38) | (42, 83) | (86, 171)
+   | degree |   18   |   19    |    20    |    21    |    22     |
+             |:------:|:------:|:-------:|:--------:|:--------:|:---------:|
+   | (t, n) | (3, 5) | (9, 16) | (20, 38) | (42, 83) | (86, 171) |
 
    The threshold is set as the majority of number_of_members.
 
@@ -44,7 +44,8 @@ $ ./target/release/client -h
    and the verification contracts for checking SNARK proofs onchain.
    The SNARK parameters are generated using:
     ```
-    $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client setup --split
+    RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> \
+    ./target/release/client setup --split
     ```
    The parameters are computed using Ethereum power-of-tau,
    therefore, the proving/verifying keys are deterministic given a configuration.
@@ -56,7 +57,8 @@ $ ./target/release/client -h
 4. KeyGen. Before the NIDKG protocol starts, each member $i$ pre-generates its member public key $mpk_i$ and
    secret key $msk_i$ for encryption and decryption in NIDKG protocol:
     ```
-    $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client keygen
+    RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> \
+    ./target/release/client keygen
     ```
    The secret key is saved at "./data/members/member.json". The public key is printed in the format:
     ```
@@ -91,7 +93,8 @@ $ ./target/release/client -h
     1. Create public parameters. Each member $i$ selects a random polynomial to create its public parameters $pp_i$
        and a SNARK proof $zkp_i$ to ensure the parameters are generated correctly.
          ```
-         $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client dkg prove <INDEX>
+         RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> \
+         ./target/release/client dkg prove <INDEX>
          ```
        Index is the member's position in the list of member public keys. The index ranges 1, 2, ..., number_of_members.
        This command reads "./data/mpks.json" to obtain all members public keys.
@@ -107,7 +110,8 @@ $ ./target/release/client -h
 
        $(pp_i, zpk_i)$ can also be verified locally using
          ```
-         $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client dkg verify <INDEX>
+         RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> \
+        ./target/release/client dkg verify <INDEX>
          ```
        This command reads $pp_i$ from "./data/dkg/proofs/instance_{INDEX}.json"
        and $zkp_i$ from  "./data/dkg/proofs/proof_{INDEX}.dat".
@@ -126,7 +130,8 @@ $ ./target/release/client -h
        Member $i$ can derive its secret share $sk_i$ and the global public parameters using:
 
        ```
-       $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client dkg derive <INDEX> -f <FILE>
+       RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> \
+       ./target/release/client dkg derive <INDEX> -f <FILE>
        ```
        This command requires member $i$'s secret key $msk_i$ in "./data/members/FILE.json" and all the
        public parameters in "./data/all_instances.json". The default value of FILE is "member". `ppList` in the contract
@@ -147,7 +152,8 @@ $ ./target/release/client -h
    `verifyPseudoRand` given $gpk$ and $x$.
     1. Each member $i$ computes a partial evaluation $eval_i$ using:
     ```
-    $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client rand eval <INDEX> <INPUT>
+    RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> \
+    ./target/release/client rand eval <INDEX> <INPUT>
     ```
    This command reads member $i$'s secret share $sk_i$ from "./data/dkg/shares/share_{INDEX}.json".
    The output of $eval_i$ is saved at "./data/random/eval_{INDEX}.json".
@@ -164,7 +170,8 @@ $ ./target/release/client -h
    All the hex string may need to be converted to big integers before submitting to the contract.
    $eval_i$ can also be verified locally using
    ```
-    $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client rand verify <INDEX> <INPUT>
+    RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> \
+    ./target/release/client rand verify <INDEX> <INPUT>
    ```
    This command reads $eval_i$ from "./data/random/eval_{INDEX}.json" and verification keys from "./data/vks.json".
 
@@ -174,7 +181,8 @@ $ ./target/release/client -h
        onchain verification cost, the combination can be done offchain and
        only the final pseudorandom value and its proof needs to be verified onchain.
     ```
-    $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client rand combine <INPUT>
+    RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> \
+    ./target/release/client rand combine <INPUT>
     ```
    This command reads all partial evaluations from "./data/evals.json"
    and outputs a pseudorandom value saved at "./data/random/pseudo.json".
@@ -205,7 +213,8 @@ $ ./target/release/client -h
 
    The pseudorandom value can also be verified locally:
     ```
-    $ RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> ./target/release/client rand verify-final <INPUT>
+    RUST_LOG=info THRESHOLD=<t> NUMBER_OF_MEMBERS=<n> DEGREE=<d> \
+    ./target/release/client rand verify-final <INPUT>
     ```
    This command reads pseudorandom from "./data/random/pseudo.json".
 
