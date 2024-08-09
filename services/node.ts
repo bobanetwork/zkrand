@@ -51,6 +51,7 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
     private state: {
         zkRandContract: Contract
         gasOverride: GasPriceOverride
+        nidkgDerived: boolean
     } = {} as any
 
     private cmdPrefix: string;
@@ -77,6 +78,7 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
         })
 
         this.state.gasOverride = {gasLimit: 10000000}
+        this.state.nidkgDerived = false
 
         this.cmdPrefix = `RUST_LOG=info THRESHOLD=${this.options.threshold} NUMBER_OF_MEMBERS=${this.options.numberMembers} DEGREE=${this.options.degree} /usr/local/bin/client`
 
@@ -88,39 +90,41 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
         const threshold = await this.state.zkRandContract.threshold()
 
         while (this.running) {
-            let contractPhase = await this.state.zkRandContract.contractPhase()
-            console.log("contractPhase", contractPhase)
-            let addrToNode = await this.state.zkRandContract.addrToNode(this.options.l2Wallet.address)
+            try {
+                let contractPhase = await this.state.zkRandContract.contractPhase()
+                console.log("contractPhase", contractPhase)
+                let addrToNode = await this.state.zkRandContract.addrToNode(this.options.l2Wallet.address)
 
-            // node address has been added by the admin
-            if (addrToNode.nodeAddress == this.options.l2Wallet.address) {
-                if (contractPhase == Status.Unregistered) {
-                    // this indicates the address was not registered yet
-                    if (!addrToNode.status) {
-                        await this.registerNode()
-                    }
-                } else if (contractPhase == Status.Nidkg) {
-                    // this indicates the address hasn't submitted public params
-                    if (!addrToNode.statusPP) {
-                        // submit public params
-                        await this.submitPP()
-                    }
-                } else if (contractPhase == Status.Ready) {
-                    let currentRound = await this.state.zkRandContract.currentRoundNum()
-                    console.log("currentRound", currentRound.toString())
-                    let roundSubmissionCount = await this.state.zkRandContract.roundSubmissionCount(currentRound)
-                    console.log("roundSubmissionCount", roundSubmissionCount.toString())
-                    let lastRoundSubmitted = await this.state.zkRandContract.lastSubmittedRound(this.options.l2Wallet.address)
-                    console.log("lastRoundSubmitted", lastRoundSubmitted.toString())
+                // node address has been added by the admin
+                if (addrToNode.nodeAddress == this.options.l2Wallet.address) {
+                    if (contractPhase == Status.Unregistered) {
+                        // this indicates the address was not registered yet
+                        if (!addrToNode.status) {
+                            await this.registerNode()
+                        }
+                    } else if (contractPhase == Status.Nidkg) {
+                        // this indicates the address hasn't submitted public params
+                        if (!addrToNode.statusPP) {
+                            // submit public params
+                            await this.submitPP()
+                        }
+                    } else if (contractPhase == Status.Ready) {
+                        let currentRound = await this.state.zkRandContract.currentRoundNum()
+                        console.log("currentRound", currentRound.toString())
+                        let lastRoundSubmitted = await this.state.zkRandContract.lastSubmittedRound(this.options.l2Wallet.address)
+                        console.log("lastRoundSubmitted", lastRoundSubmitted.toString())
 
-                    // if there are already threshold number of submissions, then this node skips submission
-                    if (currentRound > lastRoundSubmitted && roundSubmissionCount < threshold) {
-                        if (lastRoundSubmitted == 0) {
+                        if (this.state.nidkgDerived == false && lastRoundSubmitted == 0) {
                             await this.nidkgDerive()
                         }
-                        await this.submitPartialEval()
+
+                        if (currentRound > lastRoundSubmitted) {
+                            await this.submitPartialEval(threshold)
+                        }
                     }
                 }
+            } catch (error) {
+                console.warn("node script error:", error)
             }
 
             await sleep(this.options.pollingInterval)
@@ -259,9 +263,11 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
         console.log("running command <", cmdMember, ">...")
         const res = await execPromise(cmdMember)
         console.log(res[`stderr`])
+
+        this.state.nidkgDerived = true
     }
 
-    async submitPartialEval() {
+    async submitPartialEval(threshold: number) {
         const currentRound = await this.state.zkRandContract.currentRoundNum()
         const input = await this.state.zkRandContract.roundInput(currentRound)
         const index = await this.state.zkRandContract.getIndexPlus(this.options.l2Wallet.address)
@@ -285,9 +291,14 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
             proof: evalJson[`proof`]
         }
 
-        const res = await this.state.zkRandContract.submitPartialEval(pEval, {gasLimit: gasLimitLow})
-        console.log("transaction hash for submitPartialEval", res.hash)
-        await res.wait()
+        const roundSubmissionCount = await this.state.zkRandContract.roundSubmissionCount(currentRound)
+        console.log("roundSubmissionCount", roundSubmissionCount.toString())
+        // if there are already threshold number of submissions, then this node skips submission
+        if (roundSubmissionCount < threshold) {
+            const res = await this.state.zkRandContract.submitPartialEval(pEval, {gasLimit: gasLimitLow})
+            console.log("transaction hash for submitPartialEval", res.hash)
+            await res.wait()
+        }
     }
 }
 
