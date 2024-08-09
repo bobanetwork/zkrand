@@ -118,7 +118,9 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
                             await this.nidkgDerive()
                         }
 
-                        if (currentRound > lastRoundSubmitted) {
+                        const roundSubmissionCount = await this.state.zkRandContract.roundSubmissionCount(currentRound)
+                        console.log("roundSubmissionCount", roundSubmissionCount.toString())
+                        if (currentRound > lastRoundSubmitted && roundSubmissionCount < threshold) {
                             await this.submitPartialEval(threshold)
                         }
                     }
@@ -291,14 +293,9 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
             proof: evalJson[`proof`]
         }
 
-        const roundSubmissionCount = await this.state.zkRandContract.roundSubmissionCount(currentRound)
-        console.log("roundSubmissionCount", roundSubmissionCount.toString())
-        // if there are already threshold number of submissions, then this node skips submission
-        if (roundSubmissionCount < threshold) {
-            const res = await this.state.zkRandContract.submitPartialEval(pEval, {gasLimit: gasLimitLow})
-            console.log("transaction hash for submitPartialEval", res.hash)
-            await res.wait()
-        }
+        const res = await this.state.zkRandContract.submitPartialEval(pEval, {gasLimit: gasLimitLow})
+        console.log("transaction hash for submitPartialEval", res.hash)
+        await res.wait()
     }
 }
 
