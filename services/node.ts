@@ -86,7 +86,7 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
     }
 
     async _start(): Promise<void> {
-        console.log('---------------- node started ----------------')
+        console.log('\n------------------------------ node starts ------------------------------')
         const threshold = await this.state.zkRandContract.threshold()
 
         while (this.running) {
@@ -109,8 +109,6 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
                             await this.submitPP()
                         }
                     } else if (contractPhase == Status.Ready) {
-                        let currentRound = await this.state.zkRandContract.currentRoundNum()
-                        console.log("currentRound", currentRound.toString())
                         let lastRoundSubmitted = await this.state.zkRandContract.lastSubmittedRound(this.options.l2Wallet.address)
                         console.log("lastRoundSubmitted", lastRoundSubmitted.toString())
 
@@ -118,10 +116,12 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
                             await this.nidkgDerive()
                         }
 
+                        const currentRound = await this.state.zkRandContract.currentRoundNum()
+                        console.log("currentRound", currentRound.toString())
                         const roundSubmissionCount = await this.state.zkRandContract.roundSubmissionCount(currentRound)
                         console.log("roundSubmissionCount", roundSubmissionCount.toString())
                         if (currentRound > lastRoundSubmitted && roundSubmissionCount < threshold) {
-                            await this.submitPartialEval(threshold)
+                            await this.submitPartialEval(threshold, currentRound)
                         }
                     }
                 }
@@ -269,8 +269,7 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
         this.state.nidkgDerived = true
     }
 
-    async submitPartialEval(threshold: number) {
-        const currentRound = await this.state.zkRandContract.currentRoundNum()
+    async submitPartialEval(threshold: number, currentRound: number) {
         const input = await this.state.zkRandContract.roundInput(currentRound)
         const index = await this.state.zkRandContract.getIndexPlus(this.options.l2Wallet.address)
 

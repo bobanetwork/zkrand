@@ -108,7 +108,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
     }
 
     async _start(): Promise<void> {
-        console.log('----------------- admin started ------------------')
+        console.log('\n------------------------------ admin starts ------------------------------')
 
         let adminFromContract = await this.state.zkRandContract.owner()
         console.log("admin in contract:", adminFromContract)
