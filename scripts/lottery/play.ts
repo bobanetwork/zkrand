@@ -31,7 +31,8 @@ async function main() {
                     value: minBet,
                     from: userAddress,
                 });
-                console.log(tx);
+                await tx.wait()
+                console.log("player", userAddress, "placed bet", minBet);
             } catch (err) {
                 console.error(err);
             }

@@ -1,5 +1,5 @@
 /* Imports: External */
-import {Contract, Wallet, providers} from 'ethers'
+import {BigNumber, Contract, Wallet, providers} from 'ethers'
 import fs from "fs";
 import {promisify} from "util";
 import {exec} from "child_process";
@@ -42,6 +42,7 @@ interface NodeZkRandOptions {
 const optionSettings = {}
 const gasLimitLow = 500000
 const gasLimitHigh = 3000000
+const zero = BigNumber.from(0);
 
 export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
     constructor(options: NodeZkRandOptions) {
@@ -91,9 +92,9 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
 
         while (this.running) {
             try {
-                let contractPhase = await this.state.zkRandContract.contractPhase()
+                const contractPhase = await this.state.zkRandContract.contractPhase()
                 console.log("contractPhase", contractPhase)
-                let addrToNode = await this.state.zkRandContract.addrToNode(this.options.l2Wallet.address)
+                const addrToNode = await this.state.zkRandContract.addrToNode(this.options.l2Wallet.address)
 
                 // node address has been added by the admin
                 if (addrToNode.nodeAddress == this.options.l2Wallet.address) {
@@ -109,19 +110,19 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
                             await this.submitPP()
                         }
                     } else if (contractPhase == Status.Ready) {
-                        let lastRoundSubmitted = await this.state.zkRandContract.lastSubmittedRound(this.options.l2Wallet.address)
+                        const lastRoundSubmitted: BigNumber = await this.state.zkRandContract.lastSubmittedRound(this.options.l2Wallet.address)
                         console.log("lastRoundSubmitted", lastRoundSubmitted.toString())
 
-                        if (this.state.nidkgDerived == false && lastRoundSubmitted == 0) {
+                        if (this.state.nidkgDerived == false && lastRoundSubmitted.eq(zero)) {
                             await this.nidkgDerive()
                         }
 
-                        const currentRound = await this.state.zkRandContract.currentRoundNum()
+                        const currentRound: BigNumber = await this.state.zkRandContract.currentRoundNum()
                         console.log("currentRound", currentRound.toString())
                         const roundSubmissionCount = await this.state.zkRandContract.roundSubmissionCount(currentRound)
                         console.log("roundSubmissionCount", roundSubmissionCount.toString())
-                        if (currentRound > lastRoundSubmitted && roundSubmissionCount < threshold) {
-                            await this.submitPartialEval(threshold, currentRound)
+                        if (currentRound.gt(lastRoundSubmitted) && roundSubmissionCount < threshold) {
+                            await this.submitPartialEval(currentRound)
                         }
                     }
                 }
@@ -134,13 +135,13 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
     }
 
     async check_config() {
-        let threshold = await this.state.zkRandContract.threshold()
+        const threshold = await this.state.zkRandContract.threshold()
         if (threshold != this.options.threshold) {
             throw new Error(
                 `threshold=${this.options.threshold} does not match threshold=${threshold} from contract`
             )
         }
-        let memberCountFromContract = await this.state.zkRandContract.memberCount()
+        const memberCountFromContract = await this.state.zkRandContract.memberCount()
         if (memberCountFromContract != this.options.numberMembers) {
             throw new Error(
                 `number_of_members=${this.options.numberMembers} does not match number_of_members=${memberCountFromContract} from contract`
@@ -269,7 +270,7 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
         this.state.nidkgDerived = true
     }
 
-    async submitPartialEval(threshold: number, currentRound: number) {
+    async submitPartialEval(currentRound: BigNumber) {
         const input = await this.state.zkRandContract.roundInput(currentRound)
         const index = await this.state.zkRandContract.getIndexPlus(this.options.l2Wallet.address)
 

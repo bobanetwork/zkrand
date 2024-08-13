@@ -1,5 +1,5 @@
 /* Imports: External */
-import {Contract, Wallet, BigNumber, providers} from 'ethers'
+import {BigNumber, Contract, Wallet, providers} from 'ethers'
 import fs from "fs";
 import {promisify} from "util";
 import {exec} from "child_process";
@@ -57,6 +57,7 @@ const emptyAddress = '0x0000000000000000000000000000000000000000'
 const bytes32Zero = "0x" + "0".repeat(64);
 const gasLimitLow = 500000
 const gasLimitHigh = 3000000
+const zero = BigNumber.from(0);
 
 export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
     constructor(options: AdminZkRandOptions) {
@@ -110,7 +111,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
     async _start(): Promise<void> {
         console.log('\n------------------------------ admin starts ------------------------------')
 
-        let adminFromContract = await this.state.zkRandContract.owner()
+        const adminFromContract = await this.state.zkRandContract.owner()
         console.log("admin in contract:", adminFromContract)
         if (adminFromContract !== this.options.l2Wallet.address) {
             throw new Error(
@@ -118,8 +119,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
             )
         }
 
-
-        let currentIndexFromContract = await this.state.zkRandContract.currentIndex()
+        const currentIndexFromContract = await this.state.zkRandContract.currentIndex()
         console.log("currentIndexFromContract", currentIndexFromContract)
 
         if (currentIndexFromContract != this.options.numberMembers) {
@@ -163,7 +163,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
 
         while (this.running) {
             try {
-                let contractPhase = await this.state.zkRandContract.contractPhase()
+                const contractPhase = await this.state.zkRandContract.contractPhase()
                 console.log("contractPhase", contractPhase)
                 if (contractPhase == Status.Registered) {
                     // all the nodes have registered; start nidkg
@@ -174,29 +174,29 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
                     // nidkg has completed; calculate global public parameters
                     await this.createGpp()
                 } else if (contractPhase == Status.Ready) {
-                    let currentRoundNum = await this.state.zkRandContract.currentRoundNum()
+                    const currentRoundNum: BigNumber = await this.state.zkRandContract.currentRoundNum()
                     console.log("currentRoundNum", currentRoundNum.toString())
                     if (Date.now() < this.state.startDate) {
                         const begin = new Date(this.state.startDate);
                         console.log("randomness generation will begin at", begin.toUTCString())
                     } else {
-                        if (currentRoundNum == 0) {
+                        if (currentRoundNum.eq(zero)) {
                             // random generation starts from 1
                             await this.initiateRand()
                         } else {
-                            let submissionCount = await this.state.zkRandContract.roundSubmissionCount(currentRoundNum)
-                            let roundToRandom = await this.state.zkRandContract.roundToRandom(currentRoundNum)
+                            const submissionCount = await this.state.zkRandContract.roundSubmissionCount(currentRoundNum)
+                            const roundToRandom = await this.state.zkRandContract.roundToRandom(currentRoundNum)
 
                             if (roundToRandom.value === bytes32Zero && submissionCount >= this.options.threshold) {
                                 await this.createRandom(currentRoundNum)
                             }
 
-                            let secondsElapsed = Math.floor(
+                            const secondsElapsed = Math.floor(
                                 (Date.now() - this.state.timeOfLastRound) / 1000
                             )
                             console.log('Seconds elapsed since last random initiation:', secondsElapsed)
 
-                            if (secondsElapsed > this.options.randGenInterval) {
+                            if (secondsElapsed > this.options.randGenInterval && roundToRandom.value !== bytes32Zero) {
                                 await this.initiateRand();
                             }
                         }
@@ -276,13 +276,13 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
     }
 
     async check_config() {
-        let threshold = await this.state.zkRandContract.threshold()
+        const threshold = await this.state.zkRandContract.threshold()
         if (threshold != this.options.threshold) {
             throw new Error(
                 `threshold=${this.options.threshold} does not match threshold=${threshold} from contract`
             )
         }
-        let memberCountFromContract = await this.state.zkRandContract.memberCount()
+        const memberCountFromContract = await this.state.zkRandContract.memberCount()
         if (memberCountFromContract != this.options.numberMembers) {
             throw new Error(
                 `number_of_members=${this.options.numberMembers} does not match number_of_members=${memberCountFromContract} from contract`
@@ -308,7 +308,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         // derive global public parameters
         const cmd = `${this.cmdPrefix} dkg derive`
         console.log("running command <", cmd, ">...")
-        let result = await execPromise(cmd)
+        const result = await execPromise(cmd)
         console.log(result[`stderr`])
 
         const filePath = dkgDir + "gpk.json"
@@ -355,7 +355,7 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         this.state.zkRandContract.on(eventRandThreshold, async (roundNum, input, event) => {
             console.log("\nevent", eventRandThreshold, `round ${roundNum} input "${input}"`)
 
-            let memberCountFromContract = await this.state.zkRandContract.memberCount()
+            const memberCountFromContract = await this.state.zkRandContract.memberCount()
             const evals: Eval[] = []
             for (let i = 0; i < memberCountFromContract; i++) {
                 const evalFromContract = await this.state.zkRandContract.roundToEval(roundNum, i)
@@ -408,9 +408,9 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         });
     }
 
-    async createRandom(roundNum: number) {
-        let memberCountFromContract = await this.state.zkRandContract.memberCount()
-        let input = await this.state.zkRandContract.roundInput(roundNum)
+    async createRandom(roundNum: BigNumber) {
+        const memberCountFromContract = await this.state.zkRandContract.memberCount()
+        const input = await this.state.zkRandContract.roundInput(roundNum)
 
         const evals: Eval[] = []
         for (let i = 0; i < memberCountFromContract; i++) {
