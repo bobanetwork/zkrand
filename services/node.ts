@@ -127,7 +127,7 @@ export class NodeZkRandService extends BaseService<NodeZkRandOptions> {
                     }
                 }
             } catch (error) {
-                console.warn("node script error:", error)
+                console.error("node script error:", error)
             }
 
             await sleep(this.options.pollingInterval)

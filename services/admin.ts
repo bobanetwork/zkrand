@@ -162,48 +162,44 @@ export class AdminZkRandService extends BaseService<AdminZkRandOptions> {
         }
 
         while (this.running) {
-            try {
-                const contractPhase = await this.state.zkRandContract.contractPhase()
-                console.log("contractPhase", contractPhase)
-                if (contractPhase == Status.Registered) {
-                    // all the nodes have registered; start nidkg
-                    const ret = await this.state.zkRandContract.startNidkg({gasLimit: gasLimitLow})
-                    console.log("transaction hash for startNiDkg:", ret.hash)
-                    await ret.wait()
-                } else if (contractPhase == Status.NidkgComplete) {
-                    // nidkg has completed; calculate global public parameters
-                    await this.createGpp()
-                } else if (contractPhase == Status.Ready) {
-                    const currentRoundNum: BigNumber = await this.state.zkRandContract.currentRoundNum()
-                    console.log("currentRoundNum", currentRoundNum.toString())
-                    if (Date.now() < this.state.startDate) {
-                        const begin = new Date(this.state.startDate);
-                        console.log("randomness generation will begin at", begin.toUTCString())
+            const contractPhase = await this.state.zkRandContract.contractPhase()
+            console.log("contractPhase", contractPhase)
+            if (contractPhase == Status.Registered) {
+                // all the nodes have registered; start nidkg
+                const ret = await this.state.zkRandContract.startNidkg({gasLimit: gasLimitLow})
+                console.log("transaction hash for startNiDkg:", ret.hash)
+                await ret.wait()
+            } else if (contractPhase == Status.NidkgComplete) {
+                // nidkg has completed; calculate global public parameters
+                await this.createGpp()
+            } else if (contractPhase == Status.Ready) {
+                const currentRoundNum: BigNumber = await this.state.zkRandContract.currentRoundNum()
+                console.log("currentRoundNum", currentRoundNum.toString())
+                if (Date.now() < this.state.startDate) {
+                    const begin = new Date(this.state.startDate);
+                    console.log("randomness generation will begin at", begin.toUTCString())
+                } else {
+                    if (currentRoundNum.eq(zero)) {
+                        // random generation starts from 1
+                        await this.initiateRand()
                     } else {
-                        if (currentRoundNum.eq(zero)) {
-                            // random generation starts from 1
-                            await this.initiateRand()
-                        } else {
-                            const submissionCount = await this.state.zkRandContract.roundSubmissionCount(currentRoundNum)
-                            const roundToRandom = await this.state.zkRandContract.roundToRandom(currentRoundNum)
+                        const submissionCount = await this.state.zkRandContract.roundSubmissionCount(currentRoundNum)
+                        const roundToRandom = await this.state.zkRandContract.roundToRandom(currentRoundNum)
 
-                            if (roundToRandom.value === bytes32Zero && submissionCount >= this.options.threshold) {
-                                await this.createRandom(currentRoundNum)
-                            }
+                        if (roundToRandom.value === bytes32Zero && submissionCount >= this.options.threshold) {
+                            await this.createRandom(currentRoundNum)
+                        }
 
-                            const secondsElapsed = Math.floor(
-                                (Date.now() - this.state.timeOfLastRound) / 1000
-                            )
-                            console.log('Seconds elapsed since last random initiation:', secondsElapsed)
+                        const secondsElapsed = Math.floor(
+                            (Date.now() - this.state.timeOfLastRound) / 1000
+                        )
+                        console.log('Seconds elapsed since last random initiation:', secondsElapsed)
 
-                            if (secondsElapsed > this.options.randGenInterval && roundToRandom.value !== bytes32Zero) {
-                                await this.initiateRand();
-                            }
+                        if (secondsElapsed > this.options.randGenInterval && roundToRandom.value !== bytes32Zero) {
+                            await this.initiateRand();
                         }
                     }
                 }
-            } catch (error) {
-                console.warn("admin script error:", error)
             }
 
             await sleep(this.options.pollingInterval)
