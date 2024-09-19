@@ -763,7 +763,7 @@ checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
 [[package]]
 name = "ecc"
 version = "0.1.0"
-source = "git+https://github.com/bobanetwork/halo2wrong?branch=fix#c7d293e88957f11c9876b76e3ad1a88a54a6cdb0"
+source = "git+https://github.com/bobanetwork/halo2wrong?branch=fix#fa4b9851b1485a0293f0a7bad46238b2c625954d"
 dependencies = [
  "integer",
  "num-bigint",
@@ -1004,7 +1004,7 @@ dependencies = [
 [[package]]
 name = "halo2wrong"
 version = "0.1.0"
-source = "git+https://github.com/bobanetwork/halo2wrong?branch=fix#c7d293e88957f11c9876b76e3ad1a88a54a6cdb0"
+source = "git+https://github.com/bobanetwork/halo2wrong?branch=fix#fa4b9851b1485a0293f0a7bad46238b2c625954d"
 dependencies = [
  "halo2_proofs",
  "num-bigint",
@@ -1119,7 +1119,7 @@ dependencies = [
 [[package]]
 name = "integer"
 version = "0.1.0"
-source = "git+https://github.com/bobanetwork/halo2wrong?branch=fix#c7d293e88957f11c9876b76e3ad1a88a54a6cdb0"
+source = "git+https://github.com/bobanetwork/halo2wrong?branch=fix#fa4b9851b1485a0293f0a7bad46238b2c625954d"
 dependencies = [
  "maingate",
  "num-bigint",
@@ -1224,7 +1224,7 @@ checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 [[package]]
 name = "maingate"
 version = "0.1.0"
-source = "git+https://github.com/bobanetwork/halo2wrong?branch=fix#c7d293e88957f11c9876b76e3ad1a88a54a6cdb0"
+source = "git+https://github.com/bobanetwork/halo2wrong?branch=fix#fa4b9851b1485a0293f0a7bad46238b2c625954d"
 dependencies = [
  "halo2wrong",
  "num-bigint",
