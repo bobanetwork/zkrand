@@ -471,9 +471,9 @@ describe('ZKDVRF on-chain tests', async () => {
         it('lottery pickWinner()', async () => {
             await Lottery.connect(lotteryAdmin).pickWinner()
             expect(await Lottery.contractPhase()).to.be.eq(2)
-            expect(await Lottery.players(0)).to.be.eq(player2Address)
-            expect(await Lottery.players(1)).to.be.eq(player3Address)
-            expect(await Lottery.players(2)).to.be.eq(player1Address)
+            expect(await Lottery.players(0)).to.be.eq(player3Address)
+            expect(await Lottery.players(1)).to.be.eq(player1Address)
+            expect(await Lottery.players(2)).to.be.eq(player2Address)
         })
     })
 })

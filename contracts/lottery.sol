@@ -61,7 +61,7 @@ contract Lottery is Ownable {
     function shuffle() private {
         require(randValue != 0x00, "Random not ready yet");
 
-        for (uint i = 0; i < players.length; i++) {
+        for (uint i = players.length - 1; i > 0; i--) {
             bytes32 randomBytes = keccak256(abi.encodePacked(randValue, i));
             uint256 random = uint256(randomBytes);
 
@@ -78,7 +78,7 @@ contract Lottery is Ownable {
         shuffle(); // Shuffle the players array
         // The winner is the first player in the shuffled array
         // The permutation is randomly generated so we can also take more winners if needed
-        (bool success, ) = players[0].call{value: address(this).balance}("");
+        (bool success,) = players[0].call{value: address(this).balance}("");
         require(success, "Transfer failed.");
 
         contractPhase = Status.Close;
